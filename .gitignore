@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+
+# env files (절대 올리지 마세요!)
+.env
+.env.local
+.env.*.local
+
+# debug
+npm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>전기안전관리 — UI 프리뷰</title>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── 토스증권 디자인 시스템 ── */
+:root {
+  --bg-primary:   #0A0A0A;
+  --bg-surface:   #141414;
+  --bg-elevated:  #1C1C1E;
+  --bg-card:      #242426;
+  --bg-input:     #2C2C2E;
+
+  --border:       #2C2C2E;
+  --border-hover: #3A3A3C;
+
+  --text-primary:   #FFFFFF;
+  --text-secondary: #8E8E93;
+  --text-tertiary:  #48484A;
+
+  --accent:         #3182F6;      /* 토스 블루 */
+  --accent-hover:   #1B6EEA;
+  --accent-soft:    rgba(49,130,246,0.12);
+  --accent-glow:    rgba(49,130,246,0.25);
+
+  --green:  #05C072;
+  --red:    #F04452;
+  --yellow: #F5A623;
+
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  --shadow-card: 0 2px 16px rgba(0,0,0,0.4);
+  --shadow-glow: 0 0 32px rgba(49,130,246,0.15);
+
+  font-family: 'Pretendard', -apple-system, sans-serif;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background: var(--bg-primary); color: var(--text-primary); min-height:100vh; overflow-x:hidden; }
+
+/* ── 페이지 탭 네비게이션 ── */
+.page-nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex; gap: 4px; align-items: center;
+  height: 52px;
+}
+.page-tab {
+  padding: 6px 14px; border-radius: 8px; border: none;
+  background: transparent; color: var(--text-secondary);
+  font-size: 13px; font-weight: 500; cursor: pointer;
+  transition: all .18s;
+  font-family: 'Pretendard', sans-serif;
+}
+.page-tab:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.page-tab.active { background: var(--accent-soft); color: var(--accent); }
+
+/* ── 레이아웃 ── */
+.app { padding-top: 52px; display: flex; min-height: 100vh; }
+
+/* ── 사이드바 ── */
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0; position: fixed; top:52px; bottom:0;
+  display: flex; flex-direction: column;
+}
+.sidebar-logo {
+  padding: 0 20px 28px;
+  font-size: 15px; font-weight: 700; color: var(--text-primary);
+  display: flex; align-items: center; gap: 10px;
+}
+.logo-icon {
+  width: 32px; height: 32px; border-radius: 10px;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.nav-section { padding: 0 12px; margin-bottom: 4px; }
+.nav-label {
+  font-size: 10px; font-weight: 600; letter-spacing: .08em;
+  color: var(--text-tertiary); padding: 0 8px; margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  color: var(--text-secondary); font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .15s; margin-bottom: 2px;
+}
+.nav-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.nav-item.active { background: var(--accent-soft); color: var(--accent); }
+.nav-icon { font-size: 17px; width: 22px; text-align: center; }
+.nav-badge {
+  margin-left: auto; background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 20px;
+}
+.sidebar-bottom {
+  margin-top: auto; padding: 0 12px;
+  border-top: 1px solid var(--border); padding-top: 16px;
+}
+.user-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 10px;
+  cursor: pointer; transition: background .15s;
+}
+.user-card:hover { background: var(--bg-elevated); }
+.user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #6C5CE7);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.user-info { flex: 1; }
+.user-name { font-size: 13px; font-weight: 600; }
+.user-role { font-size: 11px; color: var(--text-secondary); }
+
+/* ── 메인 콘텐츠 ── */
+.main { margin-left: 220px; flex: 1; padding: 32px 36px; max-width: 1100px; }
+
+/* ── 페이지 헤더 ── */
+.page-header { margin-bottom: 28px; }
+.page-header h1 { font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.page-header p { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+/* ── 카드 ── */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  transition: border-color .15s;
+}
+.card:hover { border-color: var(--border-hover); }
+.card-sm { padding: 18px 20px; }
+
+/* ── 대시보드 그리드 ── */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px;
+  transition: all .18s;
+}
+.stat-card:hover { border-color: var(--accent); box-shadow: var(--shadow-glow); transform: translateY(-1px); }
+.stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 10px; }
+.stat-value { font-size: 28px; font-weight: 800; letter-spacing: -.04em; }
+.stat-value.blue { color: var(--accent); }
+.stat-value.green { color: var(--green); }
+.stat-value.yellow { color: var(--yellow); }
+.stat-sub { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+.stat-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 20px;
+  background: rgba(5,192,114,0.12); color: var(--green);
+}
+
+/* ── 대시보드 2단 레이아웃 ── */
+.dashboard-grid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; }
+
+/* ── 섹션 타이틀 ── */
+.section-title {
+  font-size: 14px; font-weight: 700; color: var(--text-primary);
+  margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+}
+.section-title span { color: var(--text-secondary); font-weight: 400; }
+
+/* ── 점검이력 리스트 ── */
+.history-list { display: flex; flex-direction: column; gap: 1px; }
+.history-item {
+  display: flex; align-items: center; padding: 14px 0;
+  border-bottom: 1px solid var(--border); gap: 14px;
+  transition: opacity .15s; cursor: pointer;
+}
+.history-item:last-child { border-bottom: none; }
+.history-item:hover .history-name { color: var(--accent); }
+.hi-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.hi-dot.green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.hi-dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.hi-dot.blue   { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.history-name { font-size: 14px; font-weight: 600; flex: 1; }
+.history-meta { font-size: 12px; color: var(--text-secondary); }
+.history-type {
+  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px;
+}
+.ht-monthly  { background: rgba(49,130,246,.12); color: var(--accent); }
+.ht-quarter  { background: rgba(245,166,35,.12); color: var(--yellow); }
+.ht-yearly   { background: rgba(5,192,114,.12); color: var(--green); }
+.history-down {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--text-secondary); font-size: 13px;
+  transition: all .15s;
+}
+.history-down:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+/* ── 충전소 현황 ── */
+.station-grid { display: flex; flex-direction: column; gap: 8px; }
+.station-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; background: var(--bg-elevated);
+  border-radius: 10px; cursor: pointer; transition: all .15s;
+  border: 1px solid transparent;
+}
+.station-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.si-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.si-icon.active { background: rgba(5,192,114,.15); }
+.si-icon.pending { background: rgba(245,166,35,.15); }
+.si-info { flex: 1; }
+.si-name { font-size: 13px; font-weight: 600; }
+.si-sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.si-status {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 6px;
+}
+.si-status.done { background: rgba(5,192,114,.12); color: var(--green); }
+.si-status.todo { background: rgba(245,166,35,.12); color: var(--yellow); }
+
+/* ── 점검 생성 폼 ── */
+.form-page { max-width: 640px; }
+.form-section { margin-bottom: 28px; }
+.form-section-title {
+  font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  color: var(--text-secondary); text-transform: uppercase;
+  margin-bottom: 12px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.form-group { margin-bottom: 14px; }
+.form-label {
+  font-size: 13px; font-weight: 600; color: var(--text-primary);
+  margin-bottom: 7px; display: block;
+}
+.form-input {
+  width: 100%; padding: 13px 16px;
+  background: var(--bg-input); border: 1.5px solid var(--border);
+  border-radius: 10px; color: var(--text-primary);
+  font-size: 14px; font-family: 'Pretendard', sans-serif;
+  transition: all .18s; outline: none;
+}
+.form-input:focus { border-color: var(--accent); background: var(--bg-elevated); box-shadow: 0 0 0 3px var(--accent-soft); }
+.form-input::placeholder { color: var(--text-tertiary); }
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238E8E93' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center;
+}
+
+/* ── 타입 셀렉터 (탭형) ── */
+.type-selector { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.type-btn {
+  padding: 12px 8px; border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-input); color: var(--text-secondary);
+  font-size: 13px; font-weight: 600; cursor: pointer; text-align: center;
+  transition: all .18s; font-family: 'Pretendard', sans-serif;
+}
+.type-btn:hover { border-color: var(--accent); color: var(--accent); }
+.type-btn.active {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
+}
+.type-btn small { display: block; font-size: 10px; font-weight: 400; color: inherit; opacity: .7; margin-top: 2px; }
+
+/* ── 측정값 그리드 ── */
+.measure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.measure-item { position: relative; }
+.measure-unit {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; color: var(--text-secondary); font-weight: 500;
+  pointer-events: none;
+}
+
+/* ── 충전소 검색 드롭다운 ── */
+.station-search-wrap { position: relative; }
+.station-dropdown {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50;
+  background: var(--bg-elevated); border: 1px solid var(--border-hover);
+  border-radius: 12px; padding: 6px; box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.station-option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  transition: background .12s;
+}
+.station-option:hover { background: var(--bg-card); }
+.so-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 5px var(--green); flex-shrink: 0;
+}
+.so-name { font-size: 14px; font-weight: 600; }
+.so-meta { font-size: 11px; color: var(--text-secondary); margin-top: 1px; }
+.so-cap {
+  margin-left: auto; font-size: 12px; font-weight: 700;
+  color: var(--accent); background: var(--accent-soft);
+  padding: 2px 8px; border-radius: 6px;
+}
+
+/* ── 선택된 충전소 카드 ── */
+.selected-station {
+  padding: 14px 16px; background: var(--bg-elevated);
+  border: 1.5px solid var(--accent); border-radius: 12px;
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+  margin-top: 10px;
+}
+.ss-item { }
+.ss-label { font-size: 10px; color: var(--text-secondary); font-weight: 500; margin-bottom: 3px; }
+.ss-value { font-size: 14px; font-weight: 700; }
+.ss-value.accent { color: var(--accent); }
+
+/* ── 버튼 ── */
+.btn {
+  padding: 14px 24px; border-radius: 10px; border: none;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-family: 'Pretendard', sans-serif; transition: all .18s;
+}
+.btn-primary {
+  background: var(--accent); color: #fff;
+  width: 100%;
+}
+.btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: 0 6px 20px var(--accent-glow); }
+.btn-secondary {
+  background: var(--bg-input); color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--border-hover); background: var(--bg-elevated); }
+.btn-sm { padding: 8px 16px; font-size: 13px; border-radius: 8px; }
+
+/* ── 생성 완료 상태 카드 ── */
+.success-card {
+  background: linear-gradient(135deg, rgba(5,192,114,.08), rgba(49,130,246,.08));
+  border: 1px solid rgba(5,192,114,.3);
+  border-radius: var(--radius-xl); padding: 28px;
+  text-align: center;
+}
+.success-icon {
+  width: 56px; height: 56px; background: rgba(5,192,114,.15);
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 26px; margin: 0 auto 16px;
+}
+.success-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+.success-sub { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
+.file-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+  color: var(--accent); margin-bottom: 16px;
+}
+.action-row { display: flex; gap: 8px; }
+
+/* ── 이력 페이지 ── */
+.filter-row {
+  display: flex; gap: 8px; margin-bottom: 18px; align-items: center;
+}
+.filter-chip {
+  padding: 7px 14px; border-radius: 20px;
+  border: 1px solid var(--border); background: transparent;
+  color: var(--text-secondary); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all .15s;
+  font-family: 'Pretendard', sans-serif;
+}
+.filter-chip:hover { border-color: var(--accent); color: var(--accent); }
+.filter-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.history-table { width: 100%; border-collapse: collapse; }
+.history-table th {
+  text-align: left; padding: 10px 14px;
+  font-size: 11px; font-weight: 700; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: .05em;
+  border-bottom: 1px solid var(--border); background: var(--bg-surface);
+}
+.history-table td {
+  padding: 14px 14px; font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.history-table tr:last-child td { border-bottom: none; }
+.history-table tr:hover td { background: rgba(255,255,255,.02); }
+.td-name { font-weight: 600; }
+.td-date { color: var(--text-secondary); }
+.status-dot {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; }
+.dot.green { background: var(--green); box-shadow: 0 0 4px var(--green); }
+.dot.yellow { background: var(--yellow); }
+
+/* ── 로그인 페이지 ── */
+.login-page {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-primary);
+  background-image: radial-gradient(ellipse 600px 400px at 50% 0%, rgba(49,130,246,.06), transparent);
+}
+.login-card {
+  width: 400px; padding: 40px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 24px;
+}
+.login-logo {
+  text-align: center; margin-bottom: 32px;
+}
+.login-logo-icon {
+  width: 52px; height: 52px; border-radius: 16px; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; margin: 0 auto 14px;
+}
+.login-logo h1 { font-size: 20px; font-weight: 800; }
+.login-logo p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.login-divider {
+  text-align: center; color: var(--text-tertiary); font-size: 12px;
+  margin: 14px 0; position: relative;
+}
+.login-divider::before, .login-divider::after {
+  content: ''; position: absolute; top: 50%;
+  width: 42%; height: 1px; background: var(--border);
+}
+.login-divider::before { left: 0; }
+.login-divider::after { right: 0; }
+
+/* ── 페이지 전환 ── */
+.page { display: none; }
+.page.active { display: block; }
+.login-page-wrap { display: none; }
+.login-page-wrap.active { display: flex; }
+
+/* ── 애니메이션 ── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in { animation: fadeUp .25s ease both; }
+.delay-1 { animation-delay: .05s; }
+.delay-2 { animation-delay: .10s; }
+.delay-3 { animation-delay: .15s; }
+.delay-4 { animation-delay: .20s; }
+
+/* ── 진행 인디케이터 ── */
+.progress-steps {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 28px;
+}
+.step {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: var(--text-tertiary);
+}
+.step.active { color: var(--accent); }
+.step.done { color: var(--green); }
+.step-num {
+  width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid currentColor;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+.step-line { flex: 1; height: 1px; background: var(--border); }
+
+/* ── 반응형 모바일 ── */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .main { margin-left: 0; padding: 20px 16px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .measure-grid { grid-template-columns: 1fr 1fr; }
+  .type-selector { grid-template-columns: repeat(2, 1fr); }
+  .history-table { display: none; }
+
+  /* 모바일 하단 탭바 */
+  .mobile-tab {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--bg-surface); border-top: 1px solid var(--border);
+    display: flex; height: 60px; padding: 0 8px;
+    z-index: 50;
+  }
+  .mt-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 3px; cursor: pointer;
+    color: var(--text-tertiary); font-size: 10px; font-weight: 500;
+    transition: color .15s;
+  }
+  .mt-item.active { color: var(--accent); }
+  .mt-icon { font-size: 20px; }
+  .app { padding-bottom: 60px; }
+  .login-card { width: calc(100vw - 32px); padding: 28px 24px; }
+}
+@media (min-width: 769px) {
+  .mobile-tab { display: none; }
+}
+
+/* ── 스크롤바 ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     페이지 전환 네비게이션 (프리뷰용)
+══════════════════════════════════════ -->
+<nav class="page-nav">
+  <span style="color:var(--text-tertiary);font-size:11px;margin-right:8px;font-weight:600;">UI 프리뷰</span>
+  <button class="page-tab active" onclick="showPage('login')">로그인</button>
+  <button class="page-tab" onclick="showPage('dashboard')">대시보드</button>
+  <button class="page-tab" onclick="showPage('inspection')">점검생성</button>
+  <button class="page-tab" onclick="showPage('history')">점검이력</button>
+  <button class="page-tab" onclick="showPage('success')">완료화면</button>
+</nav>
+
+<!-- ══════════════════════════════════════
+     로그인 페이지
+══════════════════════════════════════ -->
+<div id="page-login" class="login-page-wrap active">
+  <div class="login-card animate-in">
+    <div class="login-logo">
+      <div class="login-logo-icon">⚡</div>
+      <h1>전기안전관리</h1>
+      <p>직무고시 자동화 시스템</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">이메일</label>
+      <input class="form-input" type="email" placeholder="example@company.com">
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label class="form-label">비밀번호</label>
+      <input class="form-input" type="password" placeholder="비밀번호 입력">
+    </div>
+
+    <button class="btn btn-primary" onclick="showPage('dashboard')">로그인</button>
+
+    <div style="margin-top:16px;text-align:center">
+      <span style="font-size:12px;color:var(--text-secondary)">담당자에게 계정 발급을 요청하세요</span>
+    </div>
+
+    <div style="margin-top:20px;padding:14px;background:var(--bg-elevated);border-radius:10px;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:16px">🔒</span>
+      <div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:3px">계정별 데이터 분리</div>
+        <div style="font-size:11px;color:var(--text-secondary)">로그인한 섹터의 충전소 데이터만 접근 가능합니다</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     대시보드 페이지
+══════════════════════════════════════ -->
+<div id="page-dashboard" class="app page">
+
+  <!-- 사이드바 -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">⚡</div>
+      전기안전관리
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">메뉴</div>
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <span class="nav-icon">🏠</span> 대시보드
+      </div>
+      <div class="nav-item" onclick="showPage('inspection')">
+        <span class="nav-icon">📋</span> 점검 생성
+        <span class="nav-badge">NEW</span>
+      </div>
+      <div class="nav-item" onclick="showPage('history')">
+        <span class="nav-icon">📁</span> 점검 이력
+      </div>
+    </div>
+    <div class="nav-section" style="margin-top:16px">
+      <div class="nav-label">관리</div>
+      <div class="nav-item">
+        <span class="nav-icon">🏗️</span> 충전소 관리
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">⚙️</span> 설정
+      </div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="user-avatar">김</div>
+        <div class="user-info">
+          <div class="user-name">김안전</div>
+          <div class="user-role">영남권 담당자</div>
+        </div>
+        <span style="color:var(--text-tertiary);font-size:14px">›</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 메인 -->
+  <main class="main">
+    <div class="page-header animate-in">
+      <h1>대시보드</h1>
+      <p>2026년 5월 — 영남권 충전소 현황</p>
+    </div>
+
+    <!-- 통계 카드 -->
+    <div class="stats-grid animate-in delay-1">
+      <div class="stat-card">
+        <div class="stat-label">관리 충전소</div>
+        <div class="stat-value blue">12</div>
+        <div class="stat-sub">총 개소</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">이번달 완료</div>
+        <div class="stat-value green">8</div>
+        <div class="stat-sub"><span class="stat-badge">↑ 2</span> 전월 대비</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">미점검</div>
+        <div class="stat-value yellow">4</div>
+        <div class="stat-sub">마감 18일 남음</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">총 수전용량</div>
+        <div class="stat-value">2.4<span style="font-size:16px;font-weight:500;color:var(--text-secondary)">MW</span></div>
+        <div class="stat-sub">관리 설비 합산</div>
+      </div>
+    </div>
+
+    <!-- 2단 레이아웃 -->
+    <div class="dashboard-grid animate-in delay-2">
+
+      <!-- 최근 점검이력 -->
+      <div class="card">
+        <div class="section-title">최근 점검이력 <span>— 이번달</span></div>
+        <div class="history-list">
+          <div class="history-item">
+            <div class="hi-dot green"></div>
+            <div style="flex:1">
+              <div class="history-name">장유휴게소</div>
+              <div class="history-meta">2026-05-10 · 김안전</div>
+            </div>
+            <span class="history-type ht-monthly">월차</span>
+            <div class="history-down" title="다운로드">⬇</div>
+          </div>
+          <div class="history-item">
+            <div class="hi-dot green"></div>
+            <div style="flex:1">
+              <div class="history-name">기장휴게소</div>
+              <div class="history-meta">2026-05-08 · 김안전</div>
+            </div>
+            <span class="history-type ht-monthly">월차</span>
+            <div class="history-down">⬇</div>
+          </div>
+          <div class="history-item">
+            <div class="hi-dot green"></div>
+            <div style="flex:1">
+              <div class="history-name">울산신항충전소</div>
+              <div class="history-meta">2026-05-06 · 김안전</div>
+            </div>
+            <span class="history-type ht-monthly">월차</span>
+            <div class="history-down">⬇</div>
+          </div>
+          <div class="history-item">
+            <div class="hi-dot yellow"></div>
+            <div style="flex:1">
+              <div class="history-name">부산남항충전소</div>
+              <div class="history-meta">2026-03-15 · 박점검</div>
+            </div>
+            <span class="history-type ht-quarter">분기</span>
+            <div class="history-down">⬇</div>
+          </div>
+          <div class="history-item">
+            <div class="hi-dot blue"></div>
+            <div style="flex:1">
+              <div class="history-name">창원중앙충전소</div>
+              <div class="history-meta">2025-11-22 · 김안전</div>
+            </div>
+            <span class="history-type ht-yearly">연차</span>
+            <div class="history-down">⬇</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 충전소 현황 -->
+      <div class="card">
+        <div class="section-title">충전소 점검 현황</div>
+        <div class="station-grid">
+          <div class="station-item">
+            <div class="si-icon active">🟢</div>
+            <div class="si-info">
+              <div class="si-name">장유휴게소</div>
+              <div class="si-sub">용량 400kW · 22.9kV</div>
+            </div>
+            <span class="si-status done">완료</span>
+          </div>
+          <div class="station-item">
+            <div class="si-icon active">🟢</div>
+            <div class="si-info">
+              <div class="si-name">기장휴게소</div>
+              <div class="si-sub">용량 200kW · 22.9kV</div>
+            </div>
+            <span class="si-status done">완료</span>
+          </div>
+          <div class="station-item">
+            <div class="si-icon pending">🟡</div>
+            <div class="si-info">
+              <div class="si-name">울주군청충전소</div>
+              <div class="si-sub">용량 150kW · 22.9kV</div>
+            </div>
+            <span class="si-status todo">미점검</span>
+          </div>
+          <div class="station-item">
+            <div class="si-icon pending">🟡</div>
+            <div class="si-info">
+              <div class="si-name">부산역광장충전소</div>
+              <div class="si-sub">용량 300kW · 22.9kV</div>
+            </div>
+            <span class="si-status todo">미점검</span>
+          </div>
+        </div>
+
+        <button class="btn btn-secondary btn-sm" style="width:100%;margin-top:14px" onclick="showPage('inspection')">
+          + 점검 생성하기
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 모바일 하단 탭 -->
+  <div class="mobile-tab">
+    <div class="mt-item active" onclick="showPage('dashboard')"><div class="mt-icon">🏠</div>홈</div>
+    <div class="mt-item" onclick="showPage('inspection')"><div class="mt-icon">📋</div>점검</div>
+    <div class="mt-item" onclick="showPage('history')"><div class="mt-icon">📁</div>이력</div>
+    <div class="mt-item"><div class="mt-icon">⚙️</div>설정</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     점검 생성 페이지
+══════════════════════════════════════ -->
+<div id="page-inspection" class="app page">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">⚡</div>전기안전관리</div>
+    <div class="nav-section">
+      <div class="nav-label">메뉴</div>
+      <div class="nav-item" onclick="showPage('dashboard')"><span class="nav-icon">🏠</span>대시보드</div>
+      <div class="nav-item active" onclick="showPage('inspection')"><span class="nav-icon">📋</span>점검 생성</div>
+      <div class="nav-item" onclick="showPage('history')"><span class="nav-icon">📁</span>점검 이력</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="user-avatar">김</div>
+        <div class="user-info"><div class="user-name">김안전</div><div class="user-role">영남권 담당자</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header animate-in">
+      <h1>점검 생성</h1>
+      <p>정보를 입력하면 직무고시 엑셀이 자동으로 생성됩니다</p>
+    </div>
+
+    <!-- 진행 단계 -->
+    <div class="progress-steps animate-in delay-1">
+      <div class="step done"><div class="step-num">✓</div>충전소</div>
+      <div class="step-line"></div>
+      <div class="step active"><div class="step-num">2</div>점검정보</div>
+      <div class="step-line"></div>
+      <div class="step"><div class="step-num">3</div>측정값</div>
+      <div class="step-line"></div>
+      <div class="step"><div class="step-num">4</div>생성</div>
+    </div>
+
+    <div class="form-page animate-in delay-2">
+      <div class="card">
+
+        <!-- 충전소 선택 -->
+        <div class="form-section">
+          <div class="form-section-title">충전소 선택</div>
+          <div class="form-group">
+            <label class="form-label">충전소 검색</label>
+            <div class="station-search-wrap">
+              <input class="form-input" placeholder="충전소명 검색..." value="장유" oninput="toggleDropdown(this)">
+              <div class="station-dropdown" id="stationDropdown">
+                <div class="station-option" onclick="selectStation('장유휴게소', '400kW', '22.9kV', '경남 김해시')">
+                  <div class="so-dot"></div>
+                  <div>
+                    <div class="so-name">장유휴게소</div>
+                    <div class="so-meta">경남 김해시 · 장유-01, 장유-02</div>
+                  </div>
+                  <div class="so-cap">400kW</div>
+                </div>
+                <div class="station-option" onclick="selectStation('장유IC충전소', '200kW', '22.9kV', '경남 김해시')">
+                  <div class="so-dot"></div>
+                  <div>
+                    <div class="so-name">장유IC충전소</div>
+                    <div class="so-meta">경남 김해시 · 장유IC-01</div>
+                  </div>
+                  <div class="so-cap">200kW</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 선택된 충전소 정보 -->
+            <div class="selected-station" id="selectedStation" style="display:none">
+              <div class="ss-item">
+                <div class="ss-label">충전소명</div>
+                <div class="ss-value" id="ss-name">—</div>
+              </div>
+              <div class="ss-item">
+                <div class="ss-label">수전전압</div>
+                <div class="ss-value accent" id="ss-voltage">—</div>
+              </div>
+              <div class="ss-item">
+                <div class="ss-label">수전용량</div>
+                <div class="ss-value accent" id="ss-cap">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 점검 정보 -->
+        <div class="form-section">
+          <div class="form-section-title">점검 정보</div>
+
+          <div class="form-group">
+            <label class="form-label">점검 유형</label>
+            <div class="type-selector">
+              <button class="type-btn active" onclick="selectType(this)">
+                월차 <small>1,2,4,5,7,8,12월</small>
+              </button>
+              <button class="type-btn" onclick="selectType(this)">
+                분기 <small>3, 9월</small>
+              </button>
+              <button class="type-btn" onclick="selectType(this)">
+                반기 <small>3, 9월</small>
+              </button>
+              <button class="type-btn" onclick="selectType(this)">
+                연차 <small>11월</small>
+              </button>
+            </div>
+            <!-- 자동 감지 안내 -->
+            <div style="margin-top:8px;padding:10px 12px;background:var(--accent-soft);border-radius:8px;font-size:12px;color:var(--accent);font-weight:500;">
+              💡 현재 5월 → 월차점검으로 자동 감지되었습니다
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label class="form-label">점검일자</label>
+              <input class="form-input" type="date" value="2026-05-12">
+            </div>
+            <div class="form-group">
+              <label class="form-label">점검자</label>
+              <input class="form-input" type="text" value="김안전" placeholder="점검자 이름">
+            </div>
+          </div>
+        </div>
+
+        <!-- 측정값 -->
+        <div class="form-section">
+          <div class="form-section-title">측정값 입력</div>
+
+          <div class="form-group">
+            <label class="form-label">전압 (V)</label>
+            <div class="measure-grid">
+              <div class="measure-item">
+                <input class="form-input" placeholder="R상" style="padding-right:36px" value="22900">
+                <span class="measure-unit">V</span>
+              </div>
+              <div class="measure-item">
+                <input class="form-input" placeholder="S상" style="padding-right:36px" value="22850">
+                <span class="measure-unit">V</span>
+              </div>
+              <div class="measure-item">
+                <input class="form-input" placeholder="T상" style="padding-right:36px" value="22920">
+                <span class="measure-unit">V</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">전류 (A)</label>
+            <div class="measure-grid">
+              <div class="measure-item">
+                <input class="form-input" placeholder="R상" style="padding-right:36px" value="12.4">
+                <span class="measure-unit">A</span>
+              </div>
+              <div class="measure-item">
+                <input class="form-input" placeholder="S상" style="padding-right:36px" value="12.1">
+                <span class="measure-unit">A</span>
+              </div>
+              <div class="measure-item">
+                <input class="form-input" placeholder="T상" style="padding-right:36px" value="12.6">
+                <span class="measure-unit">A</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">특이사항</label>
+            <textarea class="form-input" rows="3" placeholder="이상없음 (없으면 '이상없음' 자동 입력)"></textarea>
+          </div>
+        </div>
+
+        <!-- 생성 버튼 -->
+        <div style="padding-top:4px">
+          <div style="padding:12px 14px;background:var(--bg-elevated);border-radius:10px;margin-bottom:14px;font-size:12px;color:var(--text-secondary);">
+            <strong style="color:var(--text-primary)">📄 생성될 파일</strong><br>
+            <span style="color:var(--accent);font-weight:600;">장유휴게소_월차점검_2026-05-12.xlsx</span>
+            &nbsp;·&nbsp; 별지1, 별지14 자동 작성
+          </div>
+          <button class="btn btn-primary" onclick="showPage('success')">
+            ⚡ 직무고시 엑셀 생성하기
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="mobile-tab">
+    <div class="mt-item" onclick="showPage('dashboard')"><div class="mt-icon">🏠</div>홈</div>
+    <div class="mt-item active" onclick="showPage('inspection')"><div class="mt-icon">📋</div>점검</div>
+    <div class="mt-item" onclick="showPage('history')"><div class="mt-icon">📁</div>이력</div>
+    <div class="mt-item"><div class="mt-icon">⚙️</div>설정</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     점검 이력 페이지
+══════════════════════════════════════ -->
+<div id="page-history" class="app page">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">⚡</div>전기안전관리</div>
+    <div class="nav-section">
+      <div class="nav-label">메뉴</div>
+      <div class="nav-item" onclick="showPage('dashboard')"><span class="nav-icon">🏠</span>대시보드</div>
+      <div class="nav-item" onclick="showPage('inspection')"><span class="nav-icon">📋</span>점검 생성</div>
+      <div class="nav-item active" onclick="showPage('history')"><span class="nav-icon">📁</span>점검 이력</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="user-avatar">김</div>
+        <div class="user-info"><div class="user-name">김안전</div><div class="user-role">영남권 담당자</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header animate-in">
+      <h1>점검 이력</h1>
+      <p>생성된 직무고시 파일 목록</p>
+    </div>
+
+    <!-- 필터 -->
+    <div class="filter-row animate-in delay-1">
+      <button class="filter-chip active">전체</button>
+      <button class="filter-chip">월차</button>
+      <button class="filter-chip">분기</button>
+      <button class="filter-chip">연차</button>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <input class="form-input" placeholder="충전소 검색" style="width:180px;padding:8px 14px;font-size:13px;">
+        <input class="form-input" type="month" value="2026-05" style="width:150px;padding:8px 14px;font-size:13px;">
+      </div>
+    </div>
+
+    <!-- 테이블 (PC) -->
+    <div class="card animate-in delay-2" style="padding:0;overflow:hidden">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>충전소</th>
+            <th>점검유형</th>
+            <th>점검일자</th>
+            <th>점검자</th>
+            <th>파일명</th>
+            <th>상태</th>
+            <th style="text-align:right">다운로드</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="td-name">장유휴게소</td>
+            <td><span class="history-type ht-monthly">월차</span></td>
+            <td class="td-date">2026-05-10</td>
+            <td class="td-date">김안전</td>
+            <td style="font-size:12px;color:var(--text-secondary)">장유휴게소_월차점검_2026-05-10.xlsx</td>
+            <td><span class="status-dot"><span class="dot green"></span>완료</span></td>
+            <td style="text-align:right"><button class="btn btn-secondary btn-sm">⬇ 다운로드</button></td>
+          </tr>
+          <tr>
+            <td class="td-name">기장휴게소</td>
+            <td><span class="history-type ht-monthly">월차</span></td>
+            <td class="td-date">2026-05-08</td>
+            <td class="td-date">김안전</td>
+            <td style="font-size:12px;color:var(--text-secondary)">기장휴게소_월차점검_2026-05-08.xlsx</td>
+            <td><span class="status-dot"><span class="dot green"></span>완료</span></td>
+            <td style="text-align:right"><button class="btn btn-secondary btn-sm">⬇ 다운로드</button></td>
+          </tr>
+          <tr>
+            <td class="td-name">부산남항충전소</td>
+            <td><span class="history-type ht-quarter">분기</span></td>
+            <td class="td-date">2026-03-15</td>
+            <td class="td-date">박점검</td>
+            <td style="font-size:12px;color:var(--text-secondary)">부산남항충전소_분기점검_2026-03-15.xlsx</td>
+            <td><span class="status-dot"><span class="dot green"></span>완료</span></td>
+            <td style="text-align:right"><button class="btn btn-secondary btn-sm">⬇ 다운로드</button></td>
+          </tr>
+          <tr>
+            <td class="td-name">창원중앙충전소</td>
+            <td><span class="history-type ht-yearly">연차</span></td>
+            <td class="td-date">2025-11-22</td>
+            <td class="td-date">김안전</td>
+            <td style="font-size:12px;color:var(--text-secondary)">창원중앙충전소_연차점검_2025-11-22.xlsx</td>
+            <td><span class="status-dot"><span class="dot green"></span>완료</span></td>
+            <td style="text-align:right"><button class="btn btn-secondary btn-sm">⬇ 다운로드</button></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- 모바일 카드형 목록 -->
+      <div style="display:none" class="mobile-list">
+        <div class="history-list" style="padding:12px 16px">
+          <div class="history-item">
+            <div class="hi-dot green"></div>
+            <div style="flex:1">
+              <div class="history-name">장유휴게소</div>
+              <div class="history-meta">2026-05-10 · 김안전 · 장유휴게소_월차점검_2026-05-10.xlsx</div>
+            </div>
+            <span class="history-type ht-monthly">월차</span>
+            <div class="history-down">⬇</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div class="mobile-tab">
+    <div class="mt-item" onclick="showPage('dashboard')"><div class="mt-icon">🏠</div>홈</div>
+    <div class="mt-item" onclick="showPage('inspection')"><div class="mt-icon">📋</div>점검</div>
+    <div class="mt-item active" onclick="showPage('history')"><div class="mt-icon">📁</div>이력</div>
+    <div class="mt-item"><div class="mt-icon">⚙️</div>설정</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     생성 완료 페이지
+══════════════════════════════════════ -->
+<div id="page-success" class="app page">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">⚡</div>전기안전관리</div>
+    <div class="nav-section">
+      <div class="nav-label">메뉴</div>
+      <div class="nav-item" onclick="showPage('dashboard')"><span class="nav-icon">🏠</span>대시보드</div>
+      <div class="nav-item active" onclick="showPage('inspection')"><span class="nav-icon">📋</span>점검 생성</div>
+      <div class="nav-item" onclick="showPage('history')"><span class="nav-icon">📁</span>점검 이력</div>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="user-avatar">김</div>
+        <div class="user-info"><div class="user-name">김안전</div><div class="user-role">영남권 담당자</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header animate-in">
+      <h1>점검 생성</h1>
+    </div>
+
+    <div class="form-page animate-in delay-1">
+      <div class="success-card">
+        <div class="success-icon">✅</div>
+        <div class="success-title">직무고시 파일이 생성되었습니다</div>
+        <div class="success-sub">별지1, 별지14가 자동 작성되었으며 Supabase에 저장되었습니다</div>
+
+        <div class="file-chip">
+          📄 장유휴게소_월차점검_2026-05-12.xlsx
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;text-align:left;background:rgba(255,255,255,.03);border-radius:12px;padding:14px">
+          <div>
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">충전소</div>
+            <div style="font-size:13px;font-weight:700">장유휴게소</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">점검유형</div>
+            <div style="font-size:13px;font-weight:700">월차점검</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-secondary);margin-bottom:3px">점검일자</div>
+            <div style="font-size:13px;font-weight:700">2026-05-12</div>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button class="btn btn-primary" style="flex:2">⬇ 파일 다운로드</button>
+          <button class="btn btn-secondary" style="flex:1" onclick="showPage('inspection')">새 점검 생성</button>
+        </div>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="showPage('history')">
+          점검 이력 보기
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <div class="mobile-tab">
+    <div class="mt-item" onclick="showPage('dashboard')"><div class="mt-icon">🏠</div>홈</div>
+    <div class="mt-item active" onclick="showPage('inspection')"><div class="mt-icon">📋</div>점검</div>
+    <div class="mt-item" onclick="showPage('history')"><div class="mt-icon">📁</div>이력</div>
+    <div class="mt-item"><div class="mt-icon">⚙️</div>설정</div>
+  </div>
+</div>
+
+<script>
+// ── 페이지 전환 ──
+function showPage(name) {
+  // 모든 페이지 숨기기
+  document.querySelectorAll('[id^="page-"]').forEach(el => {
+    el.classList.remove('active');
+    if (el.classList.contains('app')) el.classList.remove('page');
+    if (el.classList.contains('login-page-wrap')) el.style.display = 'none';
+  });
+
+  // 탭 업데이트
+  document.querySelectorAll('.page-tab').forEach((t, i) => {
+    const pages = ['login','dashboard','inspection','history','success'];
+    t.classList.toggle('active', pages[i] === name);
+  });
+
+  const el = document.getElementById('page-' + name);
+  if (!el) return;
+
+  if (name === 'login') {
+    el.style.display = 'flex';
+    el.classList.add('active');
+  } else {
+    el.style.display = 'flex';
+    el.classList.add('active');
+    // 애니메이션 재실행
+    el.querySelectorAll('.animate-in').forEach(a => {
+      a.style.animation = 'none';
+      requestAnimationFrame(() => { a.style.animation = ''; });
+    });
+  }
+}
+
+// ── 초기화 ──
+showPage('login');
+
+// ── 충전소 선택 ──
+function selectStation(name, cap, voltage, addr) {
+  document.querySelector('#stationDropdown').style.display = 'none';
+  document.querySelector('input[placeholder="충전소명 검색..."]').value = name;
+
+  const card = document.getElementById('selectedStation');
+  card.style.display = 'grid';
+  document.getElementById('ss-name').textContent = name;
+  document.getElementById('ss-voltage').textContent = voltage;
+  document.getElementById('ss-cap').textContent = cap;
+}
+
+function toggleDropdown(input) {
+  const dd = document.getElementById('stationDropdown');
+  dd.style.display = input.value.length > 0 ? 'block' : 'none';
+}
+
+// ── 점검유형 선택 ──
+function selectType(btn) {
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── 필터 칩 ──
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
