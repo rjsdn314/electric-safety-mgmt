@@ -1,167 +1,125 @@
 'use client';
-// ============================================================
-// components/inspection/InspectionForm.tsx — 점검 생성 폼
-// 엑셀 생성 + File System Access API 로컬 폴더 자동 저장
-// ============================================================
-import { useState } from 'react';
-import { useFileSystem } from '@/hooks/useFileSystem';
-import { useStations } from '@/hooks/useStations';
-import { Station, InspectionType } from '@/types';
-import { groupStations } from '@/lib/utils/station-group';
-import { getInspectionTypeByMonth } from '@/lib/utils/inspection-type';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
-const TYPE_OPTIONS: { value: InspectionType; label: string; months: string }[] = [
-  { value: '월차', label: '월차', months: '1,2,4,5,7,8,12월' },
-  { value: '분기', label: '분기', months: '3, 9월' },
-  { value: '반기', label: '반기', months: '3, 9월' },
-  { value: '연차', label: '연차', months: '11월' },
+const TYPE_OPTIONS = [
+  { value: '월차', months: '1,2,4,5,7,8,12월' },
+  { value: '분기', months: '3, 9월' },
+  { value: '반기', months: '3, 9월' },
+  { value: '연차', months: '11월' },
 ];
 
-function MeasureRow({ label, unit, keys, values, onChange }: {
-  label: string; unit: string; keys: string[];
-  values: Record<string, number | undefined>;
-  onChange: (k: string, v: number | undefined) => void;
-}) {
-  const phases = ['A상', 'B상', 'C상', 'N'];
-  return (
-    <div>
-      <label className="block text-sm font-semibold mb-1.5">{label}</label>
-      <div className="grid grid-cols-4 gap-2">
-        {phases.map((phase, i) => (
-          <div key={phase} className="relative">
-            <input type="number" className="toss-input pr-7 text-sm" placeholder={phase}
-              value={values[keys[i]] ?? ''}
-              onChange={e => onChange(keys[i], e.target.value === '' ? undefined : Number(e.target.value))} />
-            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs pointer-events-none"
-              style={{ color: 'var(--text-secondary)' }}>{unit}</span>
-          </div>
-        ))}
-      </div>
-      <div className="flex text-[10px] mt-0.5 gap-2" style={{ color: 'var(--text-tertiary)' }}>
-        {phases.map(p => <span key={p} className="flex-1 text-center">{p}</span>)}
-      </div>
-    </div>
-  );
-}
-
 export function InspectionForm() {
-  const { stations } = useStations();
-  const { isSupported, rootFolderName, status: fsStatus, lastSavedPath, error: fsError, selectRootFolder, saveExcel } = useFileSystem();
-
-  const today = new Date().toISOString().split('T')[0];
-  const currentMonth = new Date().getMonth() + 1;
-  const autoType = (() => { try { return getInspectionTypeByMonth(currentMonth); } catch { return '월차' as InspectionType; } })();
-
-  const [selectedStation, setSelectedStation] = useState<Station | null>(null);
-  const [stationQuery, setStationQuery] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [inspectionType, setInspectionType] = useState<InspectionType>(autoType);
-  const [date, setDate] = useState(today);
-  const [inspectorName, setInspectorName] = useState('');
+  const [stations, setStations] = useState<any[]>([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<any>(null);
+  const [inspType, setInspType] = useState('월차');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [inspector, setInspector] = useState('');
   const [count, setCount] = useState(1);
-  const [measures, setMeasures] = useState<Record<string, number | undefined>>({});
+  const [measures, setMeasures] = useState<any>({});
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [savedFile, setSavedFile] = useState('');
 
-  const groups = groupStations(stations);
-  const filtered = groups.filter(g => !stationQuery || g.base_name.includes(stationQuery));
-  const updateMeasure = (key: string, val: number | undefined) => setMeasures(prev => ({ ...prev, [key]: val }));
+  useEffect(() => {
+    const load = async () => {
+      const sb = createClient();
+      const { data, error } = await sb
+        .from('stations')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+      if (error) console.error('오류:', error);
+      else console.log('충전소:', data?.length);
+      setStations(data || []);
+    };
+    load();
+  }, []);
 
-  const handleCreate = async () => {
-    if (!selectedStation) return alert('충전소를 선택해주세요');
-    if (!inspectorName.trim()) return alert('점검자 이름을 입력해주세요');
-    if (isSupported && !rootFolderName) return alert('저장 폴더를 먼저 선택해주세요');
+  const filtered = stations.filter(s =>
+    !query || s.name?.includes(query) || s.base_name?.includes(query)
+  );
+
+  const handleSubmit = async () => {
+    if (!selected) return alert('충전소를 선택해주세요');
+    if (!inspector) return alert('점검자를 입력해주세요');
     setLoading(true);
     try {
       const res = await fetch('/api/inspection/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ station_id: selectedStation.id, inspection_type: inspectionType, date, inspector_name: inspectorName, count, ...measures, remarks: remarks || '특이사항없음' }),
+        body: JSON.stringify({
+          station_id: selected.id,
+          inspection_type: inspType,
+          date, inspector_name: inspector, count,
+          ...measures,
+          remarks: remarks || '특이사항없음',
+        }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || '생성 실패');
-      const { fileName, fileBase64, folderStructure } = await res.json();
-      await saveExcel(fileBase64, fileName, folderStructure);
+      if (!res.ok) throw new Error((await res.json()).error);
+      const { fileName } = await res.json();
+      setSavedFile(fileName);
       setDone(true);
-    } catch (e: any) {
-      alert(`오류: ${e.message}`);
+    } catch(e: any) {
+      alert('오류: ' + e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  if (done) {
-    return (
-      <div className="max-w-xl">
-        <div className="rounded-[20px] p-8 text-center"
-          style={{ background: 'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))', border: '1px solid rgba(5,192,114,.3)' }}>
-          <div className="text-4xl mb-4">✅</div>
-          <h2 className="text-lg font-[800] mb-2">저장 완료!</h2>
-          {lastSavedPath && (
-            <div className="px-4 py-3 rounded-[10px] mb-4 text-left"
-              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
-              <div className="text-[10px] font-semibold mb-1" style={{ color: 'var(--text-secondary)' }}>저장 경로</div>
-              <div className="text-xs font-mono break-all">📁 {lastSavedPath}</div>
-            </div>
-          )}
-          {fsError && <div className="text-xs mb-4 px-3 py-2 rounded-[8px]" style={{ background: 'rgba(245,166,35,.1)', color: '#F5A623' }}>⚠️ {fsError}</div>}
-          <button className="toss-btn-primary" onClick={() => { setDone(false); setMeasures({}); setRemarks(''); }}>새 점검 생성</button>
-        </div>
+  if (done) return (
+    <div className="max-w-xl">
+      <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:32,textAlign:'center'}}>
+        <div style={{fontSize:48}}>✅</div>
+        <h2 style={{fontSize:18,fontWeight:800,margin:'12px 0 8px'}}>저장 완료!</h2>
+        <div style={{color:'var(--accent)',fontWeight:600,marginBottom:20}}>📄 {savedFile}</div>
+        <button onClick={()=>{setDone(false);setSelected(null);setQuery('');setMeasures({});setRemarks('');}}
+          style={{background:'var(--accent)',color:'#fff',border:'none',borderRadius:10,padding:'14px 24px',fontSize:15,fontWeight:700,cursor:'pointer',width:'100%'}}>
+          새 점검 생성
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="max-w-2xl space-y-4">
-      {/* 저장 폴더 */}
-      <div className="p-4 rounded-[14px]" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-bold mb-0.5">📁 저장 폴더</div>
-            <div className="text-xs" style={{ color: rootFolderName ? 'var(--green)' : 'var(--text-secondary)' }}>
-              {rootFolderName ? `✓ ${rootFolderName} — 폴더 구조 자동 생성` : isSupported ? '폴더 선택 후 자동 저장됩니다' : 'Chrome에서 폴더 자동 저장 지원'}
-            </div>
-          </div>
-          {isSupported && (
-            <button onClick={selectRootFolder} className="px-3 py-1.5 text-xs font-bold rounded-[8px] text-white" style={{ background: rootFolderName ? 'var(--bg-input)' : 'var(--accent)', color: rootFolderName ? 'var(--text-primary)' : '#fff', border: rootFolderName ? '1px solid var(--border)' : 'none' }}>
-              {rootFolderName ? '변경' : '폴더 선택'}
-            </button>
-          )}
-        </div>
-        {rootFolderName && selectedStation && (
-          <div className="mt-2 text-[11px] px-3 py-1.5 rounded-[6px] font-mono" style={{ background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-            {rootFolderName}/{selectedStation.base_name}/{date.slice(0,4)}/{date.slice(5,7)}/{inspectionType}점검/파일명.xlsx
-          </div>
-        )}
-      </div>
+    <div style={{maxWidth:640}}>
+      <div className="toss-card" style={{display:'flex',flexDirection:'column',gap:24}}>
 
-      <div className="toss-card space-y-6">
-        {/* 충전소 */}
+        {/* 충전소 선택 */}
         <div>
-          <div className="section-label">충전소 선택</div>
-          <div className="relative">
-            <input className="toss-input" placeholder="충전소명 검색..." value={stationQuery}
-              onChange={e => { setStationQuery(e.target.value); setDropdownOpen(true); }}
-              onFocus={() => setDropdownOpen(true)} />
-            {dropdownOpen && filtered.length > 0 && (
-              <div className="absolute top-full left-0 right-0 z-50 mt-1.5 rounded-[12px] p-1.5 shadow-xl"
-                style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-hover)' }}>
-                {filtered.map(g => (
-                  <button key={g.base_name} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[8px] text-left transition-colors"
-                    style={{ ':hover': { background: 'var(--bg-card)' } } as any}
-                    onClick={() => { setSelectedStation(stations.find(s => s.base_name === g.base_name) ?? null); setStationQuery(g.base_name); setDropdownOpen(false); }}>
-                    <span className="w-2 h-2 rounded-full bg-[#05C072]" />
-                    <div className="flex-1"><div className="text-sm font-semibold">{g.base_name}</div><div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{g.total_capacity}kW · {g.unit_count}기</div></div>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>{g.voltage}V</span>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>충전소 선택</div>
+          <div style={{position:'relative'}}>
+            <input className="toss-input" placeholder="충전소명 검색..."
+              value={query}
+              onChange={e=>{setQuery(e.target.value);setOpen(true);}}
+              onFocus={()=>setOpen(true)}
+            />
+            {open && filtered.length > 0 && (
+              <div style={{position:'absolute',top:'calc(100% + 6px)',left:0,right:0,zIndex:50,background:'var(--bg-elevated)',border:'1px solid var(--border-hover)',borderRadius:12,padding:6,boxShadow:'0 4px 20px rgba(0,0,0,.4)',maxHeight:240,overflowY:'auto'}}>
+                {filtered.map(s => (
+                  <button key={s.id}
+                    style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'none',background:'transparent',color:'var(--text-primary)',cursor:'pointer',textAlign:'left'}}
+                    onMouseEnter={e=>(e.currentTarget.style.background='var(--bg-card)')}
+                    onMouseLeave={e=>(e.currentTarget.style.background='transparent')}
+                    onClick={()=>{setSelected(s);setQuery(s.name);setOpen(false);}}>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:'#05C072',boxShadow:'0 0 5px #05C072',flexShrink:0}}/>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:14,fontWeight:600}}>{s.name}</div>
+                      <div style={{fontSize:11,color:'var(--text-secondary)'}}>{s.voltage}V · {s.capacity}kW</div>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,padding:'2px 8px',borderRadius:6,background:'var(--accent-soft)',color:'var(--accent)'}}>{s.voltage >= 3000 ? '고압' : '저압'}</span>
                   </button>
                 ))}
               </div>
             )}
           </div>
-          {selectedStation && (
-            <div className="mt-2.5 grid grid-cols-3 gap-2 p-3.5 rounded-[10px]" style={{ background: 'var(--bg-elevated)', border: '1.5px solid var(--accent)' }}>
-              {[['충전소명', selectedStation.base_name, false], ['수전전압', `${selectedStation.voltage}V`, true], ['수전용량', `${selectedStation.capacity}kW`, true]].map(([l, v, a]) => (
-                <div key={String(l)}><div className="text-[10px] mb-0.5" style={{ color: 'var(--text-secondary)' }}>{l}</div><div className="text-sm font-bold" style={{ color: a ? 'var(--accent)' : 'var(--text-primary)' }}>{v}</div></div>
+          {selected && (
+            <div style={{marginTop:10,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,padding:14,background:'var(--bg-elevated)',border:'1.5px solid var(--accent)',borderRadius:12}}>
+              {[['충전소명',selected.name],['수전전압',selected.voltage+'V'],['수전용량',selected.capacity+'kW']].map(([l,v])=>(
+                <div key={String(l)}><div style={{fontSize:10,color:'var(--text-secondary)',marginBottom:2}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:'var(--accent)'}}>{v}</div></div>
               ))}
             </div>
           )}
@@ -169,49 +127,58 @@ export function InspectionForm() {
 
         {/* 점검 정보 */}
         <div>
-          <div className="section-label">점검 정보</div>
-          <div className="grid grid-cols-4 gap-2 mb-3">
-            {TYPE_OPTIONS.map(t => (
-              <button key={t.value} onClick={() => setInspectionType(t.value)}
-                className="py-3 rounded-[10px] text-sm font-semibold text-center transition-all"
-                style={{ border: `1.5px solid ${inspectionType === t.value ? 'var(--accent)' : 'var(--border)'}`, background: inspectionType === t.value ? 'var(--accent-soft)' : 'var(--bg-input)', color: inspectionType === t.value ? 'var(--accent)' : 'var(--text-secondary)' }}>
-                {t.label}<span className="block text-[10px] opacity-70 mt-0.5 font-normal">{t.months}</span>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>점검 정보</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
+            {TYPE_OPTIONS.map(t=>(
+              <button key={t.value} onClick={()=>setInspType(t.value)}
+                style={{padding:'12px 8px',borderRadius:10,border:`1.5px solid ${inspType===t.value?'var(--accent)':'var(--border)'}`,background:inspType===t.value?'var(--accent-soft)':'var(--bg-input)',color:inspType===t.value?'var(--accent)':'var(--text-secondary)',fontSize:13,fontWeight:600,cursor:'pointer',textAlign:'center',fontFamily:'inherit'}}>
+                {t.value}<span style={{display:'block',fontSize:10,opacity:.7,marginTop:2,fontWeight:400}}>{t.months}</span>
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className="block text-sm font-semibold mb-1.5">점검일자</label><input type="date" className="toss-input" value={date} onChange={e => setDate(e.target.value)} /></div>
-            <div><label className="block text-sm font-semibold mb-1.5">점검자</label><input type="text" className="toss-input" placeholder="이름" value={inspectorName} onChange={e => setInspectorName(e.target.value)} /></div>
-            <div><label className="block text-sm font-semibold mb-1.5">점검횟수</label><input type="number" className="toss-input" min={1} value={count} onChange={e => setCount(Number(e.target.value))} /></div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div><label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:6}}>점검일자</label><input type="date" className="toss-input" value={date} onChange={e=>setDate(e.target.value)}/></div>
+            <div><label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:6}}>점검자</label><input className="toss-input" placeholder="이름" value={inspector} onChange={e=>setInspector(e.target.value)}/></div>
+            <div><label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:6}}>점검횟수</label><input type="number" className="toss-input" min={1} value={count} onChange={e=>setCount(Number(e.target.value))}/></div>
           </div>
         </div>
 
         {/* 측정값 */}
         <div>
-          <div className="section-label">측정값 입력</div>
-          <div className="space-y-4">
-            <MeasureRow label="전압 (V)" unit="V" keys={['voltage_A1','voltage_B1','voltage_C1','voltage_N1']} values={measures} onChange={updateMeasure} />
-            <MeasureRow label="전류 (A)" unit="A" keys={['current_A1','current_B1','current_C1','current_N1']} values={measures} onChange={updateMeasure} />
-          </div>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>측정값 입력</div>
+          {[{label:'전압 (V)',unit:'V',keys:['voltage_A1','voltage_B1','voltage_C1','voltage_N1']},{label:'전류 (A)',unit:'A',keys:['current_A1','current_B1','current_C1','current_N1']}].map(row=>(
+            <div key={row.label} style={{marginBottom:16}}>
+              <label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:8}}>{row.label}</label>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}}>
+                {['A상','B상','C상','N'].map((ph,i)=>(
+                  <div key={ph} style={{position:'relative'}}>
+                    <input type="number" className="toss-input" placeholder={ph} style={{paddingRight:28,fontSize:13}}
+                      value={measures[row.keys[i]]??''}
+                      onChange={e=>setMeasures((prev:any)=>({...prev,[row.keys[i]]:e.target.value===''?undefined:Number(e.target.value)}))}/>
+                    <span style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',fontSize:12,color:'var(--text-secondary)',pointerEvents:'none'}}>{row.unit}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* 특이사항 */}
         <div>
-          <label className="block text-sm font-semibold mb-1.5">특이사항</label>
-          <textarea className="toss-input resize-none" rows={3} placeholder="특이사항없음 (비워두면 자동 입력)" value={remarks} onChange={e => setRemarks(e.target.value)} />
+          <label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:6}}>특이사항</label>
+          <textarea className="toss-input" rows={3} style={{resize:'none'}} placeholder="특이사항없음"
+            value={remarks} onChange={e=>setRemarks(e.target.value)}/>
         </div>
 
-        {/* 파일명 미리보기 */}
-        {selectedStation && (
-          <div className="px-3 py-2.5 rounded-[10px] text-sm" style={{ background: 'var(--bg-elevated)' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>생성 파일: </span>
-            <span className="font-semibold" style={{ color: 'var(--accent)' }}>{selectedStation.base_name}_{inspectionType}점검_{date}.xlsx</span>
+        {selected && (
+          <div style={{padding:'10px 14px',background:'var(--bg-elevated)',borderRadius:10,fontSize:13}}>
+            <span style={{color:'var(--text-secondary)'}}>생성 파일: </span>
+            <span style={{color:'var(--accent)',fontWeight:600}}>{selected.name}_{inspType}점검_{date}.xlsx</span>
           </div>
         )}
 
-        <button className="toss-btn-primary" onClick={handleCreate}
-          disabled={loading || fsStatus === 'saving' || fsStatus === 'picking'}
-          style={{ opacity: loading ? 0.7 : 1 }}>
+        <button onClick={handleSubmit} disabled={loading}
+          style={{width:'100%',padding:14,borderRadius:10,border:'none',background:'var(--accent)',color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',opacity:loading?.7:1,fontFamily:'inherit'}}>
           {loading ? '⏳ 생성 중...' : '⚡ 직무고시 엑셀 생성 및 저장'}
         </button>
       </div>
