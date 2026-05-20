@@ -19,18 +19,26 @@ export function useStations() {
 
   useEffect(() => {
     const fetchStations = async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('stations')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      
-      if (error) {
-        console.error('충전소 로딩 오류:', error);
+      try {
+        const supabase = createClient();
+        console.log('충전소 로딩 시작...');
+        const { data, error } = await supabase
+          .from('stations')
+          .select('*')
+          .eq('is_active', true)
+          .order('name');
+        
+        if (error) {
+          console.error('충전소 로딩 오류:', error.message);
+        } else {
+          console.log('충전소 로딩 성공:', data?.length, '개');
+        }
+        setStations(data ?? []);
+      } catch(e) {
+        console.error('예외 발생:', e);
+      } finally {
+        setLoading(false);
       }
-      setStations(data ?? []);
-      setLoading(false);
     };
     fetchStations();
   }, []);
