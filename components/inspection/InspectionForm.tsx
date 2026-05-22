@@ -23,18 +23,32 @@ export function InspectionForm() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [savedFile, setSavedFile] = useState('');
+  const [downloadUrl, setDownloadUrl] = useState('');
 
   useEffect(() => {
     const load = async () => {
       const sb = createClient();
-      const { data, error } = await sb
-        .from('stations')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
-      if (error) console.error('오류:', error);
-      else console.log('충전소:', data?.length);
-      setStations(data || []);
+      const { data: { user } } = await sb.auth.getUser();
+      
+      // 점검자명 자동 입력
+      if (user) {
+        const { data: profile } = await sb
+          .from('profiles')
+          .select('inspector_name, name, sector_id')
+          .eq('id', user.id)
+          .single();
+        if (profile?.inspector_name) setInspector(profile.inspector_name);
+        else if (profile?.name) setInspector(profile.name);
+        
+        // 계정 섹터에 맞는 충전소만 조회
+        let q = sb.from('stations').select('*').eq('is_active', true).order('name');
+        if (profile?.sector_id) q = q.eq('sector_id', profile.sector_id);
+        const { data } = await q;
+        setStations(data || []);
+      } else {
+        const { data } = await sb.from('stations').select('*').eq('is_active', true).order('name');
+        setStations(data || []);
+      }
     };
     load();
   }, []);
@@ -59,9 +73,10 @@ export function InspectionForm() {
           remarks: remarks || '특이사항없음',
         }),
       });
-      if (!res.ok) throw new Error((await res.json()).error);
-      const { fileName } = await res.json();
-      setSavedFile(fileName);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      setSavedFile(result.fileName);
+      setDownloadUrl(result.downloadUrl);
       setDone(true);
     } catch(e: any) {
       alert('오류: ' + e.message);
@@ -71,13 +86,22 @@ export function InspectionForm() {
   };
 
   if (done) return (
-    <div className="max-w-xl">
+    <div style={{maxWidth: 640}}>
       <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:32,textAlign:'center'}}>
         <div style={{fontSize:48}}>✅</div>
         <h2 style={{fontSize:18,fontWeight:800,margin:'12px 0 8px'}}>저장 완료!</h2>
         <div style={{color:'var(--accent)',fontWeight:600,marginBottom:20}}>📄 {savedFile}</div>
+        {downloadUrl && (
+          <a href={downloadUrl} download={savedFile} style={{
+            display:'inline-block', background:'var(--accent)', color:'#fff',
+            border:'none', borderRadius:10, padding:'12px 24px', fontSize:14,
+            fontWeight:700, textDecoration:'none', marginBottom: 12, width:'100%', boxSizing:'border-box'
+          }}>
+            ⬇️ 엑셀 다운로드
+          </a>
+        )}
         <button onClick={()=>{setDone(false);setSelected(null);setQuery('');setMeasures({});setRemarks('');}}
-          style={{background:'var(--accent)',color:'#fff',border:'none',borderRadius:10,padding:'14px 24px',fontSize:15,fontWeight:700,cursor:'pointer',width:'100%'}}>
+          style={{background:'transparent',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:10,padding:'12px 24px',fontSize:14,fontWeight:600,cursor:'pointer',width:'100%',fontFamily:'inherit'}}>
           새 점검 생성
         </button>
       </div>
@@ -88,7 +112,6 @@ export function InspectionForm() {
     <div style={{maxWidth:640}}>
       <div className="toss-card" style={{display:'flex',flexDirection:'column',gap:24}}>
 
-        {/* 충전소 선택 */}
         <div>
           <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>충전소 선택</div>
           <div style={{position:'relative'}}>
@@ -102,10 +125,8 @@ export function InspectionForm() {
                 {filtered.map(s => (
                   <button key={s.id}
                     style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'none',background:'transparent',color:'var(--text-primary)',cursor:'pointer',textAlign:'left'}}
-                    onMouseEnter={e=>(e.currentTarget.style.background='var(--bg-card)')}
-                    onMouseLeave={e=>(e.currentTarget.style.background='transparent')}
                     onClick={()=>{setSelected(s);setQuery(s.name);setOpen(false);}}>
-                    <span style={{width:8,height:8,borderRadius:'50%',background:'#05C072',boxShadow:'0 0 5px #05C072',flexShrink:0}}/>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:'#05C072',flexShrink:0}}/>
                     <div style={{flex:1}}>
                       <div style={{fontSize:14,fontWeight:600}}>{s.name}</div>
                       <div style={{fontSize:11,color:'var(--text-secondary)'}}>{s.voltage}V · {s.capacity}kW</div>
@@ -125,7 +146,6 @@ export function InspectionForm() {
           )}
         </div>
 
-        {/* 점검 정보 */}
         <div>
           <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>점검 정보</div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
@@ -143,7 +163,6 @@ export function InspectionForm() {
           </div>
         </div>
 
-        {/* 측정값 */}
         <div>
           <div style={{fontSize:10,fontWeight:700,letterSpacing:'0.06em',color:'var(--text-secondary)',textTransform:'uppercase',marginBottom:12,paddingBottom:8,borderBottom:'1px solid var(--border)'}}>측정값 입력</div>
           {[{label:'전압 (V)',unit:'V',keys:['voltage_A1','voltage_B1','voltage_C1','voltage_N1']},{label:'전류 (A)',unit:'A',keys:['current_A1','current_B1','current_C1','current_N1']}].map(row=>(
@@ -163,7 +182,6 @@ export function InspectionForm() {
           ))}
         </div>
 
-        {/* 특이사항 */}
         <div>
           <label style={{display:'block',fontSize:13,fontWeight:600,marginBottom:6}}>특이사항</label>
           <textarea className="toss-input" rows={3} style={{resize:'none'}} placeholder="특이사항없음"
@@ -173,7 +191,7 @@ export function InspectionForm() {
         {selected && (
           <div style={{padding:'10px 14px',background:'var(--bg-elevated)',borderRadius:10,fontSize:13}}>
             <span style={{color:'var(--text-secondary)'}}>생성 파일: </span>
-            <span style={{color:'var(--accent)',fontWeight:600}}>{selected.name}_{inspType}점검_{date}.xlsx</span>
+            <span style={{color:'var(--accent)',fontWeight:600}}>{inspType}점검_{selected.name}_{date}.xlsx</span>
           </div>
         )}
 
