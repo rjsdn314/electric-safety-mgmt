@@ -1,112 +1,98 @@
 'use client';
-// ============================================================
-// components/layout/Sidebar.tsx
-// ============================================================
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
-
-const NAV = [
-  { href: '/dashboard',  icon: '🏠', label: '대시보드' },
-  { href: '/inspection', icon: '📋', label: '점검 생성', badge: 'NEW' },
-  { href: '/history',    icon: '📁', label: '점검 이력' },
-];
-
-const ADMIN_NAV = [
-  { href: '/admin/stations', icon: '🏗️', label: '충전소 관리' },
-  { href: '/admin/users',    icon: '👥', label: '사용자 관리' },
-  { href: '/admin',          icon: '⚙️', label: '설정' },
-];
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const router = useRouter();
+  const [userInfo, setUserInfo] = useState<any>(null);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
+  useEffect(() => {
+    const fetchUser = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, email, role, inspector_name')
+          .eq('id', user.id)
+          .single();
+        setUserInfo(profile);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  const handleLogout = async () => {
+    if (!confirm('로그아웃 하시겠습니까?')) return;
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  const menus = [
+    { href: '/dashboard', label: '대시보드', icon: '🏠' },
+    { href: '/inspection', label: '점검 생성', icon: '📋' },
+    { href: '/history', label: '점검 이력', icon: '📁' },
+  ];
 
   return (
-    <>
-      {/* ── PC 사이드바 ── */}
-      <aside className="hidden md:flex flex-col fixed top-0 left-0 bottom-0 w-[220px] border-r"
-        style={{ background: 'var(--bg-surface)', borderColor: 'var(--border)' }}>
+    <aside style={{
+      width: 240, height: '100vh', background: 'var(--bg-card)',
+      borderRight: '1px solid var(--border)', display: 'flex',
+      flexDirection: 'column', padding: '24px 16px',
+    }}>
+      <div style={{display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32, padding: '0 8px'}}>
+        <span style={{fontSize: 24}}>⚡</span>
+        <span style={{fontSize: 16, fontWeight: 700}}>전기안전관리</span>
+      </div>
 
-        {/* 로고 */}
-        <div className="flex items-center gap-2.5 px-5 py-7">
-          <div className="w-8 h-8 rounded-[10px] flex items-center justify-center text-base font-bold"
-            style={{ background: 'var(--accent)' }}>⚡</div>
-          <span className="text-[15px] font-bold">전기안전관리</span>
-        </div>
+      <div style={{fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 12, padding: '0 8px'}}>메뉴</div>
 
-        {/* 메인 메뉴 */}
-        <nav className="px-3 flex-1">
-          <div className="nav-label mb-2">메뉴</div>
-          {NAV.map(item => (
-            <Link key={item.href} href={item.href}>
-              <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-sm font-medium mb-0.5 transition-all cursor-pointer
-                ${isActive(item.href)
-                  ? 'text-[#3182F6]'
-                  : 'text-[#8E8E93] hover:text-white hover:bg-[#1C1C1E]'
-                }`}
-                style={isActive(item.href) ? { background: 'var(--accent-soft)' } : {}}>
-                <span className="text-[17px] w-[22px] text-center">{item.icon}</span>
-                <span>{item.label}</span>
-                {item.badge && (
-                  <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
-                    style={{ background: 'var(--accent)' }}>{item.badge}</span>
-                )}
-              </div>
+      <nav style={{display: 'flex', flexDirection: 'column', gap: 4, flex: 1}}>
+        {menus.map(m => {
+          const active = pathname === m.href || pathname?.startsWith(m.href + '/');
+          return (
+            <Link key={m.href} href={m.href} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+              borderRadius: 10, textDecoration: 'none', fontSize: 14, fontWeight: 600,
+              color: active ? 'var(--accent)' : 'var(--text-primary)',
+              background: active ? 'var(--accent-soft)' : 'transparent',
+            }}>
+              <span style={{fontSize: 18}}>{m.icon}</span>
+              <span>{m.label}</span>
             </Link>
-          ))}
+          );
+        })}
+      </nav>
 
-          {/* 관리자 메뉴 */}
-          {profile?.role === 'admin' && (
-            <>
-              <div className="nav-label mt-4 mb-2">관리자</div>
-              {ADMIN_NAV.map(item => (
-                <Link key={item.href} href={item.href}>
-                  <div className={`flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-sm font-medium mb-0.5 transition-all cursor-pointer
-                    ${isActive(item.href)
-                      ? 'text-[#3182F6]'
-                      : 'text-[#8E8E93] hover:text-white hover:bg-[#1C1C1E]'
-                    }`}
-                    style={isActive(item.href) ? { background: 'var(--accent-soft)' } : {}}>
-                    <span className="text-[17px] w-[22px] text-center">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </div>
-                </Link>
-              ))}
-            </>
-          )}
-        </nav>
-
-        {/* 사용자 카드 */}
-        <div className="px-3 pt-4 pb-5 border-t" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] cursor-pointer hover:bg-[#1C1C1E] transition-colors">
-            <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-[13px] font-bold flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #3182F6, #6C5CE7)' }}>
-              {profile?.name?.[0] ?? '?'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold truncate">{profile?.name ?? '사용자'}</div>
-              <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{profile?.sector?.name ?? ''} 담당자</div>
-            </div>
+      {/* 사용자 영역 */}
+      <div style={{
+        marginTop: 'auto', padding: '12px 16px', background: 'var(--bg-elevated)',
+        borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%', background: 'var(--accent)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: 14, fontWeight: 700,
+        }}>
+          {userInfo?.name?.[0] || '?'}
+        </div>
+        <div style={{flex: 1, minWidth: 0}}>
+          <div style={{fontSize: 13, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+            {userInfo?.name || '사용자'}
+          </div>
+          <div style={{fontSize: 10, color: 'var(--text-secondary)'}}>
+            {userInfo?.role === 'admin' ? '관리자' : '담당자'}
           </div>
         </div>
-      </aside>
-
-      {/* ── 모바일 하단 탭바 ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex h-[60px]"
-        style={{ background: 'var(--bg-surface)', borderTop: '1px solid var(--border)' }}>
-        {[...NAV, { href: '/settings', icon: '⚙️', label: '설정' }].map(item => (
-          <Link key={item.href} href={item.href} className="flex-1">
-            <div className={`flex flex-col items-center justify-center gap-0.5 h-full text-[10px] font-medium transition-colors
-              ${isActive(item.href) ? 'text-[#3182F6]' : 'text-[#48484A]'}`}>
-              <span className="text-[20px]">{item.icon}</span>
-              {item.label}
-            </div>
-          </Link>
-        ))}
-      </nav>
-    </>
+        <button onClick={handleLogout} title="로그아웃" style={{
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontSize: 18, padding: 4, color: 'var(--text-secondary)',
+        }}>🚪</button>
+      </div>
+    </aside>
   );
 }
