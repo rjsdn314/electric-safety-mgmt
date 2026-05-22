@@ -9,6 +9,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('전체');
   const [search, setSearch] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -52,8 +54,6 @@ export default function HistoryPage() {
     if (!confirm(`정말 삭제하시겠습니까?\n\n${item.file_name}\n\n이 작업은 되돌릴 수 없습니다.`)) return;
     
     const sb = createClient();
-    
-    // Storage에서도 삭제 (file_path에서 경로 추출)
     if (item.file_path) {
       try {
         const url = new URL(item.file_path);
@@ -64,15 +64,104 @@ export default function HistoryPage() {
       } catch (e) { console.error('스토리지 삭제 실패:', e); }
     }
     
-    // DB에서 삭제
     const { error } = await sb.from('inspections').delete().eq('id', item.id);
     if (error) {
       alert('삭제 실패: ' + error.message);
       return;
     }
-    
     alert('삭제되었습니다');
     loadData();
+  };
+
+  // 일괄 동기화
+  const normalize = (s: string) => s.replace(/[\s()\-_.]/g, '').toLowerCase();
+  
+  const findOrCreateDir = async (parent: any, targetName: string) => {
+    const normTarget = normalize(targetName);
+    for await (const entry of parent.values()) {
+      if (entry.kind === 'directory' && normalize(entry.name).includes(normTarget)) {
+        return await parent.getDirectoryHandle(entry.name);
+      }
+    }
+    return await parent.getDirectoryHandle(targetName, { create: true });
+  };
+
+  const handleSync = async () => {
+    if (!('showDirectoryPicker' in window)) {
+      alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
+      return;
+    }
+    
+    if (items.length === 0) {
+      alert('동기화할 점검 이력이 없습니다.');
+      return;
+    }
+    
+    try {
+      setSyncing(true);
+      setSyncProgress('폴더 선택 중...');
+      
+      // @ts-ignore
+      const folderHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        setSyncProgress(`${i + 1}/${items.length}: ${item.file_name}`);
+        
+        try {
+          // 파일 다운로드
+          const res = await fetch(item.file_path);
+          if (!res.ok) throw new Error('다운로드 실패');
+          const blob = await res.blob();
+          const arrayBuffer = await blob.arrayBuffer();
+          
+          // 폴더 구조 생성
+          const date = item.inspection_date; // YYYY-MM-DD
+          const [yyyy, mm] = date.split('-');
+          const periodFolder = `${yyyy}${mm}${item.inspection_type}점검`;
+          
+          const baseName = item.station?.base_name || item.station?.name || 'unknown';
+          const isKintex = baseName.includes('KINTEX') || baseName.includes('킨텍스');
+          const isHighV = (item.station?.voltage || 0) >= 3000;
+          
+          let current = folderHandle;
+          
+          if (isKintex) {
+            current = await findOrCreateDir(current, baseName);
+            current = await current.getDirectoryHandle(isHighV ? '고압' : '저압', { create: true });
+            current = await current.getDirectoryHandle(periodFolder, { create: true });
+          } else {
+            current = await findOrCreateDir(current, baseName);
+            current = await current.getDirectoryHandle(periodFolder, { create: true });
+          }
+          
+          // 파일명 정리
+          const dateNum = date.replace(/-/g, '');
+          const fileName = `${item.station?.name || baseName}_${item.inspection_type}점검_${dateNum}.xlsx`;
+          
+          const fileHandle = await current.getFileHandle(fileName, { create: true });
+          const writable = await fileHandle.createWritable();
+          await writable.write(arrayBuffer);
+          await writable.close();
+          
+          successCount++;
+        } catch (e: any) {
+          console.error(`동기화 실패: ${item.file_name}`, e);
+          failCount++;
+        }
+      }
+      
+      setSyncProgress('');
+      alert(`동기화 완료!\n\n✅ 성공: ${successCount}개\n❌ 실패: ${failCount}개`);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') alert('동기화 오류: ' + e.message);
+    } finally {
+      setSyncing(false);
+      setSyncProgress('');
+    }
   };
 
   const filtered = items.filter(i =>
@@ -81,8 +170,21 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
-      <p style={{color: 'var(--text-secondary)', marginBottom: 24}}>생성된 직무고시 파일 목록</p>
+      <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
+        <div>
+          <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
+          <p style={{color: 'var(--text-secondary)'}}>생성된 직무고시 파일 목록</p>
+        </div>
+        <button onClick={handleSync} disabled={syncing}
+          style={{
+            padding: '12px 18px', borderRadius: 10, border: 'none',
+            background: 'var(--accent)', color: '#fff', fontSize: 13,
+            fontWeight: 700, cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1,
+            fontFamily: 'inherit', whiteSpace: 'nowrap'
+          }}>
+          {syncing ? `⏳ ${syncProgress || '동기화 중...'}` : '📥 PC 폴더로 일괄 동기화'}
+        </button>
+      </div>
 
       <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>
         {TYPES.map(t => (
