@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
     const displayFileName = `${station.base_name}_${inspection_type}점검_${date}.xlsx`;
     
     // Storage 저장용 파일명 (영문/숫자, station_id 사용)
-    const safePath = `${station.id}/${date.slice(0,7)}/${inspection_type}/${date}.xlsx`;
+    const typeMap: any = { '월차': 'monthly', '분기': 'quarterly', '반기': 'semiannual', '연차': 'annual' };
+const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] || 'monthly'}/${date}.xlsx`;
 
     const { error: upErr } = await supabase.storage
       .from('inspections')
