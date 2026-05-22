@@ -61,7 +61,8 @@ export async function POST(req: NextRequest) {
     const buffer = await wb.xlsx.writeBuffer();
     
     // 새 파일명 규칙: 점검종류점검_충전소명_날짜.xlsx
-    const displayFileName = `${inspection_type}점검_${station.name}_${date}.xlsx`;
+    const dateNum = date.replace(/-/g, '');
+const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;
     
     // 폴더 정보 (클라이언트 로컬 저장용)
     const [year, month] = date.split('-');
