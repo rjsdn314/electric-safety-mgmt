@@ -69,22 +69,21 @@ export function InspectionForm() {
   const saveToLocal = async (base64: string, folderInfo: any, fileName: string) => {
     if (!folderHandle) return false;
     try {
-      // 경로 구조: 충전소명/년/월/점검종류/파일명
-      // 킨텍스: 충전소명/고압or저압/년/월/점검종류/파일명
+      // 구조: 선택폴더/충전소명/2026년 05월 월차점검/파일.xlsx
+      // 킨텍스: 선택폴더/충전소명/고압or저압/2026년 05월 월차점검/파일.xlsx
       let current = folderHandle;
+      const periodFolder = `${folderInfo.year} ${folderInfo.month} ${folderInfo.inspection_type}`;
       const pathParts = folderInfo.is_kintex
-        ? [folderInfo.base_name, folderInfo.voltage_type, folderInfo.year, folderInfo.month, folderInfo.inspection_type]
-        : [folderInfo.base_name, folderInfo.year, folderInfo.month, folderInfo.inspection_type];
+        ? [folderInfo.base_name, folderInfo.voltage_type, periodFolder]
+        : [folderInfo.base_name, periodFolder];
       
       for (const part of pathParts) {
         current = await current.getDirectoryHandle(part, { create: true });
       }
       
-      // 파일 저장
       const fileHandle = await current.getFileHandle(fileName, { create: true });
       const writable = await fileHandle.createWritable();
       
-      // Base64 → Blob 변환
       const binaryString = atob(base64);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
