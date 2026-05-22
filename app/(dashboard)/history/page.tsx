@@ -1,72 +1,137 @@
 'use client';
-import { useState } from 'react';
-import { useInspections } from '@/hooks/useInspections';
-import type { InspectionType } from '@/types';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
-const TYPE_BADGE: Record<string, string> = {
-  '월차': 'bg-[rgba(49,130,246,.12)] text-[#3182F6]',
-  '분기': 'bg-[rgba(245,166,35,.12)] text-[#F5A623]',
-  '반기': 'bg-[rgba(245,166,35,.12)] text-[#F5A623]',
-  '연차': 'bg-[rgba(5,192,114,.12)] text-[#05C072]',
-};
+const TYPES = ['전체', '월차', '분기', '반기', '연차'];
 
 export default function HistoryPage() {
-  const [typeFilter, setTypeFilter] = useState<InspectionType | 'all'>('all');
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterType, setFilterType] = useState('전체');
   const [search, setSearch] = useState('');
-  const [month, setMonth] = useState('');
-  const { inspections, loading } = useInspections({ type: typeFilter === 'all' ? undefined : typeFilter });
 
-  const filtered = inspections.filter(i => {
-    const nameMatch = !search || (i.station as any)?.base_name?.includes(search);
-    const monthMatch = !month || i.inspection_date.startsWith(month);
-    return nameMatch && monthMatch;
-  });
+  const loadData = async () => {
+    setLoading(true);
+    const sb = createClient();
+    
+    let q = sb.from('inspections')
+      .select('*')
+      .order('inspection_date', { ascending: false })
+      .limit(100);
+    if (filterType !== '전체') q = q.eq('inspection_type', filterType);
+    
+    const { data: insps, error } = await q;
+    if (error) {
+      console.error('점검 조회 오류:', error);
+      setLoading(false);
+      return;
+    }
+
+    if (insps && insps.length > 0) {
+      const stationIds = [...new Set(insps.map(i => i.station_id))];
+      const { data: stations } = await sb
+        .from('stations')
+        .select('id, base_name, name, voltage, capacity')
+        .in('id', stationIds);
+      
+      const stationMap = new Map(stations?.map(s => [s.id, s]) || []);
+      const merged = insps.map(i => ({
+        ...i,
+        station: stationMap.get(i.station_id)
+      }));
+      setItems(merged);
+    } else {
+      setItems([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, [filterType]);
+
+  const handleDelete = async (item: any) => {
+    if (!confirm(`정말 삭제하시겠습니까?\n\n${item.file_name}\n\n이 작업은 되돌릴 수 없습니다.`)) return;
+    
+    const sb = createClient();
+    
+    // Storage에서도 삭제 (file_path에서 경로 추출)
+    if (item.file_path) {
+      try {
+        const url = new URL(item.file_path);
+        const pathMatch = url.pathname.match(/\/inspections\/(.+)$/);
+        if (pathMatch) {
+          await sb.storage.from('inspections').remove([pathMatch[1]]);
+        }
+      } catch (e) { console.error('스토리지 삭제 실패:', e); }
+    }
+    
+    // DB에서 삭제
+    const { error } = await sb.from('inspections').delete().eq('id', item.id);
+    if (error) {
+      alert('삭제 실패: ' + error.message);
+      return;
+    }
+    
+    alert('삭제되었습니다');
+    loadData();
+  };
+
+  const filtered = items.filter(i =>
+    !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
+  );
 
   return (
-    <div className="p-6 md:p-8 max-w-[1100px]">
-      <div className="mb-7">
-        <h1 className="text-2xl font-[800] tracking-tight">점검 이력</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>생성된 직무고시 파일 목록</p>
-      </div>
-      <div className="flex flex-wrap gap-2 mb-5 items-center">
-        {(['all','월차','분기','반기','연차'] as const).map(f => (
-          <button key={f} onClick={() => setTypeFilter(f)}
-            className="px-4 py-1.5 rounded-full text-sm font-medium transition-all"
-            style={{ border:`1px solid ${typeFilter===f?'var(--accent)':'var(--border)'}`, background:typeFilter===f?'var(--accent)':'transparent', color:typeFilter===f?'#fff':'var(--text-secondary)' }}>
-            {f === 'all' ? '전체' : f}
-          </button>
+    <div>
+      <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
+      <p style={{color: 'var(--text-secondary)', marginBottom: 24}}>생성된 직무고시 파일 목록</p>
+
+      <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>
+        {TYPES.map(t => (
+          <button key={t} onClick={() => setFilterType(t)}
+            style={{
+              padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              border: `1px solid ${filterType === t ? 'var(--accent)' : 'var(--border)'}`,
+              background: filterType === t ? 'var(--accent-soft)' : 'transparent',
+              color: filterType === t ? 'var(--accent)' : 'var(--text-secondary)',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>{t}</button>
         ))}
-        <div className="ml-auto flex gap-2">
-          <input className="toss-input !py-2 !w-[160px] text-sm" placeholder="충전소 검색" value={search} onChange={e=>setSearch(e.target.value)}/>
-          <input type="month" className="toss-input !py-2 !w-[140px] text-sm" value={month} onChange={e=>setMonth(e.target.value)}/>
-        </div>
+        <input className="toss-input" placeholder="충전소 검색"
+          value={search} onChange={e => setSearch(e.target.value)}
+          style={{flex: 1, minWidth: 200, marginLeft: 'auto'}}/>
       </div>
-      <div className="toss-card !p-0 overflow-hidden overflow-x-auto">
-        <table className="w-full border-collapse min-w-[700px]">
-          <thead>
-            <tr style={{ background:'var(--bg-elevated)' }}>
-              {['충전소','점검유형','점검일자','점검자','파일명',''].map(h=>(
-                <th key={h} className="text-left px-4 py-3 text-[11px] font-bold uppercase border-b" style={{color:'var(--text-secondary)',borderColor:'var(--border)'}}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading && <tr><td colSpan={6} className="py-8 text-center text-sm" style={{color:'var(--text-secondary)'}}>불러오는 중...</td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-sm" style={{color:'var(--text-secondary)'}}>이력이 없습니다</td></tr>}
-            {filtered.map(ins=>(
-              <tr key={ins.id} className="hover:bg-white/[.02] transition-colors">
-                <td className="px-4 py-3.5 text-sm font-semibold border-b" style={{borderColor:'var(--border)'}}>{(ins.station as any)?.base_name}</td>
-                <td className="px-4 py-3.5 border-b" style={{borderColor:'var(--border)'}}><span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${TYPE_BADGE[ins.inspection_type]}`}>{ins.inspection_type}</span></td>
-                <td className="px-4 py-3.5 text-sm border-b" style={{borderColor:'var(--border)',color:'var(--text-secondary)'}}>{ins.inspection_date}</td>
-                <td className="px-4 py-3.5 text-sm border-b" style={{borderColor:'var(--border)',color:'var(--text-secondary)'}}>{ins.inspector_name}</td>
-                <td className="px-4 py-3.5 border-b" style={{borderColor:'var(--border)'}}><span className="text-xs" style={{color:'var(--text-secondary)'}}>{ins.file_name}</span></td>
-                <td className="px-4 py-3.5 text-right border-b" style={{borderColor:'var(--border)'}}>
-                  {ins.file_path && <a href={ins.file_path} download><button className="px-3 py-1.5 text-xs font-semibold rounded-[8px]" style={{background:'var(--bg-input)',border:'1px solid var(--border)',color:'var(--text-primary)'}}>⬇ 다운로드</button></a>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
+        <div style={{display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 100px', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)'}}>
+          <div>충전소</div><div>점검유형</div><div>점검일자</div><div>점검자</div><div>파일명</div><div style={{textAlign: 'center'}}>액션</div>
+        </div>
+
+        {loading ? (
+          <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>로딩 중...</div>
+        ) : filtered.length === 0 ? (
+          <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
+        ) : (
+          filtered.map(item => (
+            <div key={item.id} style={{display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 100px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center'}}>
+              <div style={{fontWeight: 600}}>{item.station?.name || '-'}</div>
+              <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span></div>
+              <div>{item.inspection_date}</div>
+              <div>{item.inspector_name}</div>
+              <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>{item.file_name}</div>
+              <div style={{display: 'flex', gap: 6, justifyContent: 'center'}}>
+                {item.file_path && (
+                  <a href={item.file_path} download={item.file_name} title="다운로드" style={{
+                    padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)',
+                    textDecoration: 'none', fontSize: 14, lineHeight: 1
+                  }}>⬇️</a>
+                )}
+                <button onClick={() => handleDelete(item)} title="삭제" style={{
+                  padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+                  border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1
+                }}>🗑️</button>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
