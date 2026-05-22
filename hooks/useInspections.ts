@@ -11,8 +11,6 @@ export function useInspections({ limit = 50, type }: Options = {}) {
   useEffect(() => {
     const fetchData = async () => {
       const supabase = createClient();
-      
-      // 1. inspections 가져오기 (조인 없이)
       let q = supabase.from('inspections')
         .select('*')
         .order('inspection_date', { ascending: false })
@@ -26,7 +24,6 @@ export function useInspections({ limit = 50, type }: Options = {}) {
         return;
       }
 
-      // 2. stations 정보 따로 가져와서 매핑
       if (insps && insps.length > 0) {
         const stationIds = [...new Set(insps.map(i => i.station_id))];
         const { data: stations } = await supabase
