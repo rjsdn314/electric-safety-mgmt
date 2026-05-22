@@ -62,8 +62,8 @@ export async function POST(req: NextRequest) {
     
     // 새 파일명 규칙: 점검종류점검_충전소명_날짜.xlsx
     const dateNum = date.replace(/-/g, '');
-const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;
-    
+const dateNum = date.replace(/-/g, '');
+const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;    
     // 폴더 정보 (클라이언트 로컬 저장용)
     const [year, month] = date.split('-');
     const isKintex = station.base_name.includes('KINTEX') || station.base_name.includes('킨텍스');
