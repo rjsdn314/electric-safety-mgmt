@@ -59,34 +59,49 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = await wb.xlsx.writeBuffer();
-    const fileName = `${station.base_name}_${inspection_type}점검_${date}.xlsx`;
-    const filePath = `${station.base_name}/${date.slice(0,7)}/${inspection_type}점검/${fileName}`;
+    
+    // 사용자에게 보여줄 파일명 (한글)
+    const displayFileName = `${station.base_name}_${inspection_type}점검_${date}.xlsx`;
+    
+    // Storage 저장용 파일명 (영문/숫자, station_id 사용)
+    const safePath = `${station.id}/${date.slice(0,7)}/${inspection_type}/${date}.xlsx`;
 
     const { error: upErr } = await supabase.storage
       .from('inspections')
-      .upload(filePath, buffer, {
+      .upload(safePath, buffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         upsert: true,
       });
-    if (upErr) console.error('업로드 오류:', upErr);
+    if (upErr) {
+      console.error('업로드 오류:', upErr);
+      throw new Error(`Storage 업로드 실패: ${upErr.message}`);
+    }
 
     const { data: urlData } = supabase.storage
       .from('inspections')
-      .getPublicUrl(filePath);
+      .getPublicUrl(safePath);
 
-    await supabase.from('inspections').insert({
+    const { error: dbErr } = await supabase.from('inspections').insert({
       station_id,
       inspection_type,
       inspection_date: date,
       inspector_name,
       measure_values: measures,
       remarks: remarks || '특이사항없음',
-      file_name: fileName,
+      file_name: displayFileName,
       file_path: urlData.publicUrl,
       status: 'completed',
     });
+    if (dbErr) {
+      console.error('DB 저장 오류:', dbErr);
+      throw new Error(`DB 저장 실패: ${dbErr.message}`);
+    }
 
-    return NextResponse.json({ success: true, fileName, downloadUrl: urlData.publicUrl });
+    return NextResponse.json({ 
+      success: true, 
+      fileName: displayFileName, 
+      downloadUrl: urlData.publicUrl 
+    });
   } catch (e: any) {
     console.error('점검 생성 오류:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
