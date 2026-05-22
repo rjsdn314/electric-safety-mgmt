@@ -60,12 +60,26 @@ export async function POST(req: NextRequest) {
 
     const buffer = await wb.xlsx.writeBuffer();
     
-    // 사용자에게 보여줄 파일명 (한글)
-    const displayFileName = `${station.base_name}_${inspection_type}점검_${date}.xlsx`;
+    // 새 파일명 규칙: 점검종류점검_충전소명_날짜.xlsx
+    const displayFileName = `${inspection_type}점검_${station.name}_${date}.xlsx`;
     
-    // Storage 저장용 파일명 (영문/숫자, station_id 사용)
+    // 폴더 정보 (클라이언트 로컬 저장용)
+    const [year, month] = date.split('-');
+    const isKintex = station.base_name.includes('KINTEX') || station.base_name.includes('킨텍스');
+    const voltageType = isHighV ? '고압' : '저압';
+    
+    const folderInfo = {
+      base_name: station.base_name,
+      year: `${year}년`,
+      month: `${month}월`,
+      inspection_type: `${inspection_type}점검`,
+      is_kintex: isKintex,
+      voltage_type: voltageType,
+    };
+    
+    // Storage 저장 경로 (영문)
     const typeMap: any = { '월차': 'monthly', '분기': 'quarterly', '반기': 'semiannual', '연차': 'annual' };
-const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] || 'monthly'}/${date}.xlsx`;
+    const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] || 'monthly'}/${date}.xlsx`;
 
     const { error: upErr } = await supabase.storage
       .from('inspections')
@@ -73,10 +87,7 @@ const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] ||
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         upsert: true,
       });
-    if (upErr) {
-      console.error('업로드 오류:', upErr);
-      throw new Error(`Storage 업로드 실패: ${upErr.message}`);
-    }
+    if (upErr) throw new Error(`Storage 업로드 실패: ${upErr.message}`);
 
     const { data: urlData } = supabase.storage
       .from('inspections')
@@ -93,15 +104,17 @@ const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] ||
       file_path: urlData.publicUrl,
       status: 'completed',
     });
-    if (dbErr) {
-      console.error('DB 저장 오류:', dbErr);
-      throw new Error(`DB 저장 실패: ${dbErr.message}`);
-    }
+    if (dbErr) throw new Error(`DB 저장 실패: ${dbErr.message}`);
+
+    // Base64로 파일 데이터도 보냄 (로컬 저장용)
+    const base64 = Buffer.from(buffer).toString('base64');
 
     return NextResponse.json({ 
       success: true, 
       fileName: displayFileName, 
-      downloadUrl: urlData.publicUrl 
+      downloadUrl: urlData.publicUrl,
+      fileBase64: base64,
+      folderInfo,
     });
   } catch (e: any) {
     console.error('점검 생성 오류:', e);
