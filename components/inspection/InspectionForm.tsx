@@ -24,13 +24,14 @@ export function InspectionForm() {
   const [done, setDone] = useState(false);
   const [savedFile, setSavedFile] = useState('');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [folderHandle, setFolderHandle] = useState<any>(null);
+  const [folderName, setFolderName] = useState('');
 
   useEffect(() => {
     const load = async () => {
       const sb = createClient();
       const { data: { user } } = await sb.auth.getUser();
       
-      // 점검자명 자동 입력
       if (user) {
         const { data: profile } = await sb
           .from('profiles')
@@ -40,13 +41,9 @@ export function InspectionForm() {
         if (profile?.inspector_name) setInspector(profile.inspector_name);
         else if (profile?.name) setInspector(profile.name);
         
-        // 계정 섹터에 맞는 충전소만 조회
         let q = sb.from('stations').select('*').eq('is_active', true).order('name');
         if (profile?.sector_id) q = q.eq('sector_id', profile.sector_id);
         const { data } = await q;
-        setStations(data || []);
-      } else {
-        const { data } = await sb.from('stations').select('*').eq('is_active', true).order('name');
         setStations(data || []);
       }
     };
@@ -56,6 +53,53 @@ export function InspectionForm() {
   const filtered = stations.filter(s =>
     !query || s.name?.includes(query) || s.base_name?.includes(query)
   );
+
+  const selectFolder = async () => {
+    try {
+      // @ts-ignore
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      setFolderHandle(handle);
+      setFolderName(handle.name);
+      alert(`폴더 선택 완료: ${handle.name}\n이제 점검을 생성하면 이 폴더에 자동 저장됩니다!`);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') alert('폴더 선택 실패: ' + e.message);
+    }
+  };
+
+  const saveToLocal = async (base64: string, folderInfo: any, fileName: string) => {
+    if (!folderHandle) return false;
+    try {
+      // 경로 구조: 충전소명/년/월/점검종류/파일명
+      // 킨텍스: 충전소명/고압or저압/년/월/점검종류/파일명
+      let current = folderHandle;
+      const pathParts = folderInfo.is_kintex
+        ? [folderInfo.base_name, folderInfo.voltage_type, folderInfo.year, folderInfo.month, folderInfo.inspection_type]
+        : [folderInfo.base_name, folderInfo.year, folderInfo.month, folderInfo.inspection_type];
+      
+      for (const part of pathParts) {
+        current = await current.getDirectoryHandle(part, { create: true });
+      }
+      
+      // 파일 저장
+      const fileHandle = await current.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      
+      // Base64 → Blob 변환
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      await writable.write(bytes);
+      await writable.close();
+      return true;
+    } catch (e: any) {
+      console.error('로컬 저장 실패:', e);
+      alert('로컬 저장 실패: ' + e.message);
+      return false;
+    }
+  };
 
   const handleSubmit = async () => {
     if (!selected) return alert('충전소를 선택해주세요');
@@ -75,6 +119,12 @@ export function InspectionForm() {
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
+      
+      // 로컬 저장
+      if (folderHandle && result.fileBase64 && result.folderInfo) {
+        await saveToLocal(result.fileBase64, result.folderInfo, result.fileName);
+      }
+      
       setSavedFile(result.fileName);
       setDownloadUrl(result.downloadUrl);
       setDone(true);
@@ -90,7 +140,12 @@ export function InspectionForm() {
       <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:32,textAlign:'center'}}>
         <div style={{fontSize:48}}>✅</div>
         <h2 style={{fontSize:18,fontWeight:800,margin:'12px 0 8px'}}>저장 완료!</h2>
-        <div style={{color:'var(--accent)',fontWeight:600,marginBottom:20}}>📄 {savedFile}</div>
+        <div style={{color:'var(--accent)',fontWeight:600,marginBottom:8}}>📄 {savedFile}</div>
+        {folderName && (
+          <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:20}}>
+            💾 로컬 저장: {folderName}
+          </div>
+        )}
         {downloadUrl && (
           <a href={downloadUrl} download={savedFile} style={{
             display:'inline-block', background:'var(--accent)', color:'#fff',
@@ -110,6 +165,27 @@ export function InspectionForm() {
 
   return (
     <div style={{maxWidth:640}}>
+      {/* 폴더 선택 */}
+      <div className="toss-card" style={{marginBottom: 16, padding: 16, display:'flex',alignItems:'center',justifyContent:'space-between',gap:12}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0,flex:1}}>
+          <span style={{fontSize:20}}>📁</span>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:700}}>저장 폴더</div>
+            <div style={{fontSize:11,color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {folderName ? `✓ ${folderName}` : '폴더 선택 후 자동 저장됩니다'}
+            </div>
+          </div>
+        </div>
+        <button onClick={selectFolder} style={{
+          padding:'8px 14px',borderRadius:8,border:'1px solid var(--accent)',
+          background:folderHandle?'var(--accent-soft)':'transparent',
+          color:'var(--accent)',fontSize:12,fontWeight:600,cursor:'pointer',
+          flexShrink:0,fontFamily:'inherit'
+        }}>
+          {folderHandle ? '변경' : '폴더 선택'}
+        </button>
+      </div>
+
       <div className="toss-card" style={{display:'flex',flexDirection:'column',gap:24}}>
 
         <div>
