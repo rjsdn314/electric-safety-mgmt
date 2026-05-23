@@ -1,106 +1,94 @@
-/* app/globals.css */
-@import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --bg-primary:   #0A0A0A;
-    --bg-surface:   #141414;
-    --bg-elevated:  #1C1C1E;
-    --bg-card:      #242426;
-    --bg-input:     #2C2C2E;
-
-    --border:       #2C2C2E;
-    --border-hover: #3A3A3C;
-
-    --text-primary:   #FFFFFF;
-    --text-secondary: #8E8E93;
-    --text-tertiary:  #48484A;
-
-    --accent:         #3182F6;
-    --accent-hover:   #1B6EEA;
-    --accent-soft:    rgba(49,130,246,0.12);
-
-    --green:   #05C072;
-    --red:     #F04452;
-    --yellow:  #F5A623;
-
-    /* shadcn 호환 변수 */
-    --background: 0 0% 4%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 8%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 11%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 17%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 17%;
-    --muted-foreground: 0 0% 55%;
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 356 75% 61%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 17%;
-    --input: 0 0% 17%;
-    --ring: 217 91% 60%;
-    --radius: 0.75rem;
-  }
-
-  * { box-sizing: border-box; }
-
-  body {
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+:root {
+  --bg-page: #0A0A0A;
+  --bg-card: #141414;
+  --bg-elevated: #1C1C1C;
+  --bg-input: #1F1F1F;
+  --border: rgba(255,255,255,0.06);
+  --border-hover: rgba(255,255,255,0.12);
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255,255,255,0.55);
+  --text-tertiary: rgba(255,255,255,0.35);
+  --accent: #3182F6;
+  --accent-soft: rgba(49,130,246,0.15);
+  --positive: #05C072;
+  --negative: #F04452;
+  --warning: #F59E0B;
 }
 
-@layer components {
-  /* 토스증권 스타일 카드 */
-  .toss-card {
-    @apply bg-[#141414] border border-[#2C2C2E] rounded-[20px] p-6;
-    transition: border-color 0.15s;
-  }
-  .toss-card:hover { border-color: #3A3A3C; }
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
 
-  /* 토스증권 스타일 입력 */
-  .toss-input {
-    @apply w-full px-4 py-3 rounded-[10px] text-sm font-medium outline-none transition-all;
-    background: var(--bg-input);
-    border: 1.5px solid var(--border);
-    color: var(--text-primary);
-    font-family: 'Pretendard', sans-serif;
-  }
-  .toss-input:focus {
-    border-color: var(--accent);
-    background: var(--bg-elevated);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-  .toss-input::placeholder { color: var(--text-tertiary); }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+  font-feature-settings: 'tnum';
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.02em;
+}
 
-  /* 토스증권 스타일 버튼 */
-  .toss-btn-primary {
-    @apply w-full py-3.5 rounded-[10px] text-[15px] font-bold text-white transition-all;
-    background: var(--accent);
-  }
-  .toss-btn-primary:hover {
-    background: var(--accent-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(49,130,246,0.25);
-  }
+button {
+  font-family: inherit;
+  letter-spacing: -0.02em;
+}
 
-  /* 점검유형 배지 */
-  .badge-monthly { @apply text-[11px] font-semibold px-2 py-0.5 rounded-md; background: rgba(49,130,246,.12); color: #3182F6; }
-  .badge-quarter { @apply text-[11px] font-semibold px-2 py-0.5 rounded-md; background: rgba(245,166,35,.12); color: #F5A623; }
-  .badge-yearly  { @apply text-[11px] font-semibold px-2 py-0.5 rounded-md; background: rgba(5,192,114,.12); color: #05C072; }
+input, textarea, select {
+  font-family: inherit;
+  letter-spacing: -0.02em;
+}
+
+.toss-card {
+  background: var(--bg-card);
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.toss-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-input);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.15s;
+  font-family: inherit;
+  letter-spacing: -0.02em;
+}
+
+.toss-input:focus {
+  border-color: var(--accent);
+}
+
+.toss-input::placeholder {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+/* 스크롤바 숨김 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+}
+
+/* 모바일 입력 줌 방지 */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
 }
