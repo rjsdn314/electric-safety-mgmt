@@ -60,11 +60,9 @@ export async function POST(req: NextRequest) {
 
     const buffer = await wb.xlsx.writeBuffer();
     
-    // 새 파일명 규칙: 점검종류점검_충전소명_날짜.xlsx
     const dateNum = date.replace(/-/g, '');
-const dateNum = date.replace(/-/g, '');
-const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;    
-    // 폴더 정보 (클라이언트 로컬 저장용)
+    const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;
+    
     const [year, month] = date.split('-');
     const isKintex = station.base_name.includes('KINTEX') || station.base_name.includes('킨텍스');
     const voltageType = isHighV ? '고압' : '저압';
@@ -78,7 +76,6 @@ const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xls
       voltage_type: voltageType,
     };
     
-    // Storage 저장 경로 (영문)
     const typeMap: any = { '월차': 'monthly', '분기': 'quarterly', '반기': 'semiannual', '연차': 'annual' };
     const safePath = `${station.id}/${date.slice(0,7)}/${typeMap[inspection_type] || 'monthly'}/${date}.xlsx`;
 
@@ -107,7 +104,6 @@ const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xls
     });
     if (dbErr) throw new Error(`DB 저장 실패: ${dbErr.message}`);
 
-    // Base64로 파일 데이터도 보냄 (로컬 저장용)
     const base64 = Buffer.from(buffer).toString('base64');
 
     return NextResponse.json({ 
