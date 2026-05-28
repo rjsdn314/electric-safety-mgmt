@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 
 export function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
   const [userInfo, setUserInfo] = useState<any>(null);
 
   useEffect(() => {
@@ -16,10 +16,20 @@ export function Sidebar() {
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('name, email, role, inspector_name')
+          .select('name, email, role, status, inspector_name, sectors(name)')
           .eq('id', user.id)
           .single();
         setUserInfo(profile);
+
+        // 미승인 사용자 → 대기 안내 페이지
+        if (profile?.status === 'pending') {
+          router.replace('/pending');
+          return;
+        }
+        if (profile?.status === 'rejected') {
+          await supabase.auth.signOut();
+          router.replace('/login?error=rejected');
+        }
       }
     };
     fetchUser();
@@ -32,23 +42,39 @@ export function Sidebar() {
     router.push('/login');
   };
 
+  const isAdmin = userInfo?.role === 'admin';
+
   const menus = [
-    { href: '/dashboard', label: '대시보드', icon: '🏠' },
-    { href: '/inspection', label: '점검 생성', icon: '📋' },
-    { href: '/history', label: '점검 이력', icon: '📁' },
+    { href: '/dashboard',        label: '대시보드',      icon: '🏠' },
+    { href: '/inspection',       label: '점검 생성',     icon: '📋' },
+    { href: '/history',          label: '점검 이력',     icon: '📁' },
+    { href: '/stations/upload',  label: '관리구역 등록', icon: '📂' },
   ];
+
+  const adminMenus = [
+    { href: '/admin/users', label: '사용자 관리', icon: '👥' },
+  ];
+
+  const isActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + '/');
+
+  const linkStyle = (href: string): React.CSSProperties => ({
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '10px 14px', borderRadius: 10,
+    textDecoration: 'none', fontSize: 14, fontWeight: 600,
+    color: isActive(href) ? 'var(--accent)' : 'var(--text-secondary)',
+    background: isActive(href) ? 'var(--accent-soft)' : 'transparent',
+    transition: 'all .15s',
+  });
 
   return (
     <aside style={{
-      width: 260,
-      height: '100vh',
+      width: 260, height: '100vh',
       background: 'var(--bg-card)',
       borderRight: '1px solid var(--border)',
-      display: 'flex',
-      flexDirection: 'column',
+      display: 'flex', flexDirection: 'column',
       padding: '24px 16px',
-      position: 'sticky',
-      top: 0,
+      position: 'sticky', top: 0,
       overflowY: 'auto',
       boxShadow: 'var(--shadow)',
       zIndex: 100,
@@ -71,32 +97,40 @@ export function Sidebar() {
         }}>전기안전관리</span>
       </div>
 
-      {/* 메뉴 라벨 */}
+      {/* 일반 메뉴 */}
       <div style={{
         fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
         letterSpacing: '0.06em', textTransform: 'uppercase',
         marginBottom: 8, padding: '0 8px',
       }}>메뉴</div>
 
-      {/* 네비게이션 */}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-        {menus.map(m => {
-          const active = pathname === m.href || pathname?.startsWith(m.href + '/');
-          return (
-            <Link key={m.href} href={m.href} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 14px', borderRadius: 10,
-              textDecoration: 'none', fontSize: 14, fontWeight: 600,
-              color: active ? 'var(--accent)' : 'var(--text-secondary)',
-              background: active ? 'var(--accent-soft)' : 'transparent',
-              transition: 'all .15s',
-            }}>
-              <span style={{ fontSize: 18 }}>{m.icon}</span>
-              <span>{m.label}</span>
-            </Link>
-          );
-        })}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {menus.map(m => (
+          <Link key={m.href} href={m.href} style={linkStyle(m.href)}>
+            <span style={{ fontSize: 18 }}>{m.icon}</span>
+            <span>{m.label}</span>
+          </Link>
+        ))}
       </nav>
+
+      {/* 관리자 전용 메뉴 */}
+      {isAdmin && (
+        <>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)',
+            letterSpacing: '0.06em', textTransform: 'uppercase',
+            margin: '16px 0 8px', padding: '0 8px',
+          }}>관리자</div>
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {adminMenus.map(m => (
+              <Link key={m.href} href={m.href} style={linkStyle(m.href)}>
+                <span style={{ fontSize: 18 }}>{m.icon}</span>
+                <span>{m.label}</span>
+              </Link>
+            ))}
+          </nav>
+        </>
+      )}
 
       {/* 사용자 영역 */}
       <div style={{
@@ -108,7 +142,7 @@ export function Sidebar() {
       }}>
         <div style={{
           width: 36, height: 36, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--blue), var(--cyan))',
+          background: 'linear-gradient(135deg, var(--blue, #0066ff), var(--cyan, #00b8d9))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0,
         }}>
@@ -116,14 +150,14 @@ export function Sidebar() {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700,
-            color: 'var(--text-primary)',
+            fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {userInfo?.name || '사용자'}
           </div>
           <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-            {userInfo?.role === 'admin' ? '관리자' : '담당자'}
+            {userInfo?.role === 'admin' ? '👑 관리자' : '담당자'}
+            {userInfo?.sectors?.name && ` · ${userInfo.sectors.name}`}
           </div>
         </div>
         <button onClick={handleLogout} title="로그아웃" style={{
