@@ -34,7 +34,7 @@
   --radius: 14px;
 
   /* 그림자 */
-  --shadow:    0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
+  --shadow: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
   --shadow-md: 0 4px 16px rgba(0,102,255,.06), 0 2px 4px rgba(15,23,42,.04);
   --shadow-lg: 0 10px 40px rgba(0,102,255,.12), 0 4px 12px rgba(15,23,42,.06);
 }
@@ -64,17 +64,6 @@ button {
 input, textarea, select {
   font-family: inherit;
   letter-spacing: -0.02em;
-}
-
-/* ─── PC 레이아웃 ─── */
-.flex.min-h-screen {
-  display: grid !important;
-  grid-template-columns: 260px 1fr !important;
-}
-
-.flex-1 {
-  min-width: 0;
-  overflow-x: hidden;
 }
 
 /* ─── 카드 컴포넌트 ─── */
@@ -131,16 +120,11 @@ input, textarea, select {
 /* ─── 이슈 점 깜빡임 ─── */
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 3px rgba(239,68,68,.2); }
-  50%       { box-shadow: 0 0 0 6px rgba(239,68,68,.08); }
+  50% { box-shadow: 0 0 0 6px rgba(239,68,68,.08); }
 }
 
 /* ─── 모바일 ─── */
 @media (max-width: 768px) {
-  .flex.min-h-screen {
-    display: flex !important;
-    flex-direction: column;
-  }
-
   input, textarea, select {
     font-size: 16px !important;
   }
