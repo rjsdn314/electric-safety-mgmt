@@ -221,13 +221,13 @@ export function InspectionForm() {
   if (done) return (
         <div style={{maxWidth: 900, margin: '0 auto', padding: '0 24px'}}>
                 <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:40,textAlign:'center'}}>
-                          <div style={{fontSize:64}}>✅</div>div>
+                          <div style={{fontSize:64}}>✅</div>
                           <h2 style={{fontSize:22,fontWeight:800,margin:'14px 0 10px'}}>저장 완료</h2>h2>
-                          <div style={{color:'var(--accent)',fontWeight:600,marginBottom:8,fontSize:15,wordBreak:'break-all'}}>📄 {savedFile}</div>div>
+                          <div style={{color:'var(--accent)',fontWeight:600,marginBottom:8,fontSize:15,wordBreak:'break-all'}}>📄 {savedFile}</div>
                   {folderName && (
                     <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:24}}>
                                   💾 로컬 저장: {folderName}
-                    </div>div>
+                    </div>
                   )}
                   {downloadUrl && (
                     <a href={downloadUrl} download={savedFile} style={{
@@ -243,8 +243,8 @@ export function InspectionForm() {
                                       style={{width:'100%',maxWidth:400,background:'transparent',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:12,padding:'14px 24px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                                       새 점검 생성
                           </button>button>
-                </div>div>
-        </div>div>
+                </div>
+        </div>
       );
 
   return (
@@ -252,21 +252,21 @@ export function InspectionForm() {
 
           {/* 저장 폴더 */}
                 <div style={{background:'var(--bg-card)',borderRadius:16,padding:18,display:'flex',alignItems:'center',gap:14,marginBottom:14}}>
-                          <div style={{width:44,height:44,borderRadius:12,background:folderHandle?'rgba(5,192,114,.15)':'var(--bg-elevated)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>📁</div>div>
+                          <div style={{width:44,height:44,borderRadius:12,background:folderHandle?'rgba(5,192,114,.15)':'var(--bg-elevated)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>📁</div>
                           <div style={{minWidth:0,flex:1}}>
-                                      <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>저장 폴더</div>div>
+                                      <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>저장 폴더</div>
                                       <div style={{fontSize:12,color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                                         {folderName ? `${folderName}` : '폴더 선택 후 자동 저장'}
-                                      </div>div>
-                          </div>div>
+                                      </div>
+                          </div>
                           <button onClick={selectFolder} style={{padding:'10px 18px',borderRadius:10,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
                             {folderHandle ? '변경' : '선택'}
                           </button>button>
-                </div>div>
+                </div>
 
           {/* 충전소 선택 */}
                 <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
-                          <div style={sectionTitle}>충전소 선택</div>div>
+                          <div style={sectionTitle}>충전소 선택</div>
                           <div style={{position:'relative'}}>
                                       <input className="toss-input" placeholder="충전소명 검색..."
                                                     value={query}
@@ -281,80 +281,80 @@ export function InspectionForm() {
                                                             onClick={()=>handleSelectStation(s)}>
                                                             <span style={{width:8,height:8,borderRadius:'50%',background:'#05C072',flexShrink:0}}/>
                                                             <div style={{flex:1,minWidth:0}}>
-                                                                                  <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>div>
-                                                                                  <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>{s.voltage}V · {s.capacity}kW</div>div>
-                                                            </div>div>
+                                                                                  <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
+                                                                                  <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>{s.voltage}V · {s.capacity}kW</div>
+                                                            </div>
                                                             <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:8,background:'var(--accent-soft)',color:'var(--accent)',flexShrink:0}}>{s.voltage >= 3000 ? '고압' : '저압'}</span>span>
                                         </button>button>
                                       ))}
-                      </div>div>
+                      </div>
                     )}
-                          </div>div>
+                          </div>
                   {selected && (
                     <div style={{marginTop:14,padding:18,background:'var(--bg-elevated)',borderRadius:12}}>
-                                  <div style={{fontSize:14,fontWeight:700,marginBottom:10,color:'var(--accent)'}}>{selected.name}</div>div>
+                                  <div style={{fontSize:14,fontWeight:700,marginBottom:10,color:'var(--accent)'}}>{selected.name}</div>
                                   <div style={{display:'flex',gap:24,fontSize:13,color:'var(--text-secondary)',flexWrap:'wrap'}}>
-                                                  <div><span style={{opacity:0.7}}>수전전압</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.voltage}V</strong>strong></div>div>
-                                                <div><span style={{opacity:0.7}}>수전용량</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.capacity}kW</strong>strong></div>div>
+                                                  <div><span style={{opacity:0.7}}>수전전압</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.voltage}V</strong>strong></div>
+                                                <div><span style={{opacity:0.7}}>수전용량</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.capacity}kW</strong>strong></div>
                                     {selected.panel_count > 1 && (
-                                      <div><span style={{opacity:0.7}}>수배전반</span>span> <strong style={{color:'var(--accent)',marginLeft:6}}>{selected.panel_count}개</strong>strong></div>div>
+                                      <div><span style={{opacity:0.7}}>수배전반</span>span> <strong style={{color:'var(--accent)',marginLeft:6}}>{selected.panel_count}개</strong>strong></div>
                                                 )}
-                                  </div>div>
-                    </div>div>
+                                  </div>
+                    </div>
                         )}
-                </div>div>
+                </div>
         
           {/* 점검 정보 */}
               <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
-                      <div style={sectionTitle}>점검 정보</div>div>
+                      <div style={sectionTitle}>점검 정보</div>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:18}}>
                         {TYPE_OPTIONS.map(t=>(
                       <button key={t.value} onClick={()=>setInspType(t.value)}
                                       style={{padding:'16px 4px',borderRadius:12,border:`1.5px solid ${inspType===t.value?'var(--accent)':'transparent'}`,background:inspType===t.value?'var(--accent-soft)':'var(--bg-input)',color:inspType===t.value?'var(--accent)':'var(--text-secondary)',fontSize:15,fontWeight:700,cursor:'pointer',textAlign:'center',fontFamily:'inherit'}}>
                         {t.value}
-                                    <div style={{fontSize:11,opacity:.7,marginTop:4,fontWeight:500}}>{t.months}</div>div>
+                                    <div style={{fontSize:11,opacity:.7,marginTop:4,fontWeight:500}}>{t.months}</div>
                       </button>button>
                     ))}
-                      </div>div>
+                      </div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14}} className="info-grid">
                                 <div>
                                             <label style={labelStyle}>점검일자</label>label>
                                             <input type="date" className="toss-input" value={date} onChange={e=>setDate(e.target.value)}/>
-                                </div>div>
+                                </div>
                                 <div>
                                             <label style={labelStyle}>점검자</label>label>
                                             <input className="toss-input" placeholder="이름" value={inspector} onChange={e=>setInspector(e.target.value)}/>
-                                </div>div>
+                                </div>
                                 <div>
                                             <label style={labelStyle}>점검횟수</label>label>
                                             <input type="number" className="toss-input" min={1} value={count} onChange={e=>setCount(Number(e.target.value))}/>
-                                </div>div>
-                      </div>div>
-              </div>div>
+                                </div>
+                      </div>
+              </div>
         
           {/* 측정값 입력 — 개소별 동적 */}
               <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-                                <div style={sectionTitle}>측정값 입력</div>div>
+                                <div style={sectionTitle}>측정값 입력</div>
                                 <button onClick={addMeasureSet}
                                               style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,border:'1.5px dashed var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
                                             + 개소 추가
                                 </button>button>
-                      </div>div>
+                      </div>
               
                 {measureSets.map((set, idx) => (
                     <div key={idx} style={{marginBottom: idx < measureSets.length - 1 ? 28 : 0}}>
                                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
                                               <div style={{fontSize:13,fontWeight:700,color:'var(--accent)',padding:'4px 12px',borderRadius:8,background:'var(--accent-soft)'}}>
                                                               수배전반 #{idx + 1}
-                                              </div>div>
+                                              </div>
                                   {measureSets.length > 1 && (
                                       <button onClick={()=>removeMeasureSet(idx)}
                                                           style={{padding:'4px 12px',borderRadius:8,border:'1px solid var(--border)',background:'transparent',color:'var(--text-secondary)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                                                         ✕ 제거
                                       </button>button>
                                               )}
-                                </div>div>
+                                </div>
                     
                                 <div style={{marginBottom:14}}>
                                               <label style={labelStyle}>전압 (V)</label>label>
@@ -368,10 +368,10 @@ export function InspectionForm() {
                                                                                     onChange={e=>updateMeasureSet(idx, `voltage_${phase}`, e.target.value)}
                                                                                   />
                                                             <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>V</span>span>
-                                        </div>div>
+                                        </div>
                                       ))}
-                                              </div>div>
-                                </div>div>
+                                              </div>
+                                </div>
                     
                                 <div style={{marginBottom:14}}>
                                               <label style={labelStyle}>전류 (A)</label>label>
@@ -385,11 +385,11 @@ export function InspectionForm() {
                                                                                     onChange={e=>updateMeasureSet(idx, `current_${phase}`, e.target.value)}
                                                                                   />
                                                             <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>A</span>span>
-                                        </div>div>
+                                        </div>
                                       ))}
                                                               <div />
-                                              </div>div>
-                                </div>div>
+                                              </div>
+                                </div>
                     
                                 <div>
                                               <label style={labelStyle}>특이사항 (수배전반 #{idx + 1})</label>label>
@@ -397,29 +397,29 @@ export function InspectionForm() {
                                                                 value={set.remarks ?? ''}
                                                                 onChange={e=>updateMeasureSet(idx, 'remarks', e.target.value)}
                                                               />
-                                </div>div>
+                                </div>
                     
                       {idx < measureSets.length - 1 && (
                                     <div style={{borderTop:'1px solid var(--border)',marginTop:20}}/>
                                   )}
-                    </div>div>
+                    </div>
                   ))}
-              </div>div>
+              </div>
         
           {/* 전체 특이사항 */}
               <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
                       <label style={sectionTitle}>전체 특이사항</label>label>
                       <textarea className="toss-input" rows={3} style={{resize:'none'}} placeholder="특이사항이 없으면 비워두세요"
                                   value={remarks} onChange={e=>setRemarks(e.target.value)}/>
-              </div>div>
+              </div>
         
           {selected && (
                   <div style={{padding:16,background:'var(--bg-elevated)',borderRadius:12,fontSize:13,marginBottom:14}}>
-                            <div style={{color:'var(--text-secondary)',marginBottom:4,fontSize:11}}>생성될 파일</div>div>
+                            <div style={{color:'var(--text-secondary)',marginBottom:4,fontSize:11}}>생성될 파일</div>
                             <div style={{color:'var(--accent)',fontWeight:700,wordBreak:'break-all'}}>
                               {selected.name}_{inspType}점검_{date.replace(/-/g,'')}.xlsx
-                            </div>div>
-                  </div>div>
+                            </div>
+                  </div>
               )}
         
               <button onClick={handleSubmit} disabled={loading}
