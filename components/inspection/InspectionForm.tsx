@@ -20,7 +20,7 @@ export function InspectionForm() {
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
     const [selected, setSelected] = useState<any>(null);
-    const [inspType, setInspType] = useState('월차');
+    const [inspType, setInspType] = useState('월차');h
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [inspector, setInspector] = useState('');
     const [count, setCount] = useState(1);
@@ -222,7 +222,7 @@ export function InspectionForm() {
         <div style={{maxWidth: 900, margin: '0 auto', padding: '0 24px'}}>
                 <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:40,textAlign:'center'}}>
                           <div style={{fontSize:64}}>✅</div>
-                          <h2 style={{fontSize:22,fontWeight:800,margin:'14px 0 10px'}}>저장 완료</h2>h2>
+                          <h2 style={{fontSize:22,fontWeight:800,margin:'14px 0 10px'}}>저장 완료</h2>
                           <div style={{color:'var(--accent)',fontWeight:600,marginBottom:8,fontSize:15,wordBreak:'break-all'}}>📄 {savedFile}</div>
                   {folderName && (
                     <div style={{fontSize:13,color:'var(--text-secondary)',marginBottom:24}}>
@@ -237,12 +237,12 @@ export function InspectionForm() {
                                   maxWidth:400,marginLeft:'auto',marginRight:'auto'
                     }}>
                                   ⬇️ 엑셀 다운로드
-                    </a>a>
+                    </a>
                   )}
                           <button onClick={()=>{setDone(false);setSelected(null);setQuery('');setMeasureSets([emptyMeasureSet()]);setRemarks('');}}
                                       style={{width:'100%',maxWidth:400,background:'transparent',color:'var(--text-secondary)',border:'1px solid var(--border)',borderRadius:12,padding:'14px 24px',fontSize:14,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                                       새 점검 생성
-                          </button>button>
+                          </button>
                 </div>
         </div>
       );
@@ -261,7 +261,7 @@ export function InspectionForm() {
                           </div>
                           <button onClick={selectFolder} style={{padding:'10px 18px',borderRadius:10,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
                             {folderHandle ? '변경' : '선택'}
-                          </button>button>
+                          </button>
                 </div>
 
           {/* 충전소 선택 */}
@@ -284,8 +284,8 @@ export function InspectionForm() {
                                                                                   <div style={{fontSize:14,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</div>
                                                                                   <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:2}}>{s.voltage}V · {s.capacity}kW</div>
                                                             </div>
-                                                            <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:8,background:'var(--accent-soft)',color:'var(--accent)',flexShrink:0}}>{s.voltage >= 3000 ? '고압' : '저압'}</span>span>
-                                        </button>button>
+                                                            <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:8,background:'var(--accent-soft)',color:'var(--accent)',flexShrink:0}}>{s.voltage >= 3000 ? '고압' : '저압'}</span>
+                                        </button>
                                       ))}
                       </div>
                     )}
@@ -294,10 +294,10 @@ export function InspectionForm() {
                     <div style={{marginTop:14,padding:18,background:'var(--bg-elevated)',borderRadius:12}}>
                                   <div style={{fontSize:14,fontWeight:700,marginBottom:10,color:'var(--accent)'}}>{selected.name}</div>
                                   <div style={{display:'flex',gap:24,fontSize:13,color:'var(--text-secondary)',flexWrap:'wrap'}}>
-                                                  <div><span style={{opacity:0.7}}>수전전압</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.voltage}V</strong>strong></div>
-                                                <div><span style={{opacity:0.7}}>수전용량</span>span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.capacity}kW</strong>strong></div>
+                                                  <div><span style={{opacity:0.7}}>수전전압</span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.voltage}V</strong></div>
+                                                <div><span style={{opacity:0.7}}>수전용량</span> <strong style={{color:'var(--text-primary)',marginLeft:6}}>{selected.capacity}kW</strong></div>
                                     {selected.panel_count > 1 && (
-                                      <div><span style={{opacity:0.7}}>수배전반</span>span> <strong style={{color:'var(--accent)',marginLeft:6}}>{selected.panel_count}개</strong>strong></div>
+                                      <div><span style={{opacity:0.7}}>수배전반</span> <strong style={{color:'var(--accent)',marginLeft:6}}>{selected.panel_count}개</strong></div>
                                                 )}
                                   </div>
                     </div>
@@ -313,20 +313,20 @@ export function InspectionForm() {
                                       style={{padding:'16px 4px',borderRadius:12,border:`1.5px solid ${inspType===t.value?'var(--accent)':'transparent'}`,background:inspType===t.value?'var(--accent-soft)':'var(--bg-input)',color:inspType===t.value?'var(--accent)':'var(--text-secondary)',fontSize:15,fontWeight:700,cursor:'pointer',textAlign:'center',fontFamily:'inherit'}}>
                         {t.value}
                                     <div style={{fontSize:11,opacity:.7,marginTop:4,fontWeight:500}}>{t.months}</div>
-                      </button>button>
+                      </button>
                     ))}
                       </div>
                       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14}} className="info-grid">
                                 <div>
-                                            <label style={labelStyle}>점검일자</label>label>
+                                            <label style={labelStyle}>점검일자</label>
                                             <input type="date" className="toss-input" value={date} onChange={e=>setDate(e.target.value)}/>
                                 </div>
                                 <div>
-                                            <label style={labelStyle}>점검자</label>label>
+                                            <label style={labelStyle}>점검자</label>
                                             <input className="toss-input" placeholder="이름" value={inspector} onChange={e=>setInspector(e.target.value)}/>
                                 </div>
                                 <div>
-                                            <label style={labelStyle}>점검횟수</label>label>
+                                            <label style={labelStyle}>점검횟수</label>
                                             <input type="number" className="toss-input" min={1} value={count} onChange={e=>setCount(Number(e.target.value))}/>
                                 </div>
                       </div>
@@ -339,7 +339,7 @@ export function InspectionForm() {
                                 <button onClick={addMeasureSet}
                                               style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,border:'1.5px dashed var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
                                             + 개소 추가
-                                </button>button>
+                                </button>
                       </div>
               
                 {measureSets.map((set, idx) => (
@@ -352,12 +352,12 @@ export function InspectionForm() {
                                       <button onClick={()=>removeMeasureSet(idx)}
                                                           style={{padding:'4px 12px',borderRadius:8,border:'1px solid var(--border)',background:'transparent',color:'var(--text-secondary)',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
                                                         ✕ 제거
-                                      </button>button>
+                                      </button>
                                               )}
                                 </div>
                     
                                 <div style={{marginBottom:14}}>
-                                              <label style={labelStyle}>전압 (V)</label>label>
+                                              <label style={labelStyle}>전압 (V)</label>
                                               <div className="measure-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
                                                 {(['A','B','C','N'] as const).map((phase) => (
                                         <div key={phase} style={{position:'relative'}}>
@@ -367,14 +367,14 @@ export function InspectionForm() {
                                                                                     value={set[`voltage_${phase}`] ?? ''}
                                                                                     onChange={e=>updateMeasureSet(idx, `voltage_${phase}`, e.target.value)}
                                                                                   />
-                                                            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>V</span>span>
+                                                            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>V</span>
                                         </div>
                                       ))}
                                               </div>
                                 </div>
                     
                                 <div style={{marginBottom:14}}>
-                                              <label style={labelStyle}>전류 (A)</label>label>
+                                              <label style={labelStyle}>전류 (A)</label>
                                               <div className="measure-grid" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
                                                 {(['A','B','C'] as const).map((phase) => (
                                         <div key={phase} style={{position:'relative'}}>
@@ -384,7 +384,7 @@ export function InspectionForm() {
                                                                                     value={set[`current_${phase}`] ?? ''}
                                                                                     onChange={e=>updateMeasureSet(idx, `current_${phase}`, e.target.value)}
                                                                                   />
-                                                            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>A</span>span>
+                                                            <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>A</span>
                                         </div>
                                       ))}
                                                               <div />
@@ -392,7 +392,7 @@ export function InspectionForm() {
                                 </div>
                     
                                 <div>
-                                              <label style={labelStyle}>특이사항 (수배전반 #{idx + 1})</label>label>
+                                              <label style={labelStyle}>특이사항 (수배전반 #{idx + 1})</label>
                                               <input className="toss-input" placeholder="특이사항이 없으면 비워두세요"
                                                                 value={set.remarks ?? ''}
                                                                 onChange={e=>updateMeasureSet(idx, 'remarks', e.target.value)}
@@ -408,7 +408,7 @@ export function InspectionForm() {
         
           {/* 전체 특이사항 */}
               <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
-                      <label style={sectionTitle}>전체 특이사항</label>label>
+                      <label style={sectionTitle}>전체 특이사항</label>
                       <textarea className="toss-input" rows={3} style={{resize:'none'}} placeholder="특이사항이 없으면 비워두세요"
                                   value={remarks} onChange={e=>setRemarks(e.target.value)}/>
               </div>
@@ -425,14 +425,14 @@ export function InspectionForm() {
               <button onClick={handleSubmit} disabled={loading}
                         style={{width:'100%',padding:18,borderRadius:14,border:'none',background:'var(--accent)',color:'#fff',fontSize:16,fontWeight:700,cursor:'pointer',opacity:loading?.6:1,fontFamily:'inherit'}}>
           {loading ? '⏳ 생성 중...' : '⚡ 직무고시 엑셀 생성 및 저장'}
-        </div>button>
+        </div>
     
           <style jsx>{`
                   @media (max-width: 768px) {
                             .info-grid { grid-template-columns: 1fr !important; }
                                       .measure-grid { grid-template-columns: repeat(2, 1fr) !important; }
                                               }
-                                                    `}</style>style>
+                                                    `}</style>
     </div>
       );
       }
