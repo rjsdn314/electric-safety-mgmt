@@ -85,9 +85,49 @@ export function InspectionForm() {
         setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
   };
 
+  // 한글 ↔ 영문 별칭 매핑 (검색 편의성)
+  const aliasMap: Record<string, string[]> = {
+    'kintex': ['킨텍스'],
+    '킨텍스': ['kintex', 'KINTEX', 'Kintex'],
+  };
+
+  // 검색어를 정규화하고 별칭까지 포함한 검색어 목록 생성
+  const buildSearchTerms = (q: string): string[] => {
+    if (!q) return [];
+    const lower = q.toLowerCase().trim();
+    const terms = new Set<string>([q, lower, q.trim()]);
+    for (const [key, aliases] of Object.entries(aliasMap)) {
+      if (lower.includes(key.toLowerCase())) {
+        aliases.forEach(a => terms.add(a));
+      }
+      for (const alias of aliases) {
+        if (q.includes(alias) || lower.includes(alias.toLowerCase())) {
+          terms.add(key);
+          terms.add(key.toUpperCase());
+          terms.add(key.charAt(0).toUpperCase() + key.slice(1));
+        }
+      }
+    }
+    return Array.from(terms);
+  };
+
+  const matchStation = (s: any, q: string): boolean => {
+    if (!q) return true;
+    const terms = buildSearchTerms(q);
+    const haystacks = [
+      s.name || '',
+      s.base_name || '',
+      (s.name || '').toLowerCase(),
+      (s.base_name || '').toLowerCase(),
+    ];
+    return terms.some(term =>
+      haystacks.some(h => h.includes(term) || h.includes(term.toLowerCase()))
+    );
+  };
+
   const filtered = stations
-        .filter(s => !query || s.name?.includes(query) || s.base_name?.includes(query))
-        .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
+    .filter(s => matchStation(s, query))
+    .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
         setMeasureSets(prev => {
