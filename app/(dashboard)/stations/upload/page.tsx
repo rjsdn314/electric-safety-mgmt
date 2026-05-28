@@ -1,7 +1,7 @@
 'use client';
 // ============================================================
 // app/(dashboard)/stations/upload/page.tsx
-// 관리구역 등록용 엑셀 업로드 페이지
+// 관리구역 등록 업로드 페이지
 // ============================================================
 import { useState, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -12,11 +12,11 @@ export default function StationUploadPage() {
   const supabase = createClient();
 
   const fileRef = useRef<HTMLInputElement>(null);
-  const [file,        setFile]        = useState<File | null>(null);
-  const [sectorName,  setSectorName]  = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [result,      setResult]      = useState<{inserted:number; sectorName:string} | null>(null);
-  const [error,       setError]       = useState('');
+  const [file, setFile]               = useState<File | null>(null);
+  const [sectorName, setSectorName]   = useState('');
+  const [loading, setLoading]         = useState(false);
+  const [result, setResult]           = useState<{inserted:number; sectorName:string} | null>(null);
+  const [error, setError]             = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -28,7 +28,7 @@ export default function StationUploadPage() {
     setLoading(true);
     setError('');
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data:{ session } } = await supabase.auth.getSession();
       const fd = new FormData();
       fd.append('file', file);
       fd.append('sector_name', sectorName || profile?.sector?.name || '기본구역');
@@ -50,12 +50,33 @@ export default function StationUploadPage() {
     }
   };
 
+  // ─── 양식 다운로드: CSV로 생성 (엑셀에서 바로 열기 가능) ────────────
   const downloadTemplate = () => {
-    // 엑셀 양식 다운로드
-    const link = document.createElement('a');
-    link.href = '/templates/station_template.xlsx';
-    link.download = '관리구역_등록양식.xlsx';
-    link.click();
+    const rows = [
+      // 1행: 안내문
+      ['담당자명', '현장명', '관리구역명', '수전전압', '계약용량', '수배전반 개수', '측정개소명(쉼표구분)', '기본점검양식(월차/분기/반기/연차)', '비고'],
+      // 2행: 예시 데이터
+      ['홍길동', '횡성휴게소(강릉방향)', '강원권', '22900', '1849', '2', '수배전반 #1,수배전반 #2', '월차', ''],
+    ];
+
+    const BOM = '\uFEFF'; // UTF-8 BOM (엑셀 한글 깨짐 방지)
+    const csv = BOM + rows.map(row =>
+      row.map(cell => {
+        const str = String(cell ?? '');
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      }).join(',')
+    ).join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '관리구역_등록양식.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const inputStyle: React.CSSProperties = {
@@ -74,8 +95,7 @@ export default function StationUploadPage() {
           📂 관리구역 등록
         </h1>
         <p style={{ fontSize: 13, color: 'var(--mid)', lineHeight: 1.7 }}>
-          담당 현장 정보를 엑셀로 일괄 등록합니다.
-          업로드 후 점검 생성에서 해당 현장이 표시됩니다.
+          담당 현장 정보를 엑셀로 일괄 등록합니다. 업로드 후 점검 생성에서 해당 현장이 표시됩니다.
         </p>
       </div>
 
@@ -105,7 +125,7 @@ export default function StationUploadPage() {
         }}>⬇ 양식 다운로드</button>
       </div>
 
-      {/* 양식 컬럼 안내 */}
+      {/* 컬럼 안내 */}
       <div style={{
         background: 'rgba(0,102,255,.04)', border: '1px solid rgba(0,102,255,.15)',
         borderRadius: 12, padding: '16px 20px', marginBottom: 20, fontSize: 12,
@@ -162,14 +182,14 @@ export default function StationUploadPage() {
             padding: '32px 20px', borderRadius: 12,
             border: `2px dashed ${file ? 'var(--blue)' : 'var(--border)'}`,
             background: file ? 'rgba(0,102,255,.04)' : 'transparent',
-            cursor: 'pointer', transition: 'all .15s',
+            cursor: 'pointer', transition: 'all 0.15s',
           }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>{file ? '✅' : '📂'}</div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: 'var(--text)' }}>
               {file ? file.name : '클릭하여 엑셀 파일 선택'}
             </div>
             <div style={{ fontSize: 12, color: 'var(--dim)' }}>
-              {file ? `${(file.size / 1024).toFixed(1)} KB` : '.xlsx, .xls 파일 지원'}
+              {file ? `${(file.size/1024).toFixed(1)}KB` : '.xlsx, .xls 파일 지원'}
             </div>
             <input
               ref={fileRef}
@@ -181,45 +201,42 @@ export default function StationUploadPage() {
           </label>
         </div>
 
-        {error && (
-          <div style={{
-            padding: '12px 16px', borderRadius: 10, marginBottom: 16,
-            background: 'rgba(239,68,68,.08)', color: '#dc2626',
-            border: '1px solid rgba(239,68,68,.2)', fontSize: 13,
-          }}>{error}</div>
-        )}
-
         <button
           onClick={handleUpload}
           disabled={loading || !file}
           style={{
-            width: '100%', padding: '14px 0', borderRadius: 99, border: 'none',
+            width: '100%', padding: '14px', borderRadius: 12, border: 'none',
             background: loading || !file
-              ? 'var(--dim)'
-              : 'linear-gradient(135deg, #0066ff, #00b8d9)',
-            color: '#fff', fontSize: 15, fontWeight: 700,
-            cursor: loading || !file ? 'not-allowed' : 'pointer',
-            fontFamily: 'inherit', transition: 'all .15s',
+              ? 'var(--border)'
+              : 'linear-gradient(135deg, #0066ff, #0052cc)',
+            color: loading || !file ? 'var(--dim)' : '#fff',
+            fontSize: 15, fontWeight: 700, cursor: loading || !file ? 'not-allowed' : 'pointer',
+            fontFamily: 'inherit', transition: 'all 0.15s',
           }}
         >
           {loading ? '⏳ 등록 중...' : '⚡ 관리구역 일괄 등록'}
         </button>
       </div>
 
-      {/* 완료 결과 */}
+      {/* 에러 */}
+      {error && (
+        <div style={{
+          background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)',
+          borderRadius: 10, padding: '12px 16px', fontSize: 13, color: '#ef4444',
+        }}>
+          ❌ {error}
+        </div>
+      )}
+
+      {/* 성공 */}
       {result && (
         <div style={{
-          background: 'rgba(16,185,129,.06)', border: '1px solid rgba(16,185,129,.25)',
-          borderRadius: 14, padding: '24px', textAlign: 'center',
+          background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.25)',
+          borderRadius: 10, padding: '16px 20px', fontSize: 13,
         }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-          <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>등록 완료</div>
-          <div style={{ fontSize: 14, color: 'var(--mid)' }}>
-            <strong style={{ color: 'var(--text)' }}>{result.sectorName}</strong> 구역에{' '}
-            <strong style={{ color: '#059669' }}>{result.inserted}개</strong> 충전소가 등록되었습니다
-          </div>
-          <div style={{ marginTop: 16, fontSize: 12, color: 'var(--dim)' }}>
-            이제 점검 생성 페이지에서 해당 충전소를 선택할 수 있습니다
+          <div style={{ fontWeight: 700, color: '#10b981', marginBottom: 4 }}>✅ 등록 완료!</div>
+          <div style={{ color: 'var(--mid)' }}>
+            <strong>{result.sectorName}</strong> 구역에 <strong>{result.inserted}개</strong> 현장이 등록되었습니다.
           </div>
         </div>
       )}
