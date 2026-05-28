@@ -85,9 +85,9 @@ export function InspectionForm() {
         setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
   };
 
-  const filtered = stations.filter(s =>
-        !query || s.name?.includes(query) || s.base_name?.includes(query)
-                                     );
+  const filtered = stations
+        .filter(s => !query || s.name?.includes(query) || s.base_name?.includes(query))
+        .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
         setMeasureSets(prev => {
@@ -155,11 +155,7 @@ export function InspectionForm() {
                 const mm = folderInfo.month.replace('월', '');
                 const periodFolder = `${yyyy}${mm}${folderInfo.inspection_type}`;
                 let current = folderHandle;
-                if (folderInfo.is_kintex) {
-                          current = await findOrCreateDir(current, folderInfo.base_name);
-                          current = await current.getDirectoryHandle(folderInfo.voltage_type, { create: true });
-                          current = await current.getDirectoryHandle(periodFolder, { create: true });
-                } else {
+                current = await current.getDirectoryHandle(periodFolder, { create: true }); else {
                           current = await findOrCreateDir(current, folderInfo.base_name);
                           current = await current.getDirectoryHandle(periodFolder, { create: true });
                 }
