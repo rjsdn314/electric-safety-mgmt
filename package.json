@@ -1,7 +1,7 @@
 {
   "name": "electric-safety-management",
-  "version": "1.0.0",
-  "description": "전기안전관리 직무고시 자동화 웹앱",
+  "version": "2.0.0",
+  "description": "전기안전관리 직무고시 자동화 웹앱 — 계정 기반 멀티유저",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.0",
+    "@supabase/ssr": "^0.5.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "date-fns": "^3.6.0",
