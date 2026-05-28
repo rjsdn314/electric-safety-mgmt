@@ -155,10 +155,7 @@ export function InspectionForm() {
                 const mm = folderInfo.month.replace('월', '');
                 const periodFolder = `${yyyy}${mm}${folderInfo.inspection_type}`;
                 let current = folderHandle;
-                current = await current.getDirectoryHandle(periodFolder, { create: true }); else {
-                          current = await findOrCreateDir(current, folderInfo.base_name);
-                          current = await current.getDirectoryHandle(periodFolder, { create: true });
-                }
+                current = await current.getDirectoryHandle(periodFolder, { create: true });
                 const fileHandle = await current.getFileHandle(fileName, { create: true });
                 const writable = await fileHandle.createWritable();
                 const binaryString = atob(base64);
