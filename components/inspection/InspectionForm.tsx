@@ -20,7 +20,7 @@ export function InspectionForm() {
     const [query, setQuery] = useState('');
     const [open, setOpen] = useState(false);
     const [selected, setSelected] = useState<any>(null);
-    const [inspType, setInspType] = useState('월차');h
+    const [inspType, setInspType] = useState('월차');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [inspector, setInspector] = useState('');
     const [count, setCount] = useState(1);
@@ -425,7 +425,7 @@ export function InspectionForm() {
               <button onClick={handleSubmit} disabled={loading}
                         style={{width:'100%',padding:18,borderRadius:14,border:'none',background:'var(--accent)',color:'#fff',fontSize:16,fontWeight:700,cursor:'pointer',opacity:loading?.6:1,fontFamily:'inherit'}}>
           {loading ? '⏳ 생성 중...' : '⚡ 직무고시 엑셀 생성 및 저장'}
-        </div>
+        </button>
     
           <style jsx>{`
                   @media (max-width: 768px) {
