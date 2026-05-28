@@ -1,6 +1,6 @@
 'use client';
 // ============================================================
-// app/(auth)/login/page.tsx — 로그인 페이지 v2
+// app/(auth)/login/page.tsx — 로그인 페이지 v3 (중앙 정렬 수정)
 // ============================================================
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
@@ -8,10 +8,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function LoginPage() {
-  const [email,    setEmail]    = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
   const router       = useRouter();
   const searchParams = useSearchParams();
   const supabase     = createClient();
@@ -58,16 +58,23 @@ export default function LoginPage() {
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      minHeight: '100vh',
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       padding: '20px 16px',
       background: 'var(--bg-page)',
       backgroundImage: 'radial-gradient(ellipse 600px 400px at 50% 0%, rgba(0,102,255,.05), transparent)',
     }}>
       <div style={{
-        width: '100%', maxWidth: 400,
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', padding: '40px 40px',
-        boxShadow: 'var(--shadow-md)',
+        width: '100%',
+        maxWidth: 420,
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: 20,
+        padding: '40px 40px',
+        boxShadow: '0 4px 16px rgba(0,102,255,.06), 0 2px 4px rgba(15,23,42,.04)',
       }}>
         {/* 로고 */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -76,10 +83,10 @@ export default function LoginPage() {
             background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
           }}>⚡</div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6, letterSpacing: '-0.5px' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 6, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
             전기안전관리
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--mid)' }}>직무고시 자동화 시스템</p>
+          <p style={{ fontSize: 13, color: '#4b5563', margin: 0 }}>직무고시 자동화 시스템</p>
         </div>
 
         {/* 에러 */}
@@ -101,8 +108,8 @@ export default function LoginPage() {
               type="email"
               style={{
                 width: '100%', padding: '12px 14px',
-                background: 'var(--bg-page)', border: '1.5px solid var(--border)',
-                borderRadius: 10, fontSize: 14, color: 'var(--text)',
+                background: '#f6f8fc', border: '1.5px solid #e4e9f0',
+                borderRadius: 10, fontSize: 14, color: '#111827',
                 outline: 'none', fontFamily: 'inherit', letterSpacing: '-0.02em',
                 boxSizing: 'border-box',
               }}
@@ -120,8 +127,8 @@ export default function LoginPage() {
               type="password"
               style={{
                 width: '100%', padding: '12px 14px',
-                background: 'var(--bg-page)', border: '1.5px solid var(--border)',
-                borderRadius: 10, fontSize: 14, color: 'var(--text)',
+                background: '#f6f8fc', border: '1.5px solid #e4e9f0',
+                borderRadius: 10, fontSize: 14, color: '#111827',
                 outline: 'none', fontFamily: 'inherit', letterSpacing: '-0.02em',
                 boxSizing: 'border-box',
               }}
@@ -139,7 +146,7 @@ export default function LoginPage() {
           style={{
             width: '100%', padding: '14px 0',
             background: loading || !email || !password
-              ? 'var(--dim)'
+              ? '#9ca3af'
               : 'linear-gradient(135deg, #0066ff, #00b8d9)',
             color: '#fff', border: 'none', borderRadius: 99,
             fontSize: 15, fontWeight: 700,
@@ -152,13 +159,13 @@ export default function LoginPage() {
 
         {/* 안내 */}
         <div style={{ marginTop: 20, textAlign: 'center' }}>
-          <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 12 }}>
+          <p style={{ fontSize: 13, color: '#4b5563', marginBottom: 12 }}>
             아직 계정이 없으신가요?
           </p>
           <Link href="/register" style={{
             display: 'block', padding: '12px 0',
-            border: '1.5px solid var(--blue, #0066ff)',
-            borderRadius: 99, color: 'var(--blue, #0066ff)',
+            border: '1.5px solid #0066ff',
+            borderRadius: 99, color: '#0066ff',
             fontWeight: 700, fontSize: 14, textDecoration: 'none',
             transition: 'all .15s',
           }}>
@@ -169,13 +176,13 @@ export default function LoginPage() {
         {/* 보안 안내 */}
         <div style={{
           marginTop: 20, padding: '14px 16px', borderRadius: 10,
-          background: 'var(--bg-page)', border: '1px solid var(--border)',
+          background: '#f6f8fc', border: '1px solid #e4e9f0',
           display: 'flex', gap: 10, alignItems: 'flex-start',
         }}>
           <span style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
           <div>
             <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3 }}>계정별 데이터 분리</div>
-            <div style={{ fontSize: 11, color: 'var(--mid)', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 11, color: '#4b5563', lineHeight: 1.6 }}>
               로그인한 계정에 등록된 관리구역만 접근 가능합니다
             </div>
           </div>
