@@ -72,7 +72,7 @@ function TypeBadge({ type }: { type: string }) {
 export default function DashboardPage() {
   const { profile } = useAuth();
   const { stations } = useStations();
-  const { inspections } = useInspections({ limit: 5 });
+  const { inspections } = useInspections({ limit: 500 });
 
   const currentMonth = new Date().getMonth() + 1;
   const currentYear  = new Date().getFullYear();
@@ -81,6 +81,18 @@ export default function DashboardPage() {
     const d = new Date(i.inspection_date);
     return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
   }).length;
+
+  // 이번달 점검 완료한 충전소 id 집합
+  const doneStationIds = new Set(
+    inspections
+      .filter(i => {
+        const d = new Date(i.inspection_date);
+        return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+      })
+      .map(i => i.station_id)
+  );
+  // 이번달 아직 점검하지 않은 개소 목록
+  const pendingStations = stations.filter(st => !doneStationIds.has(st.id));
 
   return (
     <div style={{ padding: '40px 48px 80px', maxWidth: 900 }}>
@@ -120,7 +132,61 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* 2단 그리드: 최근 이력 + 충전소 현황 */}
+{/* ── 이번달 미점검 개소 (한눈에 보기) ── */}
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid #f59e0b',
+        borderRadius: 'var(--radius)',
+        padding: '22px 24px',
+        boxShadow: 'var(--shadow)',
+        marginBottom: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+            이번달 미점검 개소
+          </span>
+          <span style={{
+            fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99,
+            background: 'rgba(245,158,11,.12)', color: '#d97706',
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>{pendingStations.length}개소</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>— {currentMonth}월 기준</span>
+        </div>
+        {pendingStations.length === 0 ? (
+          <p style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
+            🎉 이번달 모든 충전소 점검이 완료되었습니다
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+            {pendingStations.map(station => (
+              <Link key={station.id} href="/inspection" style={{ textDecoration: 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 10,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid transparent', transition: 'all .15s', cursor: 'pointer',
+                }}
+                onMouseEnter={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: '#f59e0b', background: 'rgba(245,158,11,.06)' })}
+                onMouseLeave={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: 'transparent', background: 'var(--bg-elevated)' })}
+                >
+                  <span style={{ fontSize: 14 }}>🟡</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {station.base_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      {station.capacity}kW · {station.voltage}V
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+            {/* 2단 그리드: 최근 이력 + 충전소 현황 */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '1fr 360px',
