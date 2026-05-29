@@ -314,7 +314,7 @@ export function InspectionForm() {
                           <div style={{minWidth:0,flex:1}}>
                                       <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>저장 폴더</div>
                                       <div style={{fontSize:12,color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                                        {folderName ? `${folderName}` : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}
+                                        {folderName ? (selected ? `${folderName} / ${selected.name}` : folderName) : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}
                                       </div>
                           </div>
                           <button onClick={selectFolder} style={{padding:'10px 18px',borderRadius:10,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
