@@ -2,6 +2,7 @@
 // ============================================================
 // app/(dashboard)/dashboard/page.tsx — WATER 디자인 시스템 적용
 // ============================================================
+import { useState } from 'react';
 import { useStations } from '@/hooks/useStations';
 import { useInspections } from '@/hooks/useInspections';
 import { useAuth } from '@/hooks/useAuth';
@@ -92,7 +93,7 @@ export default function DashboardPage() {
       .map(i => i.station_id)
   );
   // 이번달 아직 점검하지 않은 개소 목록
-  const pendingStations = stations.filter(st => !doneStationIds.has(st.id));
+  const pendingStations = stations.filter(st => !doneStationIds.has(st.id)); const [pendingShow, setPendingShow] = useState(10); const visiblePending = pendingStations.slice(0, pendingShow);
 
   return (
     <div style={{ padding: '40px 48px 80px', maxWidth: 900 }}>
@@ -159,7 +160,7 @@ export default function DashboardPage() {
           </p>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-            {pendingStations.map(station => (
+            {visiblePending.map(station => (
               <Link key={station.id} href="/inspection" style={{ textDecoration: 'none' }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -183,6 +184,11 @@ export default function DashboardPage() {
               </Link>
             ))}
           </div>
+  {pendingShow < pendingStations.length && (
+  <button onClick={() => setPendingShow(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '10px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
+    더보기 ({pendingStations.length - pendingShow}개 더)
+  </button>
+        )}
         )}
       </div>
 
