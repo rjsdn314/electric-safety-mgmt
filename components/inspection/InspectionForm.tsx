@@ -457,7 +457,7 @@ export function InspectionForm() {
         
           {/* 종합 의견 */}
               <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
-                      <label style={sectionTitle}>종합 의견</label>
+                      <label style={sectionTitle}>종합 의견(별지14)</label>
                       <textarea className="toss-input" rows={3} style={{resize:'none'}} placeholder="특이사항이 없으면 비워두세요"
                                   value={remarks} onChange={e=>setRemarks(e.target.value)}/>
               </div>
