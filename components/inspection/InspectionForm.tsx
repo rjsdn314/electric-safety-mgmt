@@ -52,30 +52,49 @@ export function InspectionForm() {
                           setStations(data || []);
                 }
 
-                try {
-                          const dbReq = indexedDB.open('inspection-app', 1);
-                          dbReq.onupgradeneeded = () => { dbReq.result.createObjectStore('folders'); };
-                          dbReq.onsuccess = async () => {
-                                      const db = dbReq.result;
-                                      const tx = db.transaction('folders', 'readonly');
-                                      const store = tx.objectStore('folders');
-                                      const getReq = store.get('savedFolder');
-                                      getReq.onsuccess = async () => {
-                                                    if (getReq.result) {
-                                                                    try {
-                                                                                      const perm = await getReq.result.queryPermission({ mode: 'readwrite' });
-                                                                                      if (perm === 'granted') {
-                                                                                                          setFolderHandle(getReq.result);
-                                                                                                          setFolderName(getReq.result.name);
-                                                                                        }
-                                                                    } catch(e) {}
-                                                    }
-                                      };
-                          };
-                } catch(e) {}
+                // 폴더는 충전소 선택 시 충전소별로 불러온다 (loadStationFolder)
         };
         load();
   }, []);
+
+  // IndexedDB 헬퍼: 충전소별 폴더 핸들 저장/불러오기
+  const openFolderDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+    const req = indexedDB.open('inspection-app', 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('folders'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  const saveStationFolder = async (stationId: string, handle: any) => {
+    try {
+      const db = await openFolderDB();
+      const tx = db.transaction('folders', 'readwrite');
+      tx.objectStore('folders').put(handle, 'folder_' + stationId);
+    } catch (e) {}
+  };
+
+  const loadStationFolder = async (stationId: string) => {
+    try {
+      const db = await openFolderDB();
+      const tx = db.transaction('folders', 'readonly');
+      const getReq = tx.objectStore('folders').get('folder_' + stationId);
+      getReq.onsuccess = async () => {
+        if (getReq.result) {
+          try {
+            const perm = await getReq.result.queryPermission({ mode: 'readwrite' });
+            if (perm === 'granted' || perm === 'prompt') {
+              setFolderHandle(getReq.result);
+              setFolderName(getReq.result.name);
+              return;
+            }
+          } catch (e) {}
+        }
+        // 기억된 폴더 없음 → 미지정 상태로
+        setFolderHandle(null);
+        setFolderName('');
+      };
+    } catch (e) {}
+  };
 
   const handleSelectStation = (station: any) => {
         setSelected(station);
@@ -83,6 +102,8 @@ export function InspectionForm() {
         setOpen(false);
         const panelCount = station.panel_count && station.panel_count > 0 ? station.panel_count : 1;
         setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
+        // 충전소별로 기억한 저장 폴더 불러오기
+        loadStationFolder(station.id);
   };
 
   // 한글 ↔ 영문 별칭 매핑 (검색 편의성, 부분 매칭 지원)
@@ -163,6 +184,8 @@ export function InspectionForm() {
   };
 
   const selectFolder = async () => {
+        // 충전소를 먼저 선택해야 해당 충전소의 폴더로 기억됨
+        if (!selected) { alert('먼저 충전소를 선택해주세요. 충전소별로 저장 폴더가 기억됩니다.'); return; }
         if (!('showDirectoryPicker' in window)) {
                 alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
                 return;
@@ -172,16 +195,8 @@ export function InspectionForm() {
           const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
                 setFolderHandle(handle);
                 setFolderName(handle.name);
-                try {
-                          const dbReq = indexedDB.open('inspection-app', 1);
-                          dbReq.onupgradeneeded = () => { dbReq.result.createObjectStore('folders'); };
-                          dbReq.onsuccess = () => {
-                                      const db = dbReq.result;
-                                      const tx = db.transaction('folders', 'readwrite');
-                                      tx.objectStore('folders').put(handle, 'savedFolder');
-                          };
-                } catch(e) {}
-                alert(`✅ 폴더 저장 완료\n\n${handle.name}\n\n이제부터 모든 점검은 이 폴더에 자동 저장됩니다.`);
+                await saveStationFolder(selected.id, handle);
+                alert(`✅ 폴더 저장 완료\n\n충전소: ${selected.name}\n폴더: ${handle.name}\n\n이 충전소는 앞으로 항상 이 폴더에 저장됩니다.`);
         } catch (e: any) {
                 if (e.name !== 'AbortError') alert('폴더 선택 실패: ' + e.message);
         }
@@ -199,7 +214,7 @@ export function InspectionForm() {
         return await parent.getDirectoryHandle(targetName, { create: true });
   };
 
-  const saveToLocal = async (base64: string, folderInfo: any, fileName: string, stationName: string) => {
+  const saveToLocal = async (base64: string, fileName: string, subFolderName: string) => {
         if (!folderHandle) return false;
         try {
                 const perm = await folderHandle.queryPermission({ mode: 'readwrite' });
@@ -207,15 +222,9 @@ export function InspectionForm() {
                           const newPerm = await folderHandle.requestPermission({ mode: 'readwrite' });
                           if (newPerm !== 'granted') { alert('폴더 쓰기 권한이 필요합니다.'); return false; }
                 }
-                const yyyy = folderInfo.year.replace('년', '');
-                const mm = folderInfo.month.replace('월', '');
-                const periodFolder = `${yyyy}${mm}${folderInfo.inspection_type}`;
+                // 저장 폴더 구조: {루트}/{YYYYMMDD_충전소명_종별}/파일
                 let current = folderHandle;
-      // 충전소명별 폴더 (각 충전소마다 별도 폴더)
-      if (stationName) {
-        current = await findOrCreateDir(current, stationName);
-      }
-                current = await current.getDirectoryHandle(periodFolder, { create: true });
+                current = await current.getDirectoryHandle(subFolderName, { create: true });
                 const fileHandle = await current.getFileHandle(fileName, { create: true });
                 const writable = await fileHandle.createWritable();
                 const binaryString = atob(base64);
@@ -256,8 +265,10 @@ export function InspectionForm() {
                 });
                 const result = await res.json();
                 if (!res.ok) throw new Error(result.error);
-                if (folderHandle && result.fileBase64 && result.folderInfo) {
-                          await saveToLocal(result.fileBase64, result.folderInfo, result.fileName, selected.name);
+                if (folderHandle && result.fileBase64) {
+                  const dateNum = date.replace(/-/g, '');
+                  const subFolderName = `${dateNum}_${selected.name}_${inspType}`;
+                  await saveToLocal(result.fileBase64, result.fileName, subFolderName);
                 }
                 setSavedFile(result.fileName);
                 setDownloadUrl(result.downloadUrl);
