@@ -11,6 +11,18 @@ export default function StationUploadPage() {
   const { profile } = useAuth();
   const supabase = createClient();
 
+  // localStorage 에서 토큰 직접 읽기 (Web Lock 미사용 → 인증 교착 회피)
+  const getTokenNoLock = (): string | null => {
+    try {
+      const key = Object.keys(localStorage).find(k => k.includes('auth-token'));
+      if (!key) return null;
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const v = JSON.parse(raw);
+      return v?.access_token || null;
+    } catch { return null; }
+  };
+
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile]               = useState<File | null>(null);
   const [sectorName, setSectorName]   = useState('');
@@ -63,12 +75,12 @@ export default function StationUploadPage() {
     if (!form.name.trim()) { setAddErr('현장명을 입력해주세요'); return; }
     setAdding(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('로그인이 필요합니다. 잠시 후 다시 시도해주세요.');
+      const accessToken = getTokenNoLock();
+      if (!accessToken) throw new Error('로그인이 필요합니다. 페이지를 새로고침하거나 다시 로그인해주세요.');
       const secName = (sectorName || form.sectorLabel || '').trim();
       const res = await fetch('/api/stations/add-one', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
         body: JSON.stringify({
           name: form.name.trim(),
           sector_name: secName,
@@ -89,11 +101,11 @@ export default function StationUploadPage() {
   const handleDeleteStation = async (st: any) => {
     if (!confirm(`정말 삭제하시겠습니까?\n\n${st.name}\n\n이 관리구역이 목록에서 삭제됩니다.`)) return;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { alert('로그인이 필요합니다.'); return; }
+      const accessToken = getTokenNoLock();
+      if (!accessToken) { alert('로그인이 필요합니다. 페이지를 새로고침하거나 다시 로그인해주세요.'); return; }
       const res = await fetch('/api/stations/delete', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken },
         body: JSON.stringify({ id: st.id }),
       });
       const data = await res.json();
