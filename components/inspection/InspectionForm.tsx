@@ -199,7 +199,7 @@ export function InspectionForm() {
         return await parent.getDirectoryHandle(targetName, { create: true });
   };
 
-  const saveToLocal = async (base64: string, folderInfo: any, fileName: string) => {
+  const saveToLocal = async (base64: string, folderInfo: any, fileName: string, stationName: string) => {
         if (!folderHandle) return false;
         try {
                 const perm = await folderHandle.queryPermission({ mode: 'readwrite' });
@@ -211,6 +211,10 @@ export function InspectionForm() {
                 const mm = folderInfo.month.replace('월', '');
                 const periodFolder = `${yyyy}${mm}${folderInfo.inspection_type}`;
                 let current = folderHandle;
+      // 충전소명별 폴더 (각 충전소마다 별도 폴더)
+      if (stationName) {
+        current = await findOrCreateDir(current, stationName);
+      }
                 current = await current.getDirectoryHandle(periodFolder, { create: true });
                 const fileHandle = await current.getFileHandle(fileName, { create: true });
                 const writable = await fileHandle.createWritable();
@@ -253,7 +257,7 @@ export function InspectionForm() {
                 const result = await res.json();
                 if (!res.ok) throw new Error(result.error);
                 if (folderHandle && result.fileBase64 && result.folderInfo) {
-                          await saveToLocal(result.fileBase64, result.folderInfo, result.fileName);
+                          await saveToLocal(result.fileBase64, result.folderInfo, result.fileName, selected.name);
                 }
                 setSavedFile(result.fileName);
                 setDownloadUrl(result.downloadUrl);
