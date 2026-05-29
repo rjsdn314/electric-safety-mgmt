@@ -85,12 +85,12 @@ export async function POST(req: NextRequest) {
                       ws1.getCell(map.i.C).value = toNum(set.current_C);
             });
 
-            // 특이사항: 전체 + 개소별 합산
-            const allRemarks = [
-                      remarks || '',
-                      ...sets.map((s, i) => s.remarks ? `#${i + 1}: ${s.remarks}` : '').filter(Boolean),
-                    ].filter(Boolean).join(' / ') || '특이사항없음';
-                  ws1.getCell('A50').value = allRemarks;
+            // 특이사항: 별지1에는 개소별 특이사항만 (전체 종합의견은 별지14로만)
+            const panelRemarks = sets
+              .map((s, i) => s.remarks ? `#${i + 1}: ${s.remarks}` : '')
+              .filter(Boolean)
+              .join(' / ') || '특이사항없음';
+            ws1.getCell('A50').value = panelRemarks;
           }
 
       // 별지14 시트
