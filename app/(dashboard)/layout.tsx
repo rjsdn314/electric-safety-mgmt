@@ -2,14 +2,9 @@ import { Sidebar } from '@/components/layout/Sidebar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '260px 1fr',
-      minHeight: '100vh',
-      background: 'var(--bg-page)',
-    }}>
+    <div className="app-shell">
       <Sidebar />
-      <div style={{
+      <div className="app-content" style={{
         minWidth: 0,
         overflowX: 'hidden',
         paddingBottom: 80,
@@ -17,6 +12,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }}>
         {children}
       </div>
+      <style>{`
+        .app-shell {
+          display: grid;
+          grid-template-columns: 260px 1fr;
+          min-height: 100vh;
+          background: var(--bg-page);
+        }
+        @media (max-width: 768px) {
+          .app-shell {
+            grid-template-columns: 1fr;
+          }
+          .app-content {
+            padding-top: 56px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
