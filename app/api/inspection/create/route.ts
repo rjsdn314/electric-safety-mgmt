@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
                   station_id, inspection_type, date,
                   inspector_name, count, remarks,
                   measure_sets,
+      is_mobile,
           } = body;
 
       const supabase = createClient(
@@ -175,7 +176,7 @@ export async function POST(req: NextRequest) {
               inspection_type,
               inspection_date: date,
               inspector_name,
-              measure_values: { sets },
+              measure_values: { sets, device: is_mobile ? 'mobile' : 'pc', saved_to_pc: false },
               remarks: remarks || '특이사항없음',
               file_name: displayFileName,
               file_path: urlData.publicUrl,
