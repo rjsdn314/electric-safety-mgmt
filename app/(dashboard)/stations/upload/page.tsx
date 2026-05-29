@@ -63,46 +63,41 @@ export default function StationUploadPage() {
     if (!form.name.trim()) { setAddErr('현장명을 입력해주세요'); return; }
     setAdding(true);
     try {
-      let uid = profile?.id;
-      if (!uid) {
-        const { data: { session } } = await supabase.auth.getSession();
-        uid = session?.user?.id;
-      }
-      if (!uid) throw new Error('로그인이 필요합니다. 잠시 후 다시 시도해주세요.');
-      const secName = (sectorName || form.sectorLabel || profile?.sector?.name || '기본구역').trim();
-      // 섹터 찾기 또는 생성
-      let sectorId: string | null = null;
-      const { data: existSector } = await supabase.from('sectors').select('id').eq('name', secName).maybeSingle();
-      if (existSector) { sectorId = existSector.id; }
-      else {
-        const { data: newSector, error: secErr } = await supabase.from('sectors').insert({ name: secName }).select('id').single();
-        if (secErr) throw new Error('구역 생성 실패: ' + secErr.message);
-        sectorId = newSector!.id;
-      }
-      const { error: insErr } = await supabase.from('stations').insert({
-        sector_id: sectorId,
-        user_id: uid,
-        name: form.name.trim(),
-        base_name: form.name.trim(),
-        voltage: Number(form.voltage) || 22900,
-        capacity: Number(form.capacity) || 0,
-        panel_count: Number(form.panelCount) || 1,
-        default_type: (form.defaultType || '월차').trim(),
-        custom_values: { inspector_name: form.inspectorName.trim(), sector_label: secName, notes: '' },
-        is_active: true,
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('로그인이 필요합니다. 잠시 후 다시 시도해주세요.');
+      const secName = (sectorName || form.sectorLabel || '').trim();
+      const res = await fetch('/api/stations/add-one', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          sector_name: secName,
+          inspector_name: form.inspectorName.trim(),
+          voltage: form.voltage,
+          capacity: form.capacity,
+          panel_count: form.panelCount,
+          default_type: form.defaultType,
+        }),
       });
-      if (insErr) throw new Error('추가 실패: ' + insErr.message);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '추가 실패');
       setForm({ ...emptyForm });
-      await loadStations(uid);
+      await loadStations();
     } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
   };
 
-  // 충전소 삭제 (사용자가 직접 확인 후 실행)
   const handleDeleteStation = async (st: any) => {
     if (!confirm(`정말 삭제하시겠습니까?\n\n${st.name}\n\n이 관리구역이 목록에서 삭제됩니다.`)) return;
     try {
-      const { error } = await supabase.from('stations').delete().eq('id', st.id);
-      if (error) { alert('삭제 실패: ' + error.message); return; }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) { alert('로그인이 필요합니다.'); return; }
+      const res = await fetch('/api/stations/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + session.access_token },
+        body: JSON.stringify({ id: st.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { alert('삭제 실패: ' + (data.error || '')); return; }
       setStations(prev => prev.filter(s => s.id !== st.id));
     } catch (e: any) { alert('삭제 실패: ' + e.message); }
   };
