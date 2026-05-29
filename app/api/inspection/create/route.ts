@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
                   const dd = String(d.getDate()).padStart(2, '0');
                   ws14.getCell('G4').value = `${yy}년${mm}월${dd}일`;
                   ws14.getCell('C5').value = inspector_name;
-                  ws14.getCell('C7').value = station.address || station.name;
+                  ws14.getCell('C7').value = station.name;
                   ws14.getCell('C8').value = isHighV
                     ? `${station.voltage.toLocaleString()}[V] / ${station.capacity}[㎾]`
                             : `${station.voltage}[V]/ ${station.capacity}[㎾]`;
