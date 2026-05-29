@@ -8,6 +8,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const router   = useRouter();
   const [userInfo, setUserInfo] = useState<any>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -68,7 +69,23 @@ export function Sidebar() {
   });
 
   return (
-    <aside style={{
+    <>
+      {/* 모바일 상단 헤더 (햄버거 버튼) */}
+      <div className="mobile-topbar">
+        <button onClick={() => setOpen(true)} aria-label="메뉴 열기" style={{
+          background: 'transparent', border: 'none', fontSize: 24, cursor: 'pointer',
+          color: 'var(--text-primary)', padding: 4, lineHeight: 1,
+        }}>☰</button>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 15, fontWeight: 800 }}>
+          <span>⚡</span>
+          <span style={{ background: 'linear-gradient(135deg, #0066ff, #00b8d9)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>전기안전관리</span>
+        </span>
+      </div>
+
+      {/* 모바일 오버레이 (열렸을 때 배경 어둡게) */}
+      {open && <div className="sidebar-overlay" onClick={() => setOpen(false)} />}
+
+      <aside className={open ? 'app-sidebar open' : 'app-sidebar'} style={{
       width: 260, height: '100vh',
       background: 'var(--bg-card)',
       borderRight: '1px solid var(--border)',
@@ -106,7 +123,7 @@ export function Sidebar() {
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {menus.map(m => (
-          <Link key={m.href} href={m.href} style={linkStyle(m.href)}>
+          <Link key={m.href} href={m.href} style={linkStyle(m.href)} onClick={() => setOpen(false)}>
             <span style={{ fontSize: 18 }}>{m.icon}</span>
             <span>{m.label}</span>
           </Link>
@@ -123,7 +140,7 @@ export function Sidebar() {
           }}>관리자</div>
           <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {adminMenus.map(m => (
-              <Link key={m.href} href={m.href} style={linkStyle(m.href)}>
+              <Link key={m.href} href={m.href} style={linkStyle(m.href)} onClick={() => setOpen(false)}>
                 <span style={{ fontSize: 18 }}>{m.icon}</span>
                 <span>{m.label}</span>
               </Link>
@@ -167,5 +184,38 @@ export function Sidebar() {
         }}>🚪</button>
       </div>
     </aside>
+
+      <style>{`
+        .mobile-topbar { display: none; }
+        @media (max-width: 768px) {
+          .mobile-topbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 56px;
+            padding: 0 16px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            z-index: 200;
+          }
+          .app-sidebar {
+            position: fixed !important;
+            top: 0; left: 0;
+            transform: translateX(-100%);
+            transition: transform .25s ease;
+            z-index: 300;
+          }
+          .app-sidebar.open { transform: translateX(0); }
+          .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 250;
+          }
+        }
+      `}</style>
+    </>
   );
 }
