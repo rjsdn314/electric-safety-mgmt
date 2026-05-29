@@ -3,7 +3,7 @@
 // app/(dashboard)/stations/upload/page.tsx
 // 관리구역 등록 업로드 페이지
 // ============================================================
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -18,9 +18,80 @@ export default function StationUploadPage() {
   const [result, setResult]           = useState<{inserted:number; sectorName:string} | null>(null);
   const [error, setError]             = useState('');
 
+  // 직접 추가 폼 + 목록
+  const [stations, setStations] = useState<any[]>([]);
+  const [listLoading, setListLoading] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addErr, setAddErr] = useState('');
+  const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '' };
+  const [form, setForm] = useState({ ...emptyForm });
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) { setFile(f); setError(''); setResult(null); }
+  };
+
+  // 등록된 내 관리구역 목록 불러오기
+  const loadStations = async () => {
+    setListLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setStations([]); return; }
+      const { data } = await supabase
+        .from('stations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+      setStations(data || []);
+    } catch (e) { /* noop */ } finally { setListLoading(false); }
+  };
+
+  useEffect(() => { loadStations(); }, []);
+
+  // 충전소 하나 직접 추가
+  const handleAddOne = async () => {
+    setAddErr('');
+    if (!form.name.trim()) { setAddErr('현장명을 입력해주세요'); return; }
+    setAdding(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('로그인이 필요합니다');
+      const secName = (sectorName || form.sectorLabel || profile?.sector?.name || '기본구역').trim();
+      // 섹터 찾기 또는 생성
+      let sectorId: string | null = null;
+      const { data: existSector } = await supabase.from('sectors').select('id').eq('name', secName).maybeSingle();
+      if (existSector) { sectorId = existSector.id; }
+      else {
+        const { data: newSector, error: secErr } = await supabase.from('sectors').insert({ name: secName }).select('id').single();
+        if (secErr) throw new Error('구역 생성 실패: ' + secErr.message);
+        sectorId = newSector!.id;
+      }
+      const { error: insErr } = await supabase.from('stations').insert({
+        sector_id: sectorId,
+        user_id: user.id,
+        name: form.name.trim(),
+        base_name: form.name.trim(),
+        voltage: Number(form.voltage) || 22900,
+        capacity: Number(form.capacity) || 0,
+        panel_count: Number(form.panelCount) || 1,
+        default_type: (form.defaultType || '월차').trim(),
+        custom_values: { inspector_name: form.inspectorName.trim(), sector_label: secName, notes: '' },
+        is_active: true,
+      });
+      if (insErr) throw new Error('추가 실패: ' + insErr.message);
+      setForm({ ...emptyForm });
+      await loadStations();
+    } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
+  };
+
+  // 충전소 삭제 (사용자가 직접 확인 후 실행)
+  const handleDeleteStation = async (st: any) => {
+    if (!confirm(`정말 삭제하시겠습니까?\n\n${st.name}\n\n이 관리구역이 목록에서 삭제됩니다.`)) return;
+    try {
+      const { error } = await supabase.from('stations').delete().eq('id', st.id);
+      if (error) { alert('삭제 실패: ' + error.message); return; }
+      setStations(prev => prev.filter(s => s.id !== st.id));
+    } catch (e: any) { alert('삭제 실패: ' + e.message); }
   };
 
   const handleUpload = async () => {
@@ -43,6 +114,7 @@ export default function StationUploadPage() {
       setResult(data);
       setFile(null);
       if (fileRef.current) fileRef.current.value = '';
+      await loadStations();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -240,6 +312,76 @@ export default function StationUploadPage() {
           </div>
         </div>
       )}
+
+      {/* 직접 하나씩 추가 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px', boxShadow: 'var(--shadow)', marginTop: 24, marginBottom: 16 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4 }}>➕ 관리구역 직접 추가</div>
+        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 18 }}>엑셀 없이 충전소를 하나씩 등록합니다.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="add-grid">
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>현장명 *</label>
+            <input style={inputStyle} placeholder="예: 횡성휴게소(강릉방향)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>관리구역명</label>
+            <input style={inputStyle} placeholder="예: 강원권 (미입력 시 위 구역)" value={form.sectorLabel} onChange={e => setForm({ ...form, sectorLabel: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>담당자명</label>
+            <input style={inputStyle} placeholder="점검자 이름" value={form.inspectorName} onChange={e => setForm({ ...form, inspectorName: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수전전압 (V)</label>
+            <input style={inputStyle} type="number" placeholder="예: 22900" value={form.voltage} onChange={e => setForm({ ...form, voltage: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>계약용량 (kW)</label>
+            <input style={inputStyle} type="number" placeholder="예: 950" value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수배전반 개수</label>
+            <input style={inputStyle} type="number" min={1} value={form.panelCount} onChange={e => setForm({ ...form, panelCount: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>기본 점검양식</label>
+            <select style={inputStyle} value={form.defaultType} onChange={e => setForm({ ...form, defaultType: e.target.value })}>
+              <option value="월차">월차</option>
+              <option value="분기">분기</option>
+              <option value="반기">반기</option>
+              <option value="연차">연차</option>
+            </select>
+          </div>
+        </div>
+        {addErr && (<div style={{ marginTop: 12, fontSize: 13, color: '#ef4444' }}>❌ {addErr}</div>)}
+        <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 12, border: 'none', background: adding ? 'var(--border)' : 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: adding ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>{adding ? '⏳ 추가 중...' : '➕ 이 관리구역 추가'}</button>
+      </div>
+
+      {/* 등록된 관리구역 목록 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px', boxShadow: 'var(--shadow)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 16, fontWeight: 800 }}>등록된 관리구역</span>
+          <span style={{ fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: 'rgba(0,102,255,.1)', color: 'var(--blue, #0066ff)' }}>{stations.length}개소</span>
+        </div>
+        {listLoading ? (
+          <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>불러오는 중...</div>
+        ) : stations.length === 0 ? (
+          <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>등록된 관리구역이 없습니다</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {stations.map(st => (
+              <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.default_type}</div>
+                </div>
+                <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <style jsx>{`@media (max-width: 768px) { .add-grid { grid-template-columns: 1fr !important; } }`}</style>
     </div>
   );
 }
