@@ -46,7 +46,16 @@ export default function StationUploadPage() {
     } catch (e) { /* noop */ } finally { setListLoading(false); }
   };
 
-  useEffect(() => { if (profile?.id) loadStations(profile.id); }, [profile?.id]);
+  useEffect(() => {
+    if (profile?.id) { loadStations(profile.id); return; }
+    // profile 이 늦으면 세션으로 폴백
+    const t = setTimeout(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) loadStations(session.user.id);
+      else setListLoading(false);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [profile?.id]);
 
   // 충전소 하나 직접 추가
   const handleAddOne = async () => {
@@ -54,8 +63,12 @@ export default function StationUploadPage() {
     if (!form.name.trim()) { setAddErr('현장명을 입력해주세요'); return; }
     setAdding(true);
     try {
-      const uid = profile?.id;
-      if (!uid) throw new Error('로그인이 필요합니다');
+      let uid = profile?.id;
+      if (!uid) {
+        const { data: { session } } = await supabase.auth.getSession();
+        uid = session?.user?.id;
+      }
+      if (!uid) throw new Error('로그인이 필요합니다. 잠시 후 다시 시도해주세요.');
       const secName = (sectorName || form.sectorLabel || profile?.sector?.name || '기본구역').trim();
       // 섹터 찾기 또는 생성
       let sectorId: string | null = null;
