@@ -123,7 +123,7 @@ export default function DashboardPage() {
       }}>
         <StatCard label="관리 충전소" value={stations.length}                           sub="총 개소"   accentColor="#0066ff" />
         <StatCard label="이번달 완료" value={thisMonthDone}                              sub="건"       accentColor="#10b981" />
-        <StatCard label="미점검"       value={stations.length - thisMonthDone}           sub="개소"     accentColor="#f59e0b" />
+        <StatCard label="미점검"       value={pendingStations.length}           sub="개소"     accentColor="#f59e0b" />
         <StatCard
           label="총 수전용량"
           value={`${(stations.reduce((s, st) => s + (st.capacity ?? 0), 0) / 1000).toFixed(1)}MW`}
