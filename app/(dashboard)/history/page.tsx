@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 const TYPES = ['전체', '월차', '분기', '반기', '연차'];
 
 export default function HistoryPage() {
-  const [items, setItems] = uhseState<any[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('전체');
   const [search, setSearch] = useState('');
