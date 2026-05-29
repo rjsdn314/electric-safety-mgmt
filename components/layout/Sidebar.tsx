@@ -218,7 +218,7 @@ export function Sidebar() {
             top: 0; left: 0;
             transform: translateX(-100%);
             transition: transform .25s ease;
-            z-index: 300;
+            z-index: 9999 !important;
           }
           .app-sidebar.open { transform: translateX(0); }
           .sidebar-overlay {
