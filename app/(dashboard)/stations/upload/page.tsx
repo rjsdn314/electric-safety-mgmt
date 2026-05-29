@@ -37,6 +37,7 @@ export default function StationUploadPage() {
   const [addErr, setAddErr] = useState('');
   const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '' };
   const [form, setForm] = useState({ ...emptyForm });
+  const [stationQuery, setStationQuery] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -361,29 +362,42 @@ export default function StationUploadPage() {
         <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 12, border: 'none', background: adding ? 'var(--border)' : 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: adding ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>{adding ? '⏳ 추가 중...' : '➕ 이 관리구역 추가'}</button>
       </div>
 
-      {/* 등록된 관리구역 목록 */}
+      {/* 등록된 관리구역 (검색 방식) */}
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '24px', boxShadow: 'var(--shadow)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: 16, fontWeight: 800 }}>등록된 관리구역</span>
-          <span style={{ fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: 'rgba(0,102,255,.1)', color: 'var(--blue, #0066ff)' }}>{stations.length}개소</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={{ fontSize: 16, fontWeight: 800 }}>등록된 관리구역 검색</span>
+          <span style={{ fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: 'rgba(0,102,255,.1)', color: 'var(--blue, #0066ff)' }}>총 {stations.length}개소</span>
         </div>
+        <input
+          style={inputStyle}
+          placeholder="현장명을 입력해 검색하세요 (예: 강릉휴게소)"
+          value={stationQuery}
+          onChange={e => setStationQuery(e.target.value)}
+        />
         {listLoading ? (
           <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>불러오는 중...</div>
-        ) : stations.length === 0 ? (
-          <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>등록된 관리구역이 없습니다</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {stations.map(st => (
-              <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.custom_values?.default_type || ''}</div>
+        ) : stationQuery.trim() === '' ? (
+          <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>검색어를 입력하면 관리구역이 표시됩니다</div>
+        ) : (() => {
+          const q = stationQuery.trim().toLowerCase();
+          const filtered = stations.filter(st => (st.name || '').toLowerCase().includes(q));
+          if (filtered.length === 0) {
+            return <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>'{stationQuery}' 검색 결과가 없습니다</div>;
+          }
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+              {filtered.map(st => (
+                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.custom_values?.default_type || ''}</div>
+                  </div>
+                  <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
                 </div>
-                <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       <style jsx>{`@media (max-width: 768px) { .add-grid { grid-template-columns: 1fr !important; } }`}</style>
