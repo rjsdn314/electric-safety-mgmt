@@ -151,38 +151,51 @@ export function Sidebar() {
 
       {/* 사용자 영역 */}
       <div style={{
-        marginTop: 'auto', padding: '12px 16px',
+        marginTop: 'auto', padding: '14px 16px',
         background: 'var(--bg-elevated)',
         border: '1px solid var(--border)',
-        borderRadius: 12,
-        display: 'flex', alignItems: 'center', gap: 12,
+        borderRadius: 14,
       }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--blue, #0066ff), var(--cyan, #00b8d9))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0,
-        }}>
-          {userInfo?.name?.[0] || '?'}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700, color: 'var(--text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            width: 38, height: 38, borderRadius: '50%',
+            background: 'linear-gradient(135deg, var(--blue, #0066ff), var(--cyan, #00b8d9))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 15, fontWeight: 800, flexShrink: 0,
           }}>
-            {userInfo?.name || '사용자'}
+            {userInfo?.name?.[0] || '?'}
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-tertiary)' }}>
-            {userInfo?.role === 'admin' ? '👑 관리자' : '담당자'}
-            {userInfo?.sectors?.name && ` · ${userInfo.sectors.name}`}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 13, fontWeight: 800, color: 'var(--text-primary)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {userInfo?.name || '사용자'}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', fontWeight: 600 }}>
+              {userInfo?.role === 'admin' ? '관리자' : '담당자'}
+              {userInfo?.sectors?.name && ` · ${userInfo.sectors.name}`}
+            </div>
           </div>
         </div>
         <button onClick={handleLogout} title="로그아웃" style={{
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          fontSize: 16, padding: 4, color: 'var(--text-tertiary)',
+          width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          background: 'var(--bg-card)', border: '1px solid var(--border)',
+          borderRadius: 10, cursor: 'pointer',
+          fontSize: 13, fontWeight: 700, padding: '10px',
+          color: 'var(--text-secondary)', fontFamily: 'inherit',
           transition: 'all .15s',
-        }}>🚪</button>
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          <span>로그아웃</span>
+        </button>
       </div>
+
     </aside>
 
       <style>{`
