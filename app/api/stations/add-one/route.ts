@@ -68,10 +68,10 @@ export async function POST(req: NextRequest) {
       voltage: Number(body.voltage) || 22900,
       capacity: Number(body.capacity) || 0,
       panel_count: Number(body.panel_count) || 1,
-      default_type: String(body.default_type || '월차').trim(),
       custom_values: {
         inspector_name: String(body.inspector_name || '').trim(),
         sector_label: sectorName,
+        default_type: String(body.default_type || '월차').trim(),
         notes: '',
       },
       is_active: true,
