@@ -1,3 +1,5 @@
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
+
 :root {
   /* WATER 브랜드 컬러 */
   --blue: #0066ff;
@@ -129,3 +131,40 @@ input, textarea, select {
     font-size: 16px !important;
   }
 }
+
+
+/* ─── 타이포그래피 (참고: awwwards cdiscount jumping max) ─── */
+h1, h2, h3 {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+h1 {
+  font-weight: 900;
+  letter-spacing: -0.045em;
+}
+
+/* 본문 가독성 */
+body {
+  line-height: 1.5;
+}
+
+/* 카드/버튼 라운드 강조 */
+.toss-card {
+  border-radius: 16px;
+}
+
+/* 1차 액션 버튼 공통 (둥근 알약형 + 강조) */
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 22px;
+  border: none; border-radius: 12px;
+  background: linear-gradient(135deg, #0066ff, #0052cc);
+  color: #fff; font-size: 15px; font-weight: 800;
+  letter-spacing: -0.02em; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0,102,255,.22);
+  transition: transform .12s, box-shadow .12s;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,102,255,.28); }
+.btn-primary:active { transform: translateY(0); }
