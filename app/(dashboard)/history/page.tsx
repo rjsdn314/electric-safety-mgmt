@@ -12,6 +12,8 @@ export default function HistoryPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => { setIsDesktop('showDirectoryPicker' in window); }, []);
 
   const loadData = async () => {
     setLoading(true);
@@ -256,7 +258,7 @@ export default function HistoryPage() {
           <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
           <p style={{color: 'var(--text-secondary)'}}>생성된 직무고시 파일 목록</p>
         </div>
-        <button onClick={handleSync} disabled={syncing}
+        {isDesktop && (<button onClick={handleSync} disabled={syncing}
           style={{
             padding: '12px 18px', borderRadius: 10, border: 'none',
             background: 'var(--accent)', color: '#fff', fontSize: 13,
@@ -264,7 +266,7 @@ export default function HistoryPage() {
             fontFamily: 'inherit', whiteSpace: 'nowrap'
           }}>
           {syncing ? `⏳ ${syncProgress || '동기화 중...'}` : '📥 PC 폴더로 일괄 동기화'}
-        </button>
+        </button>)}
       </div>
 
       <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>
@@ -319,12 +321,12 @@ export default function HistoryPage() {
                   <a href={item.file_path} download={item.file_name} title="다운로드" style={{
                     padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)',
                     textDecoration: 'none', fontSize: 14, lineHeight: 1
-                  }}>⬇️</a>
+                  }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
                 )}
                 <button onClick={() => handleDelete(item)} title="삭제" style={{
                   padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
                   border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1
-                }}>🗑️</button>
+                }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </div>
           </div>                                                                ))
