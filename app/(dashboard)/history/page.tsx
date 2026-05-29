@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 const TYPES = ['전체', '월차', '분기', '반기', '연차'];
 
 export default function HistoryPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = uhseState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState('전체');
   const [search, setSearch] = useState('');
@@ -250,7 +250,7 @@ export default function HistoryPage() {
   const [visibleCount, setVisibleCount] = useState(10);
 
   return (
-    <div>
+    <div style={{padding: '40px 48px 80px'}}>
       <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
         <div>
           <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
