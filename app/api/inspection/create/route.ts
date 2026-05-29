@@ -91,6 +91,34 @@ export async function POST(req: NextRequest) {
               .filter(Boolean)
               .join(' / ') || '특이사항없음';
             ws1.getCell('A50').value = panelRemarks;
+
+        // ​저압 설비 판정(C열) 고정값 — 별지1호 양식에 맞게 강제 설정
+        if (!isHighV) {
+          const O = '\u25CB'; // 적합
+          const X = '/'; // 해당없음
+          // 저압설비 판정(C열)
+          const lowVerdicts: Record<string, string> = {
+            C13: O, C14: O,                 // 인입구배선
+            C15: O, C16: O,                 // 배·분전반
+            C17: O, C18: O, C19: O,         // 배선용차단기
+            C20: O, C21: O,                 // 누전차단기
+            C22: O, C23: O,                 // 개폐기
+            C24: O, C25: O, C26: O,         // 배선
+            C27: X, C28: X,                 // 전동기
+            C29: O, C30: O,                 // 전열설비
+            C31: X, C32: X, C33: X,         // 용접기
+            C34: X, C35: X,                 // 커패시터
+            C36: O, C37: O,                 // 조명설비
+            C38: X, C39: X,                 // 구내전선로
+            C40: O, C41: O,                 // 기타설비
+            C42: X, C43: X,                 // 발전기
+            C44: X,                         // 차단장치
+            C45: X, C46: X,                 // 축전장치
+          };
+          for (const [addr, mark] of Object.entries(lowVerdicts)) {
+            ws1.getCell(addr).value = mark;
+          }
+        }
           }
 
       // 별지14 시트
