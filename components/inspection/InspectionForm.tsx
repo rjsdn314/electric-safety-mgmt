@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,12월' },
   { value: '분기', months: '3, 9월' },
-  { value: '반기', months: '3, 9월' },
+  { value: '반기', months: '6월' },
   { value: '연차', months: '11월' },
   ];
 
