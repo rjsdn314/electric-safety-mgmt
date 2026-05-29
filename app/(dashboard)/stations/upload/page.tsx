@@ -43,40 +43,20 @@ export default function StationUploadPage() {
     if (f) { setFile(f); setError(''); setResult(null); }
   };
 
-  // 등록된 내 관리구역 목록 불러오기
-  const loadStations = async (sectorId?: string) => {
-    let sid = sectorId || profile?.sector_id || null;
-    if (!sid) {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: p } = await supabase.from('profiles').select('sector_id').eq('id', user.id).maybeSingle();
-          sid = p?.sector_id || null;
-        }
-      } catch (e) { /* noop */ }
-    }
-    if (!sid) { setStations([]); setListLoading(false); return; }
+  // 등록된 내 관리구역 목록 불러오기 (쿠키 인증 서버 API 사용)
+  const loadStations = async (_sectorId?: string) => {
     setListLoading(true);
     try {
-      const { data } = await supabase
-        .from('stations')
-        .select('*')
-        .eq('sector_id', sid)
-        .eq('is_active', true)
-        .order('name');
-      setStations(data || []);
-    } catch (e) { /* noop */ } finally { setListLoading(false); }
+      const res = await fetch('/api/stations/list', { method: 'GET' });
+      const data = await res.json();
+      if (res.ok && data.success) setStations(data.stations || []);
+      else setStations([]);
+    } catch (e) { setStations([]); } finally { setListLoading(false); }
   };
 
   useEffect(() => {
-    if (profile?.sector_id) { loadStations(profile.sector_id); return; }
-    // profile 이 늦으면 잠시 후 재시도
-    const t = setTimeout(() => {
-      if (profile?.sector_id) loadStations(profile.sector_id);
-      else setListLoading(false);
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [profile?.sector_id]);
+    loadStations();
+  }, []);
 
   // 충전소 하나 직접 추가
   const handleAddOne = async () => {
