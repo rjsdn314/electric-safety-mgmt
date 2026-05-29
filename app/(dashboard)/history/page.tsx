@@ -247,6 +247,7 @@ export default function HistoryPage() {
     const filtered = items.filter(i =>
     !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
   );
+  const [visibleCount, setVisibleCount] = useState(10);
 
   return (
     <div>
@@ -292,7 +293,7 @@ export default function HistoryPage() {
         ) : filtered.length === 0 ? (
           <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
         ) : (
-          filtered.map(item => (
+          filtered.slice(0, visibleCount).map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].inspection_date||'').slice(0,7) !== (item.inspection_date||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.inspection_date||'').slice(0,7)}</div>)}
             <div key={item.id} style={{display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 100px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center'}}>
               <div style={{fontWeight: 600}}>
                 {item.station?.name || '-'}
@@ -326,9 +327,12 @@ export default function HistoryPage() {
                 }}>🗑️</button>
               </div>
             </div>
-          ))
+          </div>                                                                ))
         )}
       </div>
+      {!loading && visibleCount < filtered.length && (
+      <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>
+      )}
     </div>
   );
 }
