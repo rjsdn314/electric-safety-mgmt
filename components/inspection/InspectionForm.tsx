@@ -47,8 +47,8 @@ export function InspectionForm() {
                           else if (profile?.name) setInspector(profile.name);
 
                   let q = sb.from('stations').select('*').eq('is_active', true).order('name');
-                          if (profile?.sector_id) q = q.eq('sector_id', profile.sector_id);
-                          const { data } = await q;
+      // sector 필터 제거: 등록한 모든 충전소가 점검 생성에서 선택 가능하도록
+                  const { data } = await q;
                           setStations(data || []);
                 }
 
