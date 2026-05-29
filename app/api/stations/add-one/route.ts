@@ -4,25 +4,18 @@ import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 // POST /api/stations/add-one
-// Cookie-based auth (works regardless of browser web-lock / localStorage state).
+// Cookie-based auth. Reuses the user's existing sector when no name is given.
 export async function POST(req: NextRequest) {
   try {
-    // 1) read the logged-in user from cookies (SSR client)
     const cookieStore = await cookies();
     const authClient = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => cookieStore.getAll(),
-          setAll: () => {},
-        },
-      },
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
     );
     const { data: { user } } = await authClient.auth.getUser();
     if (!user) return NextResponse.json({ error: '인증 실패 (로그인이 필요합니다)' }, { status: 401 });
 
-    // 2) service-role client for DB writes
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -37,19 +30,31 @@ export async function POST(req: NextRequest) {
     const name = String(body.name || '').trim();
     if (!name) return NextResponse.json({ error: '현장명을 입력해주세요' }, { status: 400 });
 
-    const sectorName = String(body.sector_name || '기본구역').trim() || '기본구역';
+    const rawSectorName = String(body.sector_name || '').trim();
 
-    let sectorId: string;
-    const { data: existSector } = await supabase
-      .from('sectors').select('id').eq('name', sectorName).maybeSingle();
-    if (existSector) {
-      sectorId = existSector.id;
-    } else {
-      const { data: newSector, error: secErr } = await supabase
-        .from('sectors').insert({ name: sectorName }).select('id').single();
+    let sectorId: string | null = profile?.sector_id || null;
+    let sectorName = '기본구역';
+
+    const findOrCreateSector = async (nm: string) => {
+      const { data: ex } = await supabase.from('sectors').select('id, name').eq('name', nm).maybeSingle();
+      if (ex) return ex;
+      const { data: created, error: secErr } = await supabase.from('sectors').insert({ name: nm }).select('id, name').single();
       if (secErr) throw new Error('구역 생성 실패: ' + secErr.message);
-      sectorId = newSector!.id;
+      return created!;
+    };
+
+    if (rawSectorName) {
+      const sec = await findOrCreateSector(rawSectorName);
+      sectorId = sec.id; sectorName = sec.name;
+    } else if (sectorId) {
+      const { data: cur } = await supabase.from('sectors').select('name').eq('id', sectorId).maybeSingle();
+      if (cur?.name) sectorName = cur.name;
+    } else {
+      const sec = await findOrCreateSector('기본구역');
+      sectorId = sec.id; sectorName = sec.name;
     }
+
+    if (!sectorId) throw new Error('관리구역을 결정할 수 없습니다');
 
     if (!profile?.sector_id) {
       await supabase.from('profiles').update({ sector_id: sectorId }).eq('id', user.id);
