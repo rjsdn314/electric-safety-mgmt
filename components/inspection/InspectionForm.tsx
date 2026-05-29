@@ -230,6 +230,11 @@ export function InspectionForm() {
   const handleSubmit = async () => {
         if (!selected) return alert('충전소를 선택해주세요');
         if (!inspector) return alert('점검자를 입력해주세요');
+        // 로컬 저장 폴더 미지정 시 안내
+        if (!folderHandle) {
+          const proceed = confirm('⚠️ 저장 폴더가 지정되지 않았습니다.\n\n폴더를 지정하지 않으면 파일이 로컬 폴더에 자동 저장되지 않고, 생성 후 직접 다운로드만 가능합니다.\n\n그래도 계속 진행하시겠습니까?');
+          if (!proceed) return;
+        }
         setLoading(true);
         try {
                 const res = await fetch('/api/inspection/create', {
@@ -305,7 +310,7 @@ export function InspectionForm() {
                           <div style={{minWidth:0,flex:1}}>
                                       <div style={{fontSize:14,fontWeight:700,marginBottom:3}}>저장 폴더</div>
                                       <div style={{fontSize:12,color:'var(--text-secondary)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                                        {folderName ? `${folderName}` : '폴더 선택 후 자동 저장'}
+                                        {folderName ? `${folderName}` : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}
                                       </div>
                           </div>
                           <button onClick={selectFolder} style={{padding:'10px 18px',borderRadius:10,border:'none',background:'var(--accent)',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0,fontFamily:'inherit'}}>
