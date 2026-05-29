@@ -261,7 +261,7 @@ export function InspectionForm() {
                                       count,
                                       measure_sets: measureSets,
                                       remarks: remarks || '특이사항없음',
-          is_mobile: !('showDirectoryPicker' in window),
+          is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
                           }),
                 });
                 const result = await res.json();
