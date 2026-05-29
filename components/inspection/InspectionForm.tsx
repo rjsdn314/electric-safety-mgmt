@@ -261,6 +261,7 @@ export function InspectionForm() {
                                       count,
                                       measure_sets: measureSets,
                                       remarks: remarks || '특이사항없음',
+          is_mobile: !('showDirectoryPicker' in window),
                           }),
                 });
                 const result = await res.json();
