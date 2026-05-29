@@ -44,30 +44,39 @@ export default function StationUploadPage() {
   };
 
   // 등록된 내 관리구역 목록 불러오기
-  const loadStations = async (userId?: string) => {
-    const uid = userId || profile?.id;
-    if (!uid) { setStations([]); setListLoading(false); return; }
+  const loadStations = async (sectorId?: string) => {
+    let sid = sectorId || profile?.sector_id || null;
+    if (!sid) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: p } = await supabase.from('profiles').select('sector_id').eq('id', user.id).maybeSingle();
+          sid = p?.sector_id || null;
+        }
+      } catch (e) { /* noop */ }
+    }
+    if (!sid) { setStations([]); setListLoading(false); return; }
     setListLoading(true);
     try {
       const { data } = await supabase
         .from('stations')
         .select('*')
-        .eq('user_id', uid)
+        .eq('sector_id', sid)
+        .eq('is_active', true)
         .order('name');
       setStations(data || []);
     } catch (e) { /* noop */ } finally { setListLoading(false); }
   };
 
   useEffect(() => {
-    if (profile?.id) { loadStations(profile.id); return; }
-    // profile 이 늦으면 세션으로 폴백
-    const t = setTimeout(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) loadStations(session.user.id);
+    if (profile?.sector_id) { loadStations(profile.sector_id); return; }
+    // profile 이 늦으면 잠시 후 재시도
+    const t = setTimeout(() => {
+      if (profile?.sector_id) loadStations(profile.sector_id);
       else setListLoading(false);
-    }, 1200);
+    }, 1500);
     return () => clearTimeout(t);
-  }, [profile?.id]);
+  }, [profile?.sector_id]);
 
   // 충전소 하나 직접 추가
   const handleAddOne = async () => {
@@ -388,7 +397,7 @@ export default function StationUploadPage() {
               <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.default_type}</div>
+                  <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.custom_values?.default_type || ''}</div>
                 </div>
                 <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
               </div>
