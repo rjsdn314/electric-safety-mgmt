@@ -156,9 +156,8 @@ export default function DashboardPage() {
         </div>
         {pendingStations.length === 0 ? (
           <p style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
-            🎉 이번달 모든 충전소 점검이 완료되었습니다
-          </p>
-        ) : (
+            🎉 이번달 모든 충전소 점검이 완료되었습니다</p>
+        ) : (<>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
             {visiblePending.map(station => (
               <Link key={station.id} href="/inspection" style={{ textDecoration: 'none' }}>
@@ -189,7 +188,8 @@ export default function DashboardPage() {
     더보기 ({pendingStations.length - pendingShow}개 더)
   </button>
         )}
-        )}
+        </>
+            )}
       </div>
 
             {/* 2단 그리드: 최근 이력 + 충전소 현황 */}
