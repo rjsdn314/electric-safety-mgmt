@@ -32,22 +32,21 @@ export default function StationUploadPage() {
   };
 
   // 등록된 내 관리구역 목록 불러오기
-  const loadStations = async () => {
+  const loadStations = async (userId?: string) => {
+    const uid = userId || profile?.id;
+    if (!uid) { setStations([]); setListLoading(false); return; }
     setListLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) { setStations([]); return; }
       const { data } = await supabase
         .from('stations')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', uid)
         .order('name');
       setStations(data || []);
     } catch (e) { /* noop */ } finally { setListLoading(false); }
   };
 
-  useEffect(() => { loadStations(); }, []);
+  useEffect(() => { if (profile?.id) loadStations(profile.id); }, [profile?.id]);
 
   // 충전소 하나 직접 추가
   const handleAddOne = async () => {
@@ -55,9 +54,8 @@ export default function StationUploadPage() {
     if (!form.name.trim()) { setAddErr('현장명을 입력해주세요'); return; }
     setAdding(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-      if (!user) throw new Error('로그인이 필요합니다');
+      const uid = profile?.id;
+      if (!uid) throw new Error('로그인이 필요합니다');
       const secName = (sectorName || form.sectorLabel || profile?.sector?.name || '기본구역').trim();
       // 섹터 찾기 또는 생성
       let sectorId: string | null = null;
@@ -70,7 +68,7 @@ export default function StationUploadPage() {
       }
       const { error: insErr } = await supabase.from('stations').insert({
         sector_id: sectorId,
-        user_id: user.id,
+        user_id: uid,
         name: form.name.trim(),
         base_name: form.name.trim(),
         voltage: Number(form.voltage) || 22900,
@@ -82,7 +80,7 @@ export default function StationUploadPage() {
       });
       if (insErr) throw new Error('추가 실패: ' + insErr.message);
       setForm({ ...emptyForm });
-      await loadStations();
+      await loadStations(uid);
     } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
   };
 
