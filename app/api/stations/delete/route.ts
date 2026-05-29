@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 // POST /api/stations/delete
-// Delete a single station owned by the requesting user.
+// Cookie-based auth. Delete a single station owned by the requesting user.
 export async function POST(req: NextRequest) {
   try {
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => cookieStore.getAll(),
+          setAll: () => {},
+        },
+      },
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: '인증 실패 (로그인이 필요합니다)' }, { status: 401 });
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) return NextResponse.json({ error: '인증 필요' }, { status: 401 });
-
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return NextResponse.json({ error: '인증 실패' }, { status: 401 });
-
     const body = await req.json();
     const id = String(body.id || '').trim();
     if (!id) return NextResponse.json({ error: 'id가 필요합니다' }, { status: 400 });
 
-    // only allow deleting own station
     const { data: target } = await supabase
       .from('stations').select('id, user_id').eq('id', id).single();
     if (!target) return NextResponse.json({ error: '대상을 찾을 수 없습니다' }, { status: 404 });
