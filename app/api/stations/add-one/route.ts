@@ -1,21 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 
 // POST /api/stations/add-one
-// Add a single station (no delete). Runs on server with service_role to avoid browser auth lock.
+// Cookie-based auth (works regardless of browser web-lock / localStorage state).
 export async function POST(req: NextRequest) {
   try {
+    // 1) read the logged-in user from cookies (SSR client)
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => cookieStore.getAll(),
+          setAll: () => {},
+        },
+      },
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: '인증 실패 (로그인이 필요합니다)' }, { status: 401 });
+
+    // 2) service-role client for DB writes
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
-
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.replace('Bearer ', '');
-    if (!token) return NextResponse.json({ error: '인증 필요' }, { status: 401 });
-
-    const { data: { user } } = await supabase.auth.getUser(token);
-    if (!user) return NextResponse.json({ error: '인증 실패' }, { status: 401 });
 
     const { data: profile } = await supabase
       .from('profiles').select('id, status, sector_id').eq('id', user.id).single();
