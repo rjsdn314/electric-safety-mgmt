@@ -1,26 +1,64 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { Profile } from '@/types';
 
 export function useAuth() {
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
 
   useEffect(() => {
-    const fetch = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
-      const { data } = await supabase.from('profiles').select('*, sector:sectors(*)').eq('id', user.id).single();
-      setProfile(data);
-      setLoading(false);
+    let mounted = true;
+    const supabase = createClient();
+    
+    const fetchProfile = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          if (mounted) setLoading(false);
+          return;
+        }
+        
+        // sectors 조인 없이 단순하게
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (!mounted) return;
+        
+        // sector 정보는 따로 가져오기
+        if (profileData?.sector_id) {
+          const { data: sectorData } = await supabase
+            .from('sectors')
+            .select('*')
+            .eq('id', profileData.sector_id)
+            .single();
+          
+          if (mounted) {
+            setProfile({ ...profileData, sector: sectorData });
+          }
+        } else {
+          if (mounted) setProfile(profileData);
+        }
+      } catch(e) {
+        console.error('프로필 조회 오류:', e);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
-    fetch();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => fetch());
-    return () => subscription.unsubscribe();
+    
+    fetchProfile();
+    
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const signOut = () => supabase.auth.signOut();
+  const signOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+  };
+  
   return { profile, loading, signOut };
 }
