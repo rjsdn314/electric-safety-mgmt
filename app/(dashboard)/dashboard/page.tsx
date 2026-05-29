@@ -1,116 +1,255 @@
 'use client';
 // ============================================================
-// app/(dashboard)/dashboard/page.tsx
+// app/(dashboard)/dashboard/page.tsx — WATER 디자인 시스템 적용
 // ============================================================
 import { useStations } from '@/hooks/useStations';
 import { useInspections } from '@/hooks/useInspections';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 
-// 통계 카드 컴포넌트
-function StatCard({ label, value, sub, color }: {
+// ── 통계 카드 컴포넌트 ──────────────────────────────────────
+function StatCard({ label, value, sub, color, accentColor }: {
   label: string; value: string | number;
-  sub?: string; color?: 'blue' | 'green' | 'yellow';
+  sub?: string; color?: string; accentColor?: string;
 }) {
-  const colorMap = { blue: '#3182F6', green: '#05C072', yellow: '#F5A623' };
+  const accent = accentColor || '#0066ff';
   return (
-    <div className="rounded-[16px] p-5 transition-all hover:-translate-y-px cursor-default"
-      style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}
-      onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 0 24px rgba(49,130,246,.12)')}
-      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+    <div
+      style={{
+        background: 'var(--bg-card)',
+        border: `1px solid var(--border)`,
+        borderLeft: `3px solid ${accent}`,
+        borderRadius: 'var(--radius)',
+        padding: '20px 22px',
+        boxShadow: 'var(--shadow)',
+        transition: 'all .15s',
+        cursor: 'default',
+      }}
+      onMouseEnter={e => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={e => {
+        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow)';
+        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
+      }}
     >
-      <div className="text-xs font-medium mb-2.5" style={{ color: 'var(--text-secondary)' }}>{label}</div>
-      <div className="text-[28px] font-[800] tracking-tight"
-        style={{ color: color ? colorMap[color] : 'var(--text-primary)' }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 10, letterSpacing: '0.02em' }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 28, fontWeight: 800, letterSpacing: '-1px',
+        color: color || accent,
+        fontFamily: "'JetBrains Mono', 'Courier New', monospace",
+      }}>
         {value}
       </div>
-      {sub && <div className="text-[11px] mt-1.5" style={{ color: 'var(--text-secondary)' }}>{sub}</div>}
+      {sub && (
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{sub}</div>
+      )}
     </div>
   );
 }
 
-// 점검유형 배지
+// ── 점검유형 배지 ────────────────────────────────────────────
 function TypeBadge({ type }: { type: string }) {
-  const styles: Record<string, string> = {
-    '월차': 'bg-[rgba(49,130,246,.12)] text-[#3182F6]',
-    '분기': 'bg-[rgba(245,166,35,.12)] text-[#F5A623]',
-    '반기': 'bg-[rgba(245,166,35,.12)] text-[#F5A623]',
-    '연차': 'bg-[rgba(5,192,114,.12)] text-[#05C072]',
+  const map: Record<string, { bg: string; color: string }> = {
+    '월차': { bg: 'rgba(0,102,255,.1)',   color: '#0066ff' },
+    '분기': { bg: 'rgba(245,158,11,.1)',  color: '#d97706' },
+    '반기': { bg: 'rgba(245,158,11,.1)',  color: '#d97706' },
+    '연차': { bg: 'rgba(16,185,129,.1)', color: '#059669' },
   };
+  const s = map[type] ?? { bg: 'rgba(0,0,0,.06)', color: '#4b5563' };
   return (
-    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${styles[type] ?? ''}`}>
-      {type}
-    </span>
+    <span style={{
+      fontSize: 11, fontWeight: 700, padding: '2px 8px',
+      borderRadius: 99, background: s.bg, color: s.color,
+    }}>{type}</span>
   );
 }
 
+// ── 페이지 본문 ──────────────────────────────────────────────
 export default function DashboardPage() {
   const { profile } = useAuth();
   const { stations } = useStations();
-  const { inspections } = useInspections({ limit: 5 });
+  const { inspections } = useInspections({ limit: 500 });
 
   const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
+  const currentYear  = new Date().getFullYear();
 
-  // 이번달 완료 건수
   const thisMonthDone = inspections.filter(i => {
     const d = new Date(i.inspection_date);
     return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
   }).length;
 
+  // 이번달 점검 완료한 충전소 id 집합
+  const doneStationIds = new Set(
+    inspections
+      .filter(i => {
+        const d = new Date(i.inspection_date);
+        return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear;
+      })
+      .map(i => i.station_id)
+  );
+  // 이번달 아직 점검하지 않은 개소 목록
+  const pendingStations = stations.filter(st => !doneStationIds.has(st.id));
+
   return (
-    <div className="p-8 max-w-[1100px]">
+    <div style={{ padding: '40px 48px 80px', maxWidth: 900 }}>
+
       {/* 헤더 */}
-      <div className="mb-7">
-        <h1 className="text-2xl font-[800] tracking-tight">대시보드</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{
+          fontSize: 28, fontWeight: 900, letterSpacing: '-1px',
+          color: 'var(--text-primary)', margin: '0 0 8px 0', lineHeight: 1.2,
+        }}>대시보드</h1>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center',
+          background: 'rgba(0,102,255,.08)', color: '#0066ff',
+          borderRadius: 99, padding: '3px 10px',
+          fontSize: 11, fontWeight: 700,
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>
           {currentYear}년 {currentMonth}월 — {profile?.sector?.name ?? ''} 충전소 현황
-        </p>
+        </span>
       </div>
 
-      {/* 통계 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard label="관리 충전소" value={stations.length} sub="총 개소" color="blue" />
-        <StatCard label="이번달 완료" value={thisMonthDone} sub="건" color="green" />
-        <StatCard label="미점검" value={stations.length - thisMonthDone} sub="개소" color="yellow" />
+      {/* 통계 카드 4열 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 14,
+        marginBottom: 24,
+      }}>
+        <StatCard label="관리 충전소" value={stations.length}                           sub="총 개소"   accentColor="#0066ff" />
+        <StatCard label="이번달 완료" value={thisMonthDone}                              sub="건"       accentColor="#10b981" />
+        <StatCard label="미점검"       value={pendingStations.length}           sub="개소"     accentColor="#f59e0b" />
         <StatCard
           label="총 수전용량"
           value={`${(stations.reduce((s, st) => s + (st.capacity ?? 0), 0) / 1000).toFixed(1)}MW`}
           sub="관리 설비 합산"
+          accentColor="#0066ff"
         />
       </div>
 
-      {/* 2단 */}
-      <div className="grid md:grid-cols-[1fr_360px] gap-4">
-
-        {/* 최근 이력 */}
-        <div className="toss-card">
-          <div className="text-sm font-bold mb-4">
-            최근 점검이력
-            <span className="font-normal ml-1" style={{ color: 'var(--text-secondary)' }}>— 이번달</span>
+{/* ── 이번달 미점검 개소 (한눈에 보기) ── */}
+      <div style={{
+        background: 'var(--bg-card)',
+        border: '1px solid var(--border)',
+        borderLeft: '3px solid #f59e0b',
+        borderRadius: 'var(--radius)',
+        padding: '22px 24px',
+        boxShadow: 'var(--shadow)',
+        marginBottom: 14,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+            이번달 미점검 개소
+          </span>
+          <span style={{
+            fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99,
+            background: 'rgba(245,158,11,.12)', color: '#d97706',
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>{pendingStations.length}개소</span>
+          <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>— {currentMonth}월 기준</span>
+        </div>
+        {pendingStations.length === 0 ? (
+          <p style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
+            🎉 이번달 모든 충전소 점검이 완료되었습니다
+          </p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+            {pendingStations.map(station => (
+              <Link key={station.id} href="/inspection" style={{ textDecoration: 'none' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 10,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid transparent', transition: 'all .15s', cursor: 'pointer',
+                }}
+                onMouseEnter={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: '#f59e0b', background: 'rgba(245,158,11,.06)' })}
+                onMouseLeave={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: 'transparent', background: 'var(--bg-elevated)' })}
+                >
+                  <span style={{ fontSize: 14 }}>🟡</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {station.base_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                      {station.capacity}kW · {station.voltage}V
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+        )}
+      </div>
+
+            {/* 2단 그리드: 최근 이력 + 충전소 현황 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 360px',
+        gap: 14,
+        alignItems: 'start',
+      }}>
+
+        {/* ── 최근 점검이력 ── */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          padding: '22px 24px',
+          boxShadow: 'var(--shadow)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
+              최근 점검이력
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>— 이번달</span>
+          </div>
+          <div style={{ borderTop: '1px solid var(--border)' }}>
             {inspections.length === 0 && (
-              <p className="py-6 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>
-                이번달 점검이력이 없습니다
-              </p>
+              <p style={{
+                padding: '32px 0', textAlign: 'center',
+                fontSize: 13, color: 'var(--text-tertiary)',
+              }}>이번달 점검이력이 없습니다</p>
             )}
             {inspections.map(ins => (
-              <div key={ins.id} className="flex items-center gap-3.5 py-3.5">
-                <span className="w-2 h-2 rounded-full flex-shrink-0 bg-[#05C072] shadow-[0_0_6px_#05C072]" />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{ins.station?.base_name}</div>
-                  <div className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+              <div key={ins.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 0',
+                borderBottom: '1px solid var(--border)',
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: '#10b981',
+                  boxShadow: '0 0 6px rgba(16,185,129,.5)',
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {ins.station?.base_name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
                     {ins.inspection_date} · {ins.inspector_name}
                   </div>
                 </div>
                 <TypeBadge type={ins.inspection_type} />
                 {ins.file_path && (
-                  <a href={ins.file_path} download
-                    className="w-[30px] h-[30px] rounded-[8px] flex items-center justify-center text-sm transition-all"
-                    style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
-                    onMouseEnter={e => Object.assign(e.currentTarget.style, { background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'var(--accent)' })}
-                    onMouseLeave={e => Object.assign(e.currentTarget.style, { background: 'var(--bg-input)', color: 'var(--text-secondary)', borderColor: 'var(--border)' })}
+                  <a href={ins.file_path} download style={{
+                    width: 28, height: 28, borderRadius: 8,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, textDecoration: 'none', transition: 'all .15s',
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-tertiary)',
+                  }}
+                  onMouseEnter={e => Object.assign((e.currentTarget as HTMLAnchorElement).style, {
+                    background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'var(--accent)'
+                  })}
+                  onMouseLeave={e => Object.assign((e.currentTarget as HTMLAnchorElement).style, {
+                    background: 'var(--bg-elevated)', color: 'var(--text-tertiary)', borderColor: 'var(--border)'
+                  })}
                   >⬇</a>
                 )}
               </div>
@@ -118,37 +257,72 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 충전소 현황 */}
-        <div className="toss-card">
-          <div className="text-sm font-bold mb-4">충전소 점검 현황</div>
-          <div className="space-y-2">
+        {/* ── 충전소 점검 현황 ── */}
+        <div style={{
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          padding: '22px 24px',
+          boxShadow: 'var(--shadow)',
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)', marginBottom: 14 }}>
+            충전소 점검 현황
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {stations.slice(0, 6).map(station => {
               const done = inspections.some(i => i.station_id === station.id);
               return (
-                <div key={station.id}
-                  className="flex items-center gap-3 px-3.5 py-3 rounded-[10px] transition-all cursor-pointer border border-transparent hover:border-[#3182F6] hover:bg-[rgba(49,130,246,.06)]"
-                  style={{ background: 'var(--bg-elevated)' }}>
-                  <span className="text-lg">{done ? '🟢' : '🟡'}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold truncate">{station.base_name}</div>
-                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--text-secondary)' }}>
+                <div key={station.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 10,
+                  background: 'var(--bg-elevated)',
+                  border: '1px solid transparent',
+                  transition: 'all .15s', cursor: 'pointer',
+                }}
+                onMouseEnter={e => Object.assign((e.currentTarget as HTMLDivElement).style, {
+                  borderColor: 'var(--accent)', background: 'var(--accent-soft)',
+                })}
+                onMouseLeave={e => Object.assign((e.currentTarget as HTMLDivElement).style, {
+                  borderColor: 'transparent', background: 'var(--bg-elevated)',
+                })}
+                >
+                  <span style={{ fontSize: 16 }}>{done ? '🟢' : '🟡'}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {station.base_name}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
                       {station.capacity}kW · {station.voltage}V
                     </div>
                   </div>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md
-                    ${done
-                      ? 'bg-[rgba(5,192,114,.12)] text-[#05C072]'
-                      : 'bg-[rgba(245,166,35,.12)] text-[#F5A623]'
-                    }`}>
-                    {done ? '완료' : '미점검'}
-                  </span>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
+                    background: done ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)',
+                    color: done ? '#059669' : '#d97706',
+                  }}>{done ? '완료' : '미점검'}</span>
                 </div>
               );
             })}
           </div>
           <Link href="/inspection">
-            <button className="w-full mt-3 py-2 text-sm font-semibold rounded-[8px] transition-colors"
-              style={{ background: 'var(--bg-input)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+            <button style={{
+              width: '100%', marginTop: 12,
+              padding: '10px 0', fontSize: 13, fontWeight: 700,
+              borderRadius: 99, border: 'none', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
+              color: '#fff',
+              boxShadow: '0 4px 12px rgba(0,102,255,.2)',
+              transition: 'all .15s',
+            }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLButtonElement).style.opacity = '0.9';
+              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLButtonElement).style.opacity = '1';
+              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
+            }}
+            >
               + 점검 생성하기
             </button>
           </Link>

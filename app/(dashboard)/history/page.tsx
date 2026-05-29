@@ -11,6 +11,7 @@ export default function HistoryPage() {
   const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState('');
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -164,7 +165,86 @@ export default function HistoryPage() {
     }
   };
 
-  const filtered = items.filter(i =>
+// IndexedDB: 충전소별 저장 폴더 핸들 불러오기 (InspectionForm과 동일 key)
+  const openFolderDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+    const req = indexedDB.open('inspection-app', 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore('folders'); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  const getStationFolder = (stationId: string): Promise<any> => new Promise(async (resolve) => {
+    try {
+      const db = await openFolderDB();
+      const tx = db.transaction('folders', 'readonly');
+      const getReq = tx.objectStore('folders').get('folder_' + stationId);
+      getReq.onsuccess = () => resolve(getReq.result || null);
+      getReq.onerror = () => resolve(null);
+    } catch (e) { resolve(null); }
+  });
+
+  const saveStationFolder = async (stationId: string, handle: any) => {
+    try {
+      const db = await openFolderDB();
+      const tx = db.transaction('folders', 'readwrite');
+      tx.objectStore('folders').put(handle, 'folder_' + stationId);
+    } catch (e) {}
+  };
+
+  // 개별 항목을 PC 폴더에 저장 (휴대폰으로 만든 점검을 PC에서 저장)
+  const saveOneToPc = async (item: any) => {
+    if (!('showDirectoryPicker' in window)) {
+      alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
+      return;
+    }
+    if (!item.file_path) { alert('저장된 파일을 찾을 수 없습니다.'); return; }
+    try {
+      setSavingId(item.id);
+      const stationId = item.station_id;
+      // 1) 충전소별로 기억한 폴더 확인, 없으면 선택창
+      let handle = await getStationFolder(stationId);
+      let needPerm = true;
+      if (handle) {
+        const perm = await handle.queryPermission({ mode: 'readwrite' });
+        if (perm === 'granted') needPerm = false;
+        else {
+          const np = await handle.requestPermission({ mode: 'readwrite' });
+          needPerm = (np !== 'granted');
+        }
+      }
+      if (!handle || needPerm) {
+        // @ts-ignore
+        handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        await saveStationFolder(stationId, handle);
+      }
+      // 2) 서버에서 파일 다운로드
+      const res = await fetch(item.file_path);
+      if (!res.ok) throw new Error('파일 다운로드 실패');
+      const arrayBuffer = await (await res.blob()).arrayBuffer();
+      // 3) 폴더 구조: {루트}/{YYYYMMDD_충전소명_종별}/파일 (InspectionForm과 동일)
+      const dateNum = item.inspection_date.replace(/-/g, '');
+      const stName = item.station?.name || item.station?.base_name || 'unknown';
+      const subFolderName = `${dateNum}_${stName}_${item.inspection_type}`;
+      const sub = await handle.getDirectoryHandle(subFolderName, { create: true });
+      const fileName = item.file_name || `${stName}_${item.inspection_type}점검_${dateNum}.xlsx`;
+      const fileHandle = await sub.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(arrayBuffer);
+      await writable.close();
+      // 4) DB에 PC 저장 완료 표시
+      const sb = createClient();
+      const newMv = { ...(item.measure_values || {}), saved_to_pc: true };
+      await sb.from('inspections').update({ measure_values: newMv }).eq('id', item.id);
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, measure_values: newMv } : it));
+      alert(`✅ PC 저장 완료\n\n${subFolderName} / ${fileName}`);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') alert('PC 저장 실패: ' + e.message);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+    const filtered = items.filter(i =>
     !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
   );
 
@@ -214,12 +294,26 @@ export default function HistoryPage() {
         ) : (
           filtered.map(item => (
             <div key={item.id} style={{display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 100px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center'}}>
-              <div style={{fontWeight: 600}}>{item.station?.name || '-'}</div>
+              <div style={{fontWeight: 600}}>
+                {item.station?.name || '-'}
+                {item.measure_values?.device === 'mobile' && (
+                  <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,0.12)', color: '#6366f1'}}>📱 휴대폰</span>
+                )}
+                {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
+                  <span style={{marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>PC 저장 대기</span>
+                )}
+              </div>
               <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span></div>
               <div>{item.inspection_date}</div>
               <div>{item.inspector_name}</div>
               <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>{item.file_name}</div>
               <div style={{display: 'flex', gap: 6, justifyContent: 'center'}}>
+                {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
+                  <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{
+                    padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff',
+                    border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit'
+                  }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>
+                )}
                 {item.file_path && (
                   <a href={item.file_path} download={item.file_name} title="다운로드" style={{
                     padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)',
