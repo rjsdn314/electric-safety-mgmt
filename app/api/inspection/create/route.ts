@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
             .getPublicUrl(safePath);
 
       // DB 저장 — 개소별 배열 구조로 저장
-      const { error: dbErr } = await supabase.from('inspections').insert({
+    const { error: dbErr } = await supabase.from('inspections').insert({
               station_id,
               inspection_type,
               inspection_date: date,
@@ -181,6 +181,7 @@ export async function POST(req: NextRequest) {
               file_name: displayFileName,
               file_path: urlData.publicUrl,
               status: 'completed',
+              device_type: is_mobile ? 'mobile' : 'desktop',
       });
           if (dbErr) throw new Error(`DB 저장 실패: ${dbErr.message}`);
 
