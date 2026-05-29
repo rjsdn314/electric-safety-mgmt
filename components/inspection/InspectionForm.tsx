@@ -85,27 +85,43 @@ export function InspectionForm() {
         setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
   };
 
-  // 한글 ↔ 영문 별칭 매핑 (검색 편의성)
+  // 한글 ↔ 영문 별칭 매핑 (검색 편의성, 부분 매칭 지원)
+  // key: 충전소 이름에 실제로 포함된 단어, value: 사용자가 입력할 수 있는 별칭들
   const aliasMap: Record<string, string[]> = {
-    'kintex': ['킨텍스'],
-    '킨텍스': ['kintex', 'KINTEX', 'Kintex'],
+    'KINTEX': ['킨텍스', '킨', '킨텍'],
+    'kintex': ['킨텍스', '킨', '킨텍'],
   };
 
-  // 검색어를 정규화하고 별칭까지 포함한 검색어 목록 생성
+  // 사용자 입력 q를 정규화하고, 부분 매칭으로 매핑된 키워드들을 모두 검색 대상에 추가
   const buildSearchTerms = (q: string): string[] => {
     if (!q) return [];
-    const lower = q.toLowerCase().trim();
-    const terms = new Set<string>([q, lower, q.trim()]);
+    const trimmed = q.trim();
+    const lower = trimmed.toLowerCase();
+    const terms = new Set<string>([trimmed, lower]);
+
+    // 별칭 부분 매칭: 사용자 입력이 별칭의 일부이거나 별칭이 사용자 입력의 일부이면 키워드 추가
     for (const [key, aliases] of Object.entries(aliasMap)) {
-      if (lower.includes(key.toLowerCase())) {
-        aliases.forEach(a => terms.add(a));
-      }
       for (const alias of aliases) {
-        if (q.includes(alias) || lower.includes(alias.toLowerCase())) {
+        const aliasLower = alias.toLowerCase();
+        // 사용자 입력이 별칭에 포함되거나(부분 입력), 별칭이 사용자 입력에 포함되면
+        if (
+          alias.includes(trimmed) ||
+          aliasLower.includes(lower) ||
+          trimmed.includes(alias) ||
+          lower.includes(aliasLower)
+        ) {
           terms.add(key);
+          terms.add(key.toLowerCase());
           terms.add(key.toUpperCase());
-          terms.add(key.charAt(0).toUpperCase() + key.slice(1));
         }
+      }
+      // 키 자체로 부분 매칭 시도 (영문 부분 입력 -> 한글 별칭)
+      const keyLower = key.toLowerCase();
+      if (
+        keyLower.includes(lower) ||
+        lower.includes(keyLower)
+      ) {
+        aliases.forEach(a => terms.add(a));
       }
     }
     return Array.from(terms);
@@ -121,7 +137,7 @@ export function InspectionForm() {
       (s.base_name || '').toLowerCase(),
     ];
     return terms.some(term =>
-      haystacks.some(h => h.includes(term) || h.includes(term.toLowerCase()))
+      haystacks.some(h => h.includes(term))
     );
   };
 
