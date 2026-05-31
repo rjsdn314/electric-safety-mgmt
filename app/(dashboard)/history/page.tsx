@@ -167,7 +167,7 @@ export default function HistoryPage() {
     }
   };
 
-  // IndexedDB: 충전소별 저장 폴더 핸들 불러오기 (InspectionForm과 동일 key)
+  // IndexedDB: 충전소별 저장 폴더 핸들 (InspectionForm과 동일 규칙: 이름 키 우선)
   const openFolderDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
     const req = indexedDB.open('inspection-app', 1);
     req.onupgradeneeded = () => { req.result.createObjectStore('folders'); };
@@ -175,28 +175,43 @@ export default function HistoryPage() {
     req.onerror = () => reject(req.error);
   });
 
-  const getStationFolder = (stationId: string): Promise<any> => new Promise(async (resolve) => {
+  // 충전소 이름 기반 키 (같은 이름의 충전소가 DB상 ID가 달라도 동일 폴더 공유)
+  const folderKeyByName = (item: any) => {
+    const base = (item?.station?.name || item?.station?.base_name || '').trim();
+    return 'folderByName_' + base;
+  };
+
+  // 폴더 불러오기: 이름 키 우선, 없으면 기존 ID 키 폴백
+  const getStationFolder = async (item: any): Promise<any> => {
     try {
       const db = await openFolderDB();
-      const tx = db.transaction('folders', 'readonly');
-      const getReq = tx.objectStore('folders').get('folder_' + stationId);
-      getReq.onsuccess = () => resolve(getReq.result || null);
-      getReq.onerror = () => resolve(null);
-    } catch (e) { resolve(null); }
-  });
+      const getOne = (key: string) => new Promise<any>((res) => {
+        const tx = db.transaction('folders', 'readonly');
+        const r = tx.objectStore('folders').get(key);
+        r.onsuccess = () => res(r.result || null);
+        r.onerror = () => res(null);
+      });
+      let result = await getOne(folderKeyByName(item));
+      if (!result && item?.station_id) result = await getOne('folder_' + item.station_id);
+      return result;
+    } catch (e) { return null; }
+  };
 
-  const saveStationFolder = async (stationId: string, handle: any) => {
+  // 폴더 저장: 이름 키 + (호환용) ID 키 둘 다 기록
+  const saveStationFolder = async (item: any, handle: any) => {
     try {
       const db = await openFolderDB();
       const tx = db.transaction('folders', 'readwrite');
-      tx.objectStore('folders').put(handle, 'folder_' + stationId);
+      const store = tx.objectStore('folders');
+      store.put(handle, folderKeyByName(item));
+      if (item?.station_id) store.put(handle, 'folder_' + item.station_id);
     } catch (e) {}
   };
 
   // 개별 항목을 PC 폴더에 저장 (휴대폰으로 만든 점검을 PC에서 저장)
-  // InspectionForm의 saveToLocal과 동일하게 동작하도록 맞춤:
-  // 기억된 폴더의 권한이 'granted' 또는 'prompt'면 그대로 사용하고,
-  // 실제 쓰기 직전에만 권한을 요청한다. (불필요하게 새 폴더창을 띄우지 않음)
+  // InspectionForm의 saveToLocal과 동일하게 동작:
+  // 이름 기준으로 기억된 폴더를 찾고, 권한이 'granted'/'prompt'면 그대로 사용,
+  // 실제 쓰기 직전에만 권한을 요청한다. 기억된 폴더가 없을 때만 새로 선택.
   const saveOneToPc = async (item: any) => {
     if (!('showDirectoryPicker' in window)) {
       alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
@@ -205,10 +220,9 @@ export default function HistoryPage() {
     if (!item.file_path) { alert('저장된 파일을 찾을 수 없습니다.'); return; }
     try {
       setSavingId(item.id);
-      const stationId = item.station_id;
 
-      // 1) 충전소별로 기억한 폴더 확인 ('prompt'도 그대로 사용)
-      let handle = await getStationFolder(stationId);
+      // 1) 이름 기준으로 기억한 폴더 확인 ('prompt'도 그대로 사용)
+      let handle = await getStationFolder(item);
       if (handle) {
         const perm = await handle.queryPermission({ mode: 'readwrite' });
         if (perm !== 'granted' && perm !== 'prompt') {
@@ -216,11 +230,11 @@ export default function HistoryPage() {
         }
       }
 
-      // 기억된 폴더가 전혀 없을 때만 새로 선택 (이후 충전소별로 기억)
+      // 기억된 폴더가 전혀 없을 때만 새로 선택 (이후 이름 기준으로 기억)
       if (!handle) {
         // @ts-ignore
         handle = await window.showDirectoryPicker({ mode: 'readwrite' });
-        await saveStationFolder(stationId, handle);
+        await saveStationFolder(item, handle);
       }
 
       // 2) 쓰기 직전 권한 확보
