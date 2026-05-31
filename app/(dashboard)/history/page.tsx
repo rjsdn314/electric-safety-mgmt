@@ -18,13 +18,13 @@ export default function HistoryPage() {
   const loadData = async () => {
     setLoading(true);
     const sb = createClient();
-    
+
     let q = sb.from('inspections')
       .select('*')
       .order('inspection_date', { ascending: false })
       .limit(100);
     if (filterType !== '전체') q = q.eq('inspection_type', filterType);
-    
+
     const { data: insps, error } = await q;
     if (error) {
       console.error('점검 조회 오류:', error);
@@ -38,7 +38,7 @@ export default function HistoryPage() {
         .from('stations')
         .select('id, base_name, name, voltage, capacity')
         .in('id', stationIds);
-      
+
       const stationMap = new Map(stations?.map(s => [s.id, s]) || []);
       const merged = insps.map(i => ({
         ...i,
@@ -55,7 +55,7 @@ export default function HistoryPage() {
 
   const handleDelete = async (item: any) => {
     if (!confirm(`정말 삭제하시겠습니까?\n\n${item.file_name}\n\n이 작업은 되돌릴 수 없습니다.`)) return;
-    
+
     const sb = createClient();
     if (item.file_path) {
       try {
@@ -66,7 +66,7 @@ export default function HistoryPage() {
         }
       } catch (e) { console.error('스토리지 삭제 실패:', e); }
     }
-    
+
     const { error } = await sb.from('inspections').delete().eq('id', item.id);
     if (error) {
       alert('삭제 실패: ' + error.message);
@@ -78,7 +78,7 @@ export default function HistoryPage() {
 
   // 일괄 동기화
   const normalize = (s: string) => s.replace(/[\s()\-_.]/g, '').toLowerCase();
-  
+
   const findOrCreateDir = async (parent: any, targetName: string) => {
     const normTarget = normalize(targetName);
     for await (const entry of parent.values()) {
@@ -94,44 +94,44 @@ export default function HistoryPage() {
       alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
       return;
     }
-    
+
     if (items.length === 0) {
       alert('동기화할 점검 이력이 없습니다.');
       return;
     }
-    
+
     try {
       setSyncing(true);
       setSyncProgress('폴더 선택 중...');
-      
+
       // @ts-ignore
       const folderHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-      
+
       let successCount = 0;
       let failCount = 0;
-      
+
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         setSyncProgress(`${i + 1}/${items.length}: ${item.file_name}`);
-        
+
         try {
           // 파일 다운로드
           const res = await fetch(item.file_path);
           if (!res.ok) throw new Error('다운로드 실패');
           const blob = await res.blob();
           const arrayBuffer = await blob.arrayBuffer();
-          
+
           // 폴더 구조 생성
           const date = item.inspection_date; // YYYY-MM-DD
           const [yyyy, mm] = date.split('-');
           const periodFolder = `${yyyy}${mm}${item.inspection_type}점검`;
-          
+
           const baseName = item.station?.base_name || item.station?.name || 'unknown';
           const isKintex = baseName.includes('KINTEX') || baseName.includes('킨텍스');
           const isHighV = (item.station?.voltage || 0) >= 3000;
-          
+
           let current = folderHandle;
-          
+
           if (isKintex) {
             current = await findOrCreateDir(current, baseName);
             current = await current.getDirectoryHandle(isHighV ? '고압' : '저압', { create: true });
@@ -140,23 +140,23 @@ export default function HistoryPage() {
             current = await findOrCreateDir(current, baseName);
             current = await current.getDirectoryHandle(periodFolder, { create: true });
           }
-          
+
           // 파일명 정리
           const dateNum = date.replace(/-/g, '');
           const fileName = `${item.station?.name || baseName}_${item.inspection_type}점검_${dateNum}.xlsx`;
-          
+
           const fileHandle = await current.getFileHandle(fileName, { create: true });
           const writable = await fileHandle.createWritable();
           await writable.write(arrayBuffer);
           await writable.close();
-          
+
           successCount++;
         } catch (e: any) {
           console.error(`동기화 실패: ${item.file_name}`, e);
           failCount++;
         }
       }
-      
+
       setSyncProgress('');
       alert(`동기화 완료!\n\n✅ 성공: ${successCount}개\n❌ 실패: ${failCount}개`);
     } catch (e: any) {
@@ -167,7 +167,7 @@ export default function HistoryPage() {
     }
   };
 
-// IndexedDB: 충전소별 저장 폴더 핸들 불러오기 (InspectionForm과 동일 key)
+  // IndexedDB: 충전소별 저장 폴더 핸들 불러오기 (InspectionForm과 동일 key)
   const openFolderDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
     const req = indexedDB.open('inspection-app', 1);
     req.onupgradeneeded = () => { req.result.createObjectStore('folders'); };
@@ -194,6 +194,9 @@ export default function HistoryPage() {
   };
 
   // 개별 항목을 PC 폴더에 저장 (휴대폰으로 만든 점검을 PC에서 저장)
+  // InspectionForm의 saveToLocal과 동일하게 동작하도록 맞춤:
+  // 기억된 폴더의 권한이 'granted' 또는 'prompt'면 그대로 사용하고,
+  // 실제 쓰기 직전에만 권한을 요청한다. (불필요하게 새 폴더창을 띄우지 않음)
   const saveOneToPc = async (item: any) => {
     if (!('showDirectoryPicker' in window)) {
       alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
@@ -203,27 +206,36 @@ export default function HistoryPage() {
     try {
       setSavingId(item.id);
       const stationId = item.station_id;
-      // 1) 충전소별로 기억한 폴더 확인, 없으면 선택창
+
+      // 1) 충전소별로 기억한 폴더 확인 ('prompt'도 그대로 사용)
       let handle = await getStationFolder(stationId);
-      let needPerm = true;
       if (handle) {
         const perm = await handle.queryPermission({ mode: 'readwrite' });
-        if (perm === 'granted') needPerm = false;
-        else {
-          const np = await handle.requestPermission({ mode: 'readwrite' });
-          needPerm = (np !== 'granted');
+        if (perm !== 'granted' && perm !== 'prompt') {
+          handle = null;
         }
       }
-      if (!handle || needPerm) {
+
+      // 기억된 폴더가 전혀 없을 때만 새로 선택 (이후 충전소별로 기억)
+      if (!handle) {
         // @ts-ignore
         handle = await window.showDirectoryPicker({ mode: 'readwrite' });
         await saveStationFolder(stationId, handle);
       }
-      // 2) 서버에서 파일 다운로드
+
+      // 2) 쓰기 직전 권한 확보
+      let perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        perm = await handle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') { alert('폴더 쓰기 권한이 필요합니다.'); return; }
+      }
+
+      // 3) 서버에서 파일 다운로드
       const res = await fetch(item.file_path);
       if (!res.ok) throw new Error('파일 다운로드 실패');
       const arrayBuffer = await (await res.blob()).arrayBuffer();
-      // 3) 폴더 구조: {루트}/{YYYYMMDD_충전소명_종별}/파일 (InspectionForm과 동일)
+
+      // 4) 폴더 구조: {루트}/{YYYYMMDD_충전소명_종별}/파일 (InspectionForm과 동일)
       const dateNum = item.inspection_date.replace(/-/g, '');
       const stName = item.station?.name || item.station?.base_name || 'unknown';
       const subFolderName = `${dateNum}_${stName}_${item.inspection_type}`;
@@ -233,11 +245,13 @@ export default function HistoryPage() {
       const writable = await fileHandle.createWritable();
       await writable.write(arrayBuffer);
       await writable.close();
-      // 4) DB에 PC 저장 완료 표시
+
+      // 5) DB에 PC 저장 완료 표시
       const sb = createClient();
       const newMv = { ...(item.measure_values || {}), saved_to_pc: true };
       await sb.from('inspections').update({ measure_values: newMv }).eq('id', item.id);
       setItems(prev => prev.map(it => it.id === item.id ? { ...it, measure_values: newMv } : it));
+
       alert(`✅ PC 저장 완료\n\n${subFolderName} / ${fileName}`);
     } catch (e: any) {
       if (e.name !== 'AbortError') alert('PC 저장 실패: ' + e.message);
@@ -246,7 +260,7 @@ export default function HistoryPage() {
     }
   };
 
-    const filtered = items.filter(i =>
+  const filtered = items.filter(i =>
     !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
   );
   const [visibleCount, setVisibleCount] = useState(10);
@@ -329,11 +343,11 @@ export default function HistoryPage() {
                 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             </div>
-          </div>                                                                ))
+          </div> ))
         )}
       </div>
       {!loading && visibleCount < filtered.length && (
-      <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>
+        <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>
       )}
     </div>
   );
