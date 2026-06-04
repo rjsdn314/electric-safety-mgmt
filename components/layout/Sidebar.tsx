@@ -54,6 +54,7 @@ export function Sidebar() {
 
   const adminMenus = [
     { href: '/admin/users', label: '사용자 관리', icon: '👥' },
+    { href: '/admin/templates', label: '양식 등록', icon: '📑' },
   ];
 
   const isActive = (href: string) =>
