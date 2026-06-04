@@ -12,6 +12,7 @@ const TYPE_OPTIONS = [
 const emptyMeasureSet = () => ({
   voltage_A: '', voltage_B: '', voltage_C: '', voltage_N: '',
   current_A: '', current_B: '', current_C: '',
+  ground: '',
   remarks: '',
 });
 
@@ -26,7 +27,6 @@ export function InspectionForm() {
   const [count, setCount] = useState(1);
   const [measureSets, setMeasureSets] = useState<any[]>([emptyMeasureSet()]);
   const [remarks, setRemarks] = useState('');
-  const [groundValues, setGroundValues] = useState<string[]>(['']);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [savedFile, setSavedFile] = useState('');
@@ -261,7 +261,7 @@ export function InspectionForm() {
           inspector_name: inspector,
           count,
           measure_sets: measureSets,
-          ground_resistance: groundValues,
+          ground_resistance: measureSets.map(s=>s.ground),
           remarks: remarks || '특이사항없음',
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
@@ -463,6 +463,20 @@ export function InspectionForm() {
               </div>
             </div>
 
+            {(inspType==='분기'||inspType==='반기') && (
+            <div style={{marginBottom:14}}>
+              <label style={labelStyle}>접지저항 (Ω) — 별지2-접지저항 D{5 + idx}</label>
+              <div style={{position:'relative',maxWidth:220}}>
+                <input type="number" inputMode="decimal" step="0.01" className="toss-input"
+                  placeholder="측정치" style={{paddingRight:36}}
+                  value={set.ground ?? ''}
+                  onChange={e=>updateMeasureSet(idx, 'ground', e.target.value)}
+                />
+                <span style={{position:'absolute',right:14,top:'50%',transform:'translateY(-50%)',fontSize:13,color:'var(--text-secondary)',pointerEvents:'none',fontWeight:600}}>Ω</span>
+              </div>
+            </div>
+            )}
+
             <div>
               <label style={labelStyle}>특이사항 (수배전반 #{idx + 1})</label>
               <input className="toss-input" placeholder="특이사항이 없으면 비워두세요"
@@ -477,31 +491,6 @@ export function InspectionForm() {
           </div>
         ))}
       </div>
-
-      {/* 접지저항 (분기/반기 전용) */}
-      {(inspType==='분기'||inspType==='반기') && (
-      <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
-          <label style={sectionTitle}>접지저항 측정값 (별지2-접지저항)</label>
-          <button type="button" onClick={()=>setGroundValues(p=>[...p,''])}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:10,border:'1.5px dashed var(--accent)',background:'var(--accent-soft)',color:'var(--accent)',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:'inherit'}}>
-            + 측정값 추가
-          </button>
-        </div>
-        <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:14}}>입력한 순서대로 측정치(Ω) D5, D6, D7 …에 기록됩니다.</div>
-        {groundValues.map((v,i)=>(
-          <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
-            <span style={{fontSize:13,color:'var(--text-secondary)',width:64,flexShrink:0}}>측정 {i+1}</span>
-            <input className="toss-input" type="number" step="0.01" placeholder="Ω" value={v}
-              onChange={e=>setGroundValues(p=>p.map((x,idx)=>idx===i?e.target.value:x))} style={{flex:1}}/>
-            {groundValues.length>1 && (
-              <button type="button" onClick={()=>setGroundValues(p=>p.filter((_,idx)=>idx!==i))}
-                style={{padding:'8px 12px',borderRadius:8,border:'1px solid var(--border)',background:'transparent',color:'var(--text-secondary)',fontSize:12,cursor:'pointer',fontFamily:'inherit',flexShrink:0}}>삭제</button>
-            )}
-          </div>
-        ))}
-      </div>
-      )}
 
       {/* 종합 의견 */}
       <div style={{background:'var(--bg-card)',borderRadius:16,padding:24,marginBottom:14}}>
