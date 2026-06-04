@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 // ============================================================
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, company, phone, message } = await req.json();
+    const { user_id, name, email, company, phone, message } = await req.json();
 
     const adminEmail = process.env.ADMIN_EMAIL || 'rjsdn43666211@gmail.com';
     const appUrl     = process.env.NEXT_PUBLIC_APP_URL || 'https://electric-safety-mgmt.vercel.app';
@@ -17,6 +17,21 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
+
+    // 가입 신청 기록을 서버(서비스 롤)에서 확실히 남긴다 (RLS/세션 의존 제거)
+    if (user_id) {
+      const { data: existing } = await supabase
+        .from('signup_requests').select('id').eq('user_id', user_id).maybeSingle();
+      if (!existing) {
+        await supabase.from('signup_requests').insert({
+          user_id, email, name,
+          company: company || null,
+          phone:   phone   || null,
+          message: message || null,
+          status:  'pending',
+        });
+      }
+    }
 
     // Supabase 이메일 발송 (Edge Function 또는 SMTP 미설정 시 콘솔 로그)
     // 실제 운영 시 Resend / SendGrid API로 교체 권장
@@ -49,7 +64,7 @@ ${appUrl}/admin/users
           'Authorization': `Bearer ${resendKey}`,
         },
         body: JSON.stringify({
-          from: 'noreply@electric-safety-mgmt.vercel.app',
+          from: process.env.RESEND_FROM || 'onboarding@resend.dev',
           to:   adminEmail,
           subject: `[전기안전관리] 새 회원가입 신청 — ${name} (${email})`,
           text: emailBody,

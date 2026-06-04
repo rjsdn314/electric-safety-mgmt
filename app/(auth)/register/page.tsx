@@ -58,11 +58,12 @@ export default function RegisterPage() {
         status:  'pending',
       });
 
-      // 3. 관리자 알림 API 호출
+      // 3. 관리자 알림 + 신청 기록 (서버에서 서비스 롤로 기록)
       await fetch('/api/auth/notify-admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          user_id: authData.user.id,
           name:    form.name,
           email:   form.email,
           company: form.company,
