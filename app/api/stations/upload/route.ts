@@ -99,20 +99,19 @@ export async function POST(req: NextRequest) {
 
       rows.push({
         sector_id:    sectorId,
-        user_id:      user.id,
         name:         String(stationName).trim(),
-        base_name:    String(stationName).trim(), // 트리거로 자동 설정되지만 명시
+        base_name:    String(stationName).trim(),
         voltage:      Number(voltage) || 22900,
         capacity:     Number(capacity) || 0,
         panel_count:  Number(panelCount) || panelNames.length || 1,
-        panel_names:  panelNames.length > 0 ? panelNames : null,
-        default_type: String(defaultType || '월차').trim(),
+        is_active:    true,
         custom_values: {
           inspector_name: String(inspectorName || '').trim(),
           sector_label:   String(sectorLabel || sectorName).trim(),
           notes:          String(notes || '').trim(),
+          panel_names:    panelNames.length > 0 ? panelNames : null,
+          default_type:   String(defaultType || '월차').trim(),
         },
-        is_active:  true,
       });
     });
 
@@ -120,25 +119,45 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '등록할 데이터가 없습니다 (3행부터 데이터 입력 필요)' }, { status: 400 });
     }
 
-    // 기존 해당 사용자 충전소 삭제 후 재등록 (upsert 방식)
-    await supabase.from('stations').delete()
-      .eq('user_id', user.id)
-      .eq('sector_id', sectorId);
+    // 비파괴 등록: 이름 기준 업데이트 또는 삽입 (삭제하지 않음 → 등록양식/점검이력 보존)
+    let inserted = 0, updated = 0;
+    for (const r of rows) {
+      const { data: existing } = await supabase
+        .from('stations').select('id').eq('name', r.name).limit(1);
 
-    const { error: insertErr } = await supabase.from('stations').insert(rows);
-    if (insertErr) throw new Error('충전소 등록 실패: ' + insertErr.message);
+      if (existing && existing.length > 0) {
+        // 기존 충전소: 같은 이름의 모든 행을 제자리 업데이트(id 보존 → CASCADE 미발생)
+        const { error: upErr } = await supabase.from('stations').update({
+          voltage:       r.voltage,
+          capacity:      r.capacity,
+          panel_count:   r.panel_count,
+          custom_values: r.custom_values,
+          updated_at:    new Date().toISOString(),
+        }).eq('name', r.name);
+        if (upErr) throw new Error(`업데이트 실패(${r.name}): ${upErr.message}`);
+        updated++;
+      } else {
+        const { error: insErr } = await supabase.from('stations').insert(r);
+        if (insErr) throw new Error(`등록 실패(${r.name}): ${insErr.message}`);
+        inserted++;
+      }
+    }
 
-    // 업로드 이력 저장
-    await supabase.from('station_uploads').insert({
-      user_id:    user.id,
-      file_name:  file.name,
-      row_count:  rows.length,
-      status:     'completed',
-    });
+    // 업로드 이력 저장 (실패해도 본 등록에는 영향 없음)
+    try {
+      await supabase.from('station_uploads').insert({
+        user_id:   user.id,
+        file_name: file.name,
+        row_count: rows.length,
+        status:    'completed',
+      });
+    } catch { /* best-effort */ }
 
     return NextResponse.json({
       success:   true,
-      inserted:  rows.length,
+      inserted,
+      updated,
+      total:     rows.length,
       sectorId,
       sectorName,
     });

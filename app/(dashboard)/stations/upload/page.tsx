@@ -27,7 +27,7 @@ export default function StationUploadPage() {
   const [file, setFile]               = useState<File | null>(null);
   const [sectorName, setSectorName]   = useState('');
   const [loading, setLoading]         = useState(false);
-  const [result, setResult]           = useState<{inserted:number; sectorName:string} | null>(null);
+  const [result, setResult]           = useState<{inserted:number; updated?:number; total?:number; sectorName:string} | null>(null);
   const [error, setError]             = useState('');
 
   // 직접 추가 폼 + 목록
@@ -313,7 +313,8 @@ export default function StationUploadPage() {
         }}>
           <div style={{ fontWeight: 700, color: '#10b981', marginBottom: 4 }}>✅ 등록 완료!</div>
           <div style={{ color: 'var(--mid)' }}>
-            <strong>{result.sectorName}</strong> 구역에 <strong>{result.inserted}개</strong> 현장이 등록되었습니다.
+            <strong>{result.sectorName}</strong> 구역 · 신규 <strong>{result.inserted}개</strong>
+            {result.updated ? <> · 업데이트 <strong>{result.updated}개</strong></> : null} 처리되었습니다.
           </div>
         </div>
       )}
