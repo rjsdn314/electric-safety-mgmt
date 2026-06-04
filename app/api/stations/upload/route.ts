@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
+import { normalizeXlsx } from '@/lib/excel/normalize';
 
 // ============================================================
 // POST /api/stations/upload
@@ -58,7 +59,23 @@ export async function POST(req: NextRequest) {
     // 엑셀 파싱
     const buffer = await file.arrayBuffer();
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    try {
+      await wb.xlsx.load(buffer);
+    } catch {
+      // ExcelJS가 못 여는 비표준 zip(다른 앱 저장 등) → JSZip 재압축으로 정규화 후 재시도
+      try {
+        const clean = await normalizeXlsx(Buffer.from(buffer));
+        await wb.xlsx.load(clean as any);
+      } catch {
+        // OLE2/CFB(D0 CF 11 E0) 시그니처면 암호화(민감도 라벨/IRM) 또는 구형 .xls
+        const u8 = new Uint8Array(buffer);
+        const isCFB = u8[0] === 0xD0 && u8[1] === 0xCF && u8[2] === 0x11 && u8[3] === 0xE0;
+        const msg = isCFB
+          ? '이 파일은 회사 보안(민감도 라벨/정보 보호)으로 암호화되어 있어 읽을 수 없습니다. Excel에서 파일을 연 뒤 ① 상단 "민감도(Sensitivity)" 라벨을 "일반/공개"로 바꾸거나 [파일 → 정보 → 보호 제거]로 라벨을 해제하고, ② "다른 이름으로 저장 → Excel 통합 문서(*.xlsx)"로 저장하여 다시 업로드해 주세요.'
+          : '엑셀 파일을 읽을 수 없습니다. 받으신 양식을 Excel에서 연 뒤 "다른 이름으로 저장 → Excel 통합 문서(*.xlsx)"로 저장하여 다시 업로드해 주세요.';
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
+    }
 
     const ws = wb.worksheets[0];
     if (!ws) return NextResponse.json({ error: '시트를 찾을 수 없습니다' }, { status: 400 });

@@ -40,8 +40,24 @@ export default function StationUploadPage() {
   const [stationQuery, setStationQuery] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (f) { setFile(f); setError(''); setResult(null); }
+    acceptFile(e.target.files?.[0]);
+  };
+
+  const acceptFile = (f?: File | null) => {
+    if (!f) return;
+    if (!/\.(xlsx|xls)$/i.test(f.name)) {
+      setError('.xlsx 또는 .xls 파일만 업로드할 수 있습니다.');
+      return;
+    }
+    setFile(f); setError(''); setResult(null);
+  };
+
+  const [dragActive, setDragActive] = useState(false);
+  const onDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragActive(true); };
+  const onDragLeave = (e: React.DragEvent) => { e.preventDefault(); setDragActive(false); };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault(); setDragActive(false);
+    acceptFile(e.dataTransfer.files?.[0]);
   };
 
   // 등록된 내 관리구역 목록 불러오기 (쿠키 인증 서버 API 사용)
@@ -236,16 +252,18 @@ export default function StationUploadPage() {
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
             엑셀 파일 선택 *
           </label>
-          <label style={{
+          <label
+            onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
+            style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             padding: '32px 20px', borderRadius: 12,
-            border: `2px dashed ${file ? 'var(--blue)' : 'var(--border)'}`,
-            background: file ? 'rgba(0,102,255,.04)' : 'transparent',
+            border: `2px dashed ${dragActive ? 'var(--blue)' : file ? 'var(--blue)' : 'var(--border)'}`,
+            background: dragActive ? 'rgba(0,102,255,.10)' : file ? 'rgba(0,102,255,.04)' : 'transparent',
             cursor: 'pointer', transition: 'all 0.15s',
           }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>{file ? '✅' : '📂'}</div>
             <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4, color: 'var(--text)' }}>
-              {file ? file.name : '클릭하여 엑셀 파일 선택'}
+              {file ? file.name : (dragActive ? '여기에 놓으세요' : '클릭하거나 파일을 끌어다 놓으세요')}
             </div>
             <div style={{ fontSize: 12, color: 'var(--dim)' }}>
               {file ? `${(file.size/1024).toFixed(1)}KB` : '.xlsx, .xls 파일 지원'}
