@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    await sb.storage.from('templates').remove([`${station_id}/${inspection_group}.xlsx`]);
+    await sb.storage.from('templates').remove([`${station_id}/quarterly.xlsx`]);
     const { error } = await sb.from('station_templates')
       .delete().eq('station_id', station_id).eq('inspection_group', inspection_group);
     if (error) throw new Error(error.message);

@@ -83,7 +83,7 @@ export default function TemplateManager() {
       if (!r.stationId) { next[i] = { ...r, status: 'skip' }; continue; }
       try {
         next[i] = { ...r, status: 'uploading' }; setRows([...next]);
-        const path = `${r.stationId}/분기.xlsx`;
+        const path = `${r.stationId}/quarterly.xlsx`;
         const { error: upErr } = await sb.storage.from('templates').upload(path, r.file, {
           upsert: true,
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

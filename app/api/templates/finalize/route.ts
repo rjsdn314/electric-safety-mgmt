@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const path = `${station_id}/${inspection_group}.xlsx`;
+    const path = `${station_id}/quarterly.xlsx`;
 
     // 1) 방금 브라우저가 올린 원본 내려받기
     const { data: dl, error: dlErr } = await sb.storage.from('templates').download(path);
