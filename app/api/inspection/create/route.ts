@@ -40,9 +40,9 @@ export async function POST(req: NextRequest) {
       current_A: body.current_A1 ?? '', current_B: body.current_B1 ?? '',
       current_C: body.current_C1 ?? '', remarks: '',
     }];
-    const ground: any[] = Array.isArray(ground_resistance)
-      ? ground_resistance.filter((v) => v !== '' && v !== null && v !== undefined)
-      : [];
+    // 접지저항: 위치(수배전반 #N → D5+N) 보존을 위해 빈 값도 그대로 전달.
+    // xmlFill이 인덱스별로 빈 칸은 건너뛰고 채운다.
+    const ground: any[] = Array.isArray(ground_resistance) ? ground_resistance : [];
 
     // ── 양식 소스 결정 ──
     let tplBuffer: ArrayBuffer | null = null;
