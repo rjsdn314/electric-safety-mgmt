@@ -70,8 +70,9 @@ export async function POST(req: NextRequest) {
       if (rowNum <= 2) return; // 헤더 2행 스킵
 
       const cells = row.values as any[];
-      // 컬럼 순서: [이메일, 담당자명, 현장명, 관리구역명, 수전전압, 계약용량, 수배전반개수, 측정개소명, 기본점검양식, 비고]
-      const [, , inspectorName, stationName, sectorLabel, voltage, capacity, panelCount, panelNamesRaw, defaultType, notes] = cells;
+      // 컬럼 순서(A~I): [담당자명, 현장명, 관리구역명, 수전전압, 계약용량, 수배전반개수, 측정개소명, 기본점검양식, 비고]
+      // row.values 는 1-based (index 0 은 비어있음) → 첫 항목만 건너뜀
+      const [, inspectorName, stationName, sectorLabel, voltage, capacity, panelCount, panelNamesRaw, defaultType, notes] = cells;
 
       if (!stationName) return; // 빈 행 스킵
 

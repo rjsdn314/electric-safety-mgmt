@@ -128,33 +128,14 @@ export default function StationUploadPage() {
     }
   };
 
-  // ─── 양식 다운로드: CSV로 생성 (엑셀에서 바로 열기 가능) ────────────
+  // ─── 양식 다운로드: 서버에서 .xlsx 생성 (업로드 형식과 동일) ────────────
   const downloadTemplate = () => {
-    const rows = [
-      // 1행: 안내문
-      ['담당자명', '현장명', '관리구역명', '수전전압', '계약용량', '수배전반 개수', '측정개소명(쉼표구분)', '기본점검양식(월차/분기/반기/연차)', '비고'],
-      // 2행: 예시 데이터
-      ['홍길동', '횡성휴게소(강릉방향)', '강원권', '22900', '1849', '2', '수배전반 #1,수배전반 #2', '월차', ''],
-    ];
-
-    const BOM = '\uFEFF'; // UTF-8 BOM (엑셀 한글 깨짐 방지)
-    const csv = BOM + rows.map(row =>
-      row.map(cell => {
-        const str = String(cell ?? '');
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      }).join(',')
-    ).join('\r\n');
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = '관리구역_등록양식.csv';
+    a.href = '/api/stations/template';
+    a.download = '관리구역_등록양식.xlsx';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    a.remove();
   };
 
   const inputStyle: React.CSSProperties = {
