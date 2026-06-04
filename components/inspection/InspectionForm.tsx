@@ -41,14 +41,15 @@ export function InspectionForm() {
       if (user) {
         const { data: profile } = await sb
           .from('profiles')
-          .select('inspector_name, name, sector_id')
+          .select('inspector_name, name, sector_id, role')
           .eq('id', user.id)
           .single();
         if (profile?.inspector_name) setInspector(profile.inspector_name);
         else if (profile?.name) setInspector(profile.name);
 
         let q = sb.from('stations').select('*').eq('is_active', true).order('name');
-        // sector 필터 제거: 등록한 모든 충전소가 점검 생성에서 선택 가능하도록
+        // 계정별 분리: 관리자가 아니면 본인이 등록한 현장만 선택 가능
+        if (profile?.role !== 'admin') q = q.eq('user_id', user.id);
         const { data } = await q;
         setStations(data || []);
       }
@@ -261,7 +262,7 @@ export function InspectionForm() {
           inspector_name: inspector,
           count,
           measure_sets: measureSets,
-          ground_resistance: measureSets.map(s=>s.ground),
+          ground_resistance: inspType==='반기' ? measureSets.map(s=>s.ground) : [],
           remarks: remarks || '특이사항없음',
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
@@ -463,7 +464,7 @@ export function InspectionForm() {
               </div>
             </div>
 
-            {(inspType==='분기'||inspType==='반기') && (
+            {inspType==='반기' && (
             <div style={{marginBottom:14}}>
               <label style={labelStyle}>접지저항 (Ω) — 별지2-접지저항 D{5 + idx}</label>
               <div style={{position:'relative',maxWidth:220}}>

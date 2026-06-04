@@ -42,22 +42,38 @@ export async function POST(req: NextRequest) {
     }];
     // 접지저항: 위치(수배전반 #N → D5+N) 보존을 위해 빈 값도 그대로 전달.
     // xmlFill이 인덱스별로 빈 칸은 건너뛰고 채운다.
-    const ground: any[] = Array.isArray(ground_resistance) ? ground_resistance : [];
+    // ※ 분기점검은 운영 기준상 접지저항 측정 제외 → 값을 강제로 비운다.
+    //   반기점검만 접지저항을 채운다.
+    const ground: any[] =
+      inspection_type === '반기' && Array.isArray(ground_resistance) ? ground_resistance : [];
+
+    // ── 양식 내 치환할 기존 안전관리자명 (DB settings.manager_name, 기본값 황건우) ──
+    // 등록 양식 파일에 인쇄돼 있는 고정 이름을 로그인 계정명으로 바꾸기 위함.
+    let replaceNames: string[] = ['황건우'];
+    try {
+      const { data: mn } = await sb.from('settings').select('value').eq('key', 'manager_name').maybeSingle();
+      if (mn?.value && !replaceNames.includes(mn.value)) replaceNames.push(mn.value);
+    } catch { /* settings 없어도 기본값 사용 */ }
 
     // ── 양식 소스 결정 ──
+    // 점검종별 → 양식 그룹 매핑. 분기는 분기 전용 양식, 반기는 반기 전용 양식(별지2 포함)을 사용.
     let tplBuffer: ArrayBuffer | null = null;
     let usedRegistered = false;
 
     if (inspection_type === '분기' || inspection_type === '반기') {
-      const { data: tpl } = await sb
-        .from('station_templates')
-        .select('file_path')
-        .eq('station_id', station_id)
-        .eq('inspection_group', '분기')
-        .maybeSingle();
-      if (tpl?.file_path) {
-        const { data: dl, error: dlErr } = await sb.storage.from('templates').download(tpl.file_path);
-        if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; }
+      // 1순위: 해당 종별 전용 그룹 양식 → 2순위(구버전 호환): '분기' 그룹 양식
+      const groupCandidates = inspection_type === '반기' ? ['반기', '분기'] : ['분기'];
+      for (const grp of groupCandidates) {
+        const { data: tpl } = await sb
+          .from('station_templates')
+          .select('file_path')
+          .eq('station_id', station_id)
+          .eq('inspection_group', grp)
+          .maybeSingle();
+        if (tpl?.file_path) {
+          const { data: dl, error: dlErr } = await sb.storage.from('templates').download(tpl.file_path);
+          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; break; }
+        }
       }
     }
 
@@ -81,6 +97,7 @@ export async function POST(req: NextRequest) {
         company_name: '',
         measure_sets: sets,
         ground_resistance: ground,
+        replace_names: replaceNames,
         remarks: remarks || '특이사항없음',
       });
     } else {
@@ -97,7 +114,7 @@ export async function POST(req: NextRequest) {
         measure_sets: sets,
         remarks: remarks || '특이사항없음',
       };
-      fillWorkbook(wb, data, { forceLowVerdicts: true });
+      fillWorkbook(wb, data, { forceLowVerdicts: true, replaceNames });
       buffer = Buffer.from(await wb.xlsx.writeBuffer());
     }
 

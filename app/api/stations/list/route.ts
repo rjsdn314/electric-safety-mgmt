@@ -26,8 +26,8 @@ export async function GET(_req: NextRequest) {
 
     let query = supabase.from('stations').select('*').eq('is_active', true).order('created_at', { ascending: false });
     if (profile?.role !== 'admin') {
-      if (!profile?.sector_id) return NextResponse.json({ success: true, stations: [] });
-      query = query.eq('sector_id', profile.sector_id);
+      // 본인이 등록한 현장만 노출 (계정별 분리)
+      query = query.eq('user_id', user.id);
     }
     const { data: stations, error } = await query;
     if (error) throw new Error(error.message);

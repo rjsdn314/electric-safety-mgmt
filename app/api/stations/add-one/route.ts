@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
 
     const { data: inserted, error: insErr } = await supabase.from('stations').insert({
       sector_id: sectorId,
+      user_id: user.id,
       name,
       base_name: name,
       voltage: Number(body.voltage) || 22900,

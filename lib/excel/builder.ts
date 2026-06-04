@@ -205,7 +205,7 @@ export function fillByeolji2(ws: ExcelJS.Worksheet, d: InspectionData) {
 export function fillWorkbook(
   wb: ExcelJS.Workbook,
   d: InspectionData,
-  opts?: { forceLowVerdicts?: boolean }
+  opts?: { forceLowVerdicts?: boolean; replaceNames?: string[] }
 ) {
   for (const ws of wb.worksheets) {
     const name = ws.name || '';
@@ -218,6 +218,23 @@ export function fillWorkbook(
     else if (isB14) fillByeolji14(ws, d);
     else if (isB7) fillByeolji7(ws, d);     // 모든 별지7에 동일 적용
     else if (isB2) fillByeolji2(ws, d);     // 모든 별지2에 동일 적용
+  }
+
+  // 양식에 인쇄된 기존 안전관리자명 → 로그인 계정명 치환 (모든 시트의 문자열 셀)
+  const names = opts?.replaceNames || [];
+  const repl = d.inspector_name || '';
+  if (repl && names.length) {
+    for (const ws of wb.worksheets) {
+      ws.eachRow({ includeEmpty: false }, (row) => {
+        row.eachCell({ includeEmpty: false }, (cell) => {
+          if (typeof cell.value === 'string') {
+            let s = cell.value;
+            for (const nm of names) { if (nm) s = s.split(nm).join(repl); }
+            if (s !== cell.value) cell.value = s;
+          }
+        });
+      });
+    }
   }
 }
 

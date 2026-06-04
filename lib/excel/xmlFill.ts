@@ -21,6 +21,7 @@ export interface FillData {
     current_A?: any; current_B?: any; current_C?: any; remarks?: string;
   }>;
   ground_resistance?: any[];   // 접지저항 측정값 (별지2-접지저항 D5↓)
+  replace_names?: string[];     // 양식에 인쇄된 기존 안전관리자명 → inspector_name 으로 치환
   remarks: string;
 }
 
@@ -114,6 +115,22 @@ function replaceDates(xml: string, shared: string[], date: string, maxRow: numbe
 
 function num(v: any) { return v !== '' && v !== null && v !== undefined && !isNaN(Number(v)) ? Number(v) : null; }
 
+// ── 양식에 고정 인쇄된 안전관리자/점검자/서명 이름을 로그인 계정명으로 치환 ──
+// sharedStrings.xml(<t> 내부) 및 시트 inline 문자열(<t> 내부) 모두에 적용.
+// 부분 문자열도 치환하므로 별지14의 "(성 명) 황건우 (서명)" 같은 결합 셀도 처리된다.
+function replaceNamesInXml(xml: string, names: string[], replacement: string): string {
+  if (!replacement || !names || !names.length) return xml;
+  return xml.replace(/(<t[^>]*>)([\s\S]*?)(<\/t>)/g, (full, open, inner, close) => {
+    let s = inner;
+    for (const nm of names) {
+      if (!nm) continue;
+      // XML 이스케이프된 형태/원문 모두 안전하게 단순 치환
+      s = s.split(nm).join(xmlEsc(replacement));
+    }
+    return s === inner ? full : `${open}${s}${close}`;
+  });
+}
+
 function fillByeolji1(xml: string, d: FillData): string {
   const t = ymd(d.date);
   xml = setCell(xml, 'B2', d.station_name, false);
@@ -185,7 +202,11 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   for (const m of rels.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) ridToTarget.set(m[1], m[2]);
 
   const ssFile = zip.file('xl/sharedStrings.xml');
-  const shared = ssFile ? parseShared(await ssFile.async('string')) : [];
+  const ssRaw = ssFile ? await ssFile.async('string') : '';
+  const shared = ssRaw ? parseShared(ssRaw) : [];
+
+  const names = d.replace_names || [];
+  const repl = d.inspector_name || '';
 
   for (const [name, rid] of nameToRid) {
     const target = ridToTarget.get(rid); if (!target) continue;
@@ -204,9 +225,22 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     else if (isB7) xml = fillByeolji7(xml, shared, d);
     else if (isGround) xml = fillByeolji2Ground(xml, shared, d);
     else if (isB2) xml = fillByeolji2(xml, shared, d);
-    else continue;
+    else {
+      // 별지 매핑이 없는 시트도 이름 치환은 적용 (inline 문자열 한정)
+      const nx = replaceNamesInXml(xml, names, repl);
+      if (nx !== xml) zip.file(path, nx);
+      continue;
+    }
 
+    // 채운 시트의 inline 문자열에 대해서도 이름 치환 적용
+    xml = replaceNamesInXml(xml, names, repl);
     zip.file(path, xml);
+  }
+
+  // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)
+  if (ssRaw && repl && names.length) {
+    const newSs = replaceNamesInXml(ssRaw, names, repl);
+    if (newSs !== ssRaw) zip.file('xl/sharedStrings.xml', newSs);
   }
 
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });

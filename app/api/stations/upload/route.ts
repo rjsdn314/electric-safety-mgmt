@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
 
       rows.push({
         sector_id:    sectorId,
+        user_id:      user.id,
         name:         String(stationName).trim(),
         base_name:    String(stationName).trim(),
         voltage:      Number(voltage) || 22900,
@@ -123,17 +124,17 @@ export async function POST(req: NextRequest) {
     let inserted = 0, updated = 0;
     for (const r of rows) {
       const { data: existing } = await supabase
-        .from('stations').select('id').eq('name', r.name).limit(1);
+        .from('stations').select('id').eq('name', r.name).eq('user_id', user.id).limit(1);
 
       if (existing && existing.length > 0) {
-        // 기존 충전소: 같은 이름의 모든 행을 제자리 업데이트(id 보존 → CASCADE 미발생)
+        // 본인 소유의 동일명 충전소만 제자리 업데이트(id 보존 → CASCADE 미발생)
         const { error: upErr } = await supabase.from('stations').update({
           voltage:       r.voltage,
           capacity:      r.capacity,
           panel_count:   r.panel_count,
           custom_values: r.custom_values,
           updated_at:    new Date().toISOString(),
-        }).eq('name', r.name);
+        }).eq('name', r.name).eq('user_id', user.id);
         if (upErr) throw new Error(`업데이트 실패(${r.name}): ${upErr.message}`);
         updated++;
       } else {
