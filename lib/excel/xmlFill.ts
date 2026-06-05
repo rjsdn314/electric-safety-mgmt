@@ -177,7 +177,11 @@ function fillByeolji14(xml: string, shared: string[], d: FillData): string {
   const vNum = parseInt(d.voltage.replace(/[^0-9]/g, '') || '0', 10);
   const cNum = d.capacity.replace(/[^0-9]/g, '');
   xml = setCell(xml, 'C8', d.is_high_voltage ? `${vNum.toLocaleString()}[V] / ${cNum}[㎾]` : `${vNum}[V]/ ${cNum}[㎾]`, false);
-  xml = setCell(xml, 'C38', d.remarks || '특이사항없음', false);
+  // 종합의견(C38): 직접 입력값 우선. 비어 있고 개소별 특이사항이 하나라도 있으면
+  // '특이사항없음'을 적지 않고 공란으로 둔다. 모두 없을 때만 '특이사항없음'.
+  const hasPanelRemark14 = (d.measure_sets || []).some((s) => s.remarks && String(s.remarks).trim());
+  const overall14 = (d.remarks && d.remarks.trim()) ? d.remarks : (hasPanelRemark14 ? '' : '특이사항없음');
+  xml = setCell(xml, 'C38', overall14, false);
   return xml;
 }
 

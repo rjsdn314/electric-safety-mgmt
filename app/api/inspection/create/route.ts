@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
         measure_sets: sets,
         ground_resistance: ground,
         replace_names: replaceNames,
-        remarks: remarks || '특이사항없음',
+        remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
       });
     } else {
       // 공용 폴백: 기존 ExcelJS 경로
@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
         date, inspection_type, count: count || 1, inspector_name,
         company_name: '',
         measure_sets: sets,
-        remarks: remarks || '특이사항없음',
+        remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리
       };
       fillWorkbook(wb, data, { forceLowVerdicts: true, replaceNames });
       buffer = Buffer.from(await wb.xlsx.writeBuffer());

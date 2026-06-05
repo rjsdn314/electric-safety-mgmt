@@ -176,7 +176,11 @@ export function fillByeolji14(ws: ExcelJS.Worksheet, d: InspectionData) {
   if (d.charger_maker) setCell(ws, 'E13', d.charger_maker);
   if (d.charger_model) setCell(ws, 'H13', d.charger_model);
   if (d.insulation_resistance) setCell(ws, 'K36', d.insulation_resistance);
-  setCell(ws, 'C38', d.remarks || '특이사항없음');
+  // 종합의견(C38): 직접 입력값 우선. 비어 있고 개소별 특이사항이 하나라도 있으면
+  // '특이사항없음'을 적지 않고 공란으로 둔다. 모두 없을 때만 '특이사항없음'.
+  const hasPanelRemark14 = (d.measure_sets || []).some((s) => s.remarks && String(s.remarks).trim());
+  const overall14 = (d.remarks && d.remarks.trim()) ? d.remarks : (hasPanelRemark14 ? '' : '특이사항없음');
+  setCell(ws, 'C38', overall14);
 }
 
 // ============================================================

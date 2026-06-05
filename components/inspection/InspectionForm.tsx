@@ -263,7 +263,7 @@ export function InspectionForm() {
           count,
           measure_sets: measureSets,
           ground_resistance: (inspType==='반기'||inspType==='연차') ? measureSets.map(s=>s.ground) : [],
-          remarks: remarks || '특이사항없음',
+          remarks: remarks,   // 종합의견 빈값은 서버/엔진에서 처리(개소 특이사항 있으면 공란 유지)
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
       });
