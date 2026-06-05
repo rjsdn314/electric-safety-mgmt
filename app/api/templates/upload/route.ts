@@ -19,6 +19,9 @@ function admin() {
   );
 }
 
+// 그룹별 Storage 저장 파일명 (키는 ASCII만 허용되므로 한글 그룹명을 직접 키로 쓰지 않는다)
+const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx', '연차': 'annual.xlsx' };
+
 // 충전소명 정규화: 공백/괄호/방향/말미 날짜숫자 제거 후 비교
 function normName(s: string): string {
   return (s || '')
@@ -82,7 +85,9 @@ export async function POST(req: NextRequest) {
       const clean = await normalizeXlsx(raw);
       const meta = await detectSheetMeta(clean);
 
-      const path = `${matched.id}/${inspectionGroup}.xlsx`;
+      // Supabase Storage 키는 ASCII만 허용 → 한글 그룹명 대신 ASCII 파일명 매핑 사용
+      // (finalize 라우트와 동일 규칙: 분기=quarterly, 반기=semiannual, 연차=annual)
+      const path = `${matched.id}/${GROUP_FILE[inspectionGroup] || 'quarterly.xlsx'}`;
       const { error: upErr } = await sb.storage
         .from('templates')
         .upload(path, clean, {
