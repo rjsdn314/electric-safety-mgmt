@@ -39,6 +39,12 @@ export default function StationUploadPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [stationQuery, setStationQuery] = useState('');
 
+  // 등록된 관리구역 수정
+  const [editing, setEditing] = useState<any>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editErr, setEditErr] = useState('');
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     acceptFile(e.target.files?.[0]);
   };
@@ -100,6 +106,36 @@ export default function StationUploadPage() {
       setForm({ ...emptyForm });
       await loadStations();
     } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
+  };
+
+  const startEdit = (st: any) => {
+    setEditErr('');
+    setEditing(st);
+    const pn = st.custom_values?.panel_names;
+    setEditForm({
+      name: st.name || '',
+      sector_label: st.custom_values?.sector_label || '',
+      voltage: st.voltage ?? '',
+      capacity: st.capacity ?? '',
+      panel_count: st.panel_count ?? 1,
+      panel_names: Array.isArray(pn) ? pn.join(', ') : (pn || ''),
+      notes: st.custom_values?.notes || '',
+    });
+  };
+  const cancelEdit = () => { setEditing(null); setEditForm(null); setEditErr(''); };
+  const saveEdit = async () => {
+    if (!editForm?.name?.trim()) { setEditErr('현장명을 입력해주세요'); return; }
+    setSavingEdit(true); setEditErr('');
+    try {
+      const res = await fetch('/api/stations/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editing.id, ...editForm }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '수정 실패');
+      setStations(prev => prev.map(s => (s.id === editing.id ? data.station : s)));
+      cancelEdit();
+    } catch (e: any) { setEditErr(e.message); } finally { setSavingEdit(false); }
   };
 
   const handleDeleteStation = async (st: any) => {
@@ -387,12 +423,56 @@ export default function StationUploadPage() {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
               {filtered.map(st => (
-                <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.custom_values?.default_type || ''}</div>
+                <div key={st.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-elevated, rgba(0,0,0,.02))', border: '1px solid var(--border)' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>{st.voltage}V · {st.capacity}kW · 수배전반 {st.panel_count}개 · {st.custom_values?.default_type || ''}</div>
+                    </div>
+                    <button onClick={() => (editing?.id === st.id ? cancelEdit() : startEdit(st))} title="수정" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(0,102,255,0.1)', color: 'var(--blue, #0066ff)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>✏️ 수정</button>
+                    <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
                   </div>
-                  <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ padding: '6px 12px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0 }}>🗑️ 삭제</button>
+
+                  {editing?.id === st.id && editForm && (
+                    <div style={{ marginTop: 8, padding: '16px 16px 18px', borderRadius: 10, border: '1.5px solid var(--blue, #0066ff)', background: 'rgba(0,102,255,.03)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 12, color: 'var(--blue, #0066ff)' }}>관리구역 수정</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }} className="add-grid">
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>현장명 *</label>
+                          <input style={inputStyle} value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>관리구역명</label>
+                          <input style={inputStyle} value={editForm.sector_label} onChange={e => setEditForm({ ...editForm, sector_label: e.target.value })} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수전전압 (V)</label>
+                          <input style={inputStyle} type="number" value={editForm.voltage} onChange={e => setEditForm({ ...editForm, voltage: e.target.value })} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>계약용량 (kW)</label>
+                          <input style={inputStyle} type="number" value={editForm.capacity} onChange={e => setEditForm({ ...editForm, capacity: e.target.value })} />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>점검개소 수 (수배전반)</label>
+                          <input style={inputStyle} type="number" min={1} value={editForm.panel_count} onChange={e => setEditForm({ ...editForm, panel_count: e.target.value })} />
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>점검개소명 (쉼표로 구분)</label>
+                          <input style={inputStyle} placeholder="예: 수배전반-1, 수배전반-2" value={editForm.panel_names} onChange={e => setEditForm({ ...editForm, panel_names: e.target.value })} />
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>비고</label>
+                          <input style={inputStyle} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
+                        </div>
+                      </div>
+                      {editErr && (<div style={{ marginTop: 10, fontSize: 12, color: '#ef4444' }}>❌ {editErr}</div>)}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                        <button onClick={saveEdit} disabled={savingEdit} style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: savingEdit ? 'var(--border)' : 'linear-gradient(135deg, #0066ff, #0052cc)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: savingEdit ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>{savingEdit ? '저장 중...' : '💾 저장'}</button>
+                        <button onClick={cancelEdit} disabled={savingEdit} style={{ padding: '11px 18px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--mid)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -21,7 +21,7 @@ export default function HistoryPage() {
 
     let q = sb.from('inspections')
       .select('*')
-      .order('inspection_date', { ascending: false })
+      .order('created_at', { ascending: false })   // 최신 생성 항목이 최상단
       .limit(100);
     if (filterType !== '전체') q = q.eq('inspection_type', filterType);
 
@@ -274,6 +274,52 @@ export default function HistoryPage() {
     }
   };
 
+  // 로컬에 저장된 엑셀 파일만 삭제 (점검이력 레코드는 보존)
+  const deleteLocalFile = async (item: any) => {
+    if (!('showDirectoryPicker' in window)) {
+      alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.');
+      return;
+    }
+    if (!confirm(`해당 로컬 파일을 삭제하시겠습니까?\n\n${item.file_name}\n\n(점검이력은 그대로 유지되며, PC에 저장된 엑셀 파일만 삭제됩니다.)`)) return;
+    try {
+      setSavingId(item.id);
+      // 충전소별로 기억된 저장 폴더 핸들
+      const handle = await getStationFolder(item);
+      if (!handle) { alert('이 충전소의 저장 폴더 기록이 없어 로컬 파일 위치를 찾을 수 없습니다.\n점검 생성/저장 시 지정한 폴더가 있어야 삭제할 수 있습니다.'); return; }
+      const perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') {
+        const np = await handle.requestPermission({ mode: 'readwrite' });
+        if (np !== 'granted') { alert('폴더 접근 권한이 필요합니다.'); return; }
+      }
+      // 저장 구조: {루트}/{YYYYMMDD_충전소명_종별}/파일 (InspectionForm·saveOneToPc와 동일)
+      const dateNum = (item.inspection_date || '').replace(/-/g, '');
+      const stName = item.station?.name || item.station?.base_name || 'unknown';
+      const subFolderName = `${dateNum}_${stName}_${item.inspection_type}`;
+      const fileName = item.file_name || `${stName}_${item.inspection_type}점검_${dateNum}.xlsx`;
+      let removed = false;
+      try {
+        const sub = await handle.getDirectoryHandle(subFolderName);
+        await sub.removeEntry(fileName);
+        removed = true;
+        // 하위 폴더가 비면 함께 정리
+        try { let empty = true; for await (const _e of (sub as any).values()) { empty = false; break; } if (empty) await handle.removeEntry(subFolderName); } catch {}
+      } catch (e) {
+        // 하위 폴더 없이 루트에 바로 저장된 경우도 시도
+        try { await handle.removeEntry(fileName); removed = true; } catch {}
+      }
+      // DB에 로컬 삭제 표시 (이력은 보존)
+      const sb = createClient();
+      const newMv = { ...(item.measure_values || {}), local_deleted: true, saved_to_pc: false };
+      await sb.from('inspections').update({ measure_values: newMv }).eq('id', item.id);
+      setItems(prev => prev.map(it => it.id === item.id ? { ...it, measure_values: newMv } : it));
+      alert(removed ? `✅ 로컬 파일을 삭제했습니다.\n\n${fileName}` : `로컬 파일을 찾지 못했습니다(이미 삭제되었을 수 있음). "파일 없음"으로 표시합니다.`);
+    } catch (e: any) {
+      if (e.name !== 'AbortError') alert('로컬 파일 삭제 실패: ' + e.message);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   const filtered = items.filter(i =>
     !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
   );
@@ -323,7 +369,7 @@ export default function HistoryPage() {
         ) : filtered.length === 0 ? (
           <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
         ) : (
-          filtered.slice(0, visibleCount).map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].inspection_date||'').slice(0,7) !== (item.inspection_date||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.inspection_date||'').slice(0,7)}</div>)}
+          filtered.slice(0, visibleCount).map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>)}
             <div key={item.id} style={{display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr 100px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center'}}>
               <div style={{fontWeight: 600}}>
                 {item.station?.name || '-'}
@@ -337,7 +383,12 @@ export default function HistoryPage() {
               <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span></div>
               <div>{item.inspection_date}</div>
               <div>{item.inspector_name}</div>
-              <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>{item.file_name}</div>
+              <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>
+                {item.file_name}
+                {item.measure_values?.local_deleted && (
+                  <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>
+                )}
+              </div>
               <div style={{display: 'flex', gap: 6, justifyContent: 'center'}}>
                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
                   <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{
@@ -351,7 +402,13 @@ export default function HistoryPage() {
                     textDecoration: 'none', fontSize: 14, lineHeight: 1
                   }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
                 )}
-                <button onClick={() => handleDelete(item)} title="삭제" style={{
+                {isDesktop && !item.measure_values?.local_deleted && (
+                  <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬 저장 파일 삭제" style={{
+                    padding: 6, borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706',
+                    border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 14, lineHeight: 1
+                  }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4v6h6"/><path d="M4 10a8 8 0 1 1 2 5"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg></button>
+                )}
+                <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{
                   padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
                   border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1
                 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>

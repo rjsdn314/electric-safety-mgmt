@@ -119,6 +119,18 @@ function replaceDates(xml: string, shared: string[], date: string, maxRow: numbe
 
 function num(v: any) { return v !== '' && v !== null && v !== undefined && !isNaN(Number(v)) ? Number(v) : null; }
 
+// 컬럼 번호(1-base) → 문자 (8 → "H", 31 → "AE")
+function numToCol(n: number): string { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+// 셀 내용만 비우고 스타일(s=)은 보존 (병합/테두리 유지). 없으면 그대로.
+function clearCell(xml: string, ref: string): string {
+  const cellRe = new RegExp(`<c r="${ref}"([^>]*?)(/>|>[\\s\\S]*?</c>)`);
+  return xml.replace(cellRe, (_full, attrs) => {
+    const s = (attrs.match(/\ss="\d+"/) || [''])[0];
+    return `<c r="${ref}"${s}/>`;
+  });
+}
+
 // ── 양식에 고정 인쇄된 안전관리자/점검자/서명 이름을 로그인 계정명으로 치환 ──
 // sharedStrings.xml(<t> 내부) 및 시트 inline 문자열(<t> 내부) 모두에 적용.
 // 부분 문자열도 치환하므로 별지14의 "(성 명) 황건우 (서명)" 같은 결합 셀도 처리된다.
@@ -175,6 +187,11 @@ function fillByeolji7(xml: string, shared: string[], d: FillData): string {
   xml = setCell(xml, 'AE3', +t.m, true);
   xml = setCell(xml, 'AI3', +t.d, true);
   xml = replaceDates(xml, shared, d.date, 5);
+  // 기본값 비우기: 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거.
+  // 사용자가 직접 입력하기 전까지 공란으로 생성한다. (H=8 ~ AE=31)
+  for (const row of [13, 15, 17]) {
+    for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
+  }
   return xml;
 }
 
@@ -190,6 +207,23 @@ function fillByeolji2Ground(xml: string, shared: string[], d: FillData): string 
 
 function fillByeolji2(xml: string, shared: string[], d: FillData): string {
   return replaceDates(xml, shared, d.date, 8);
+}
+
+// 드로잉에서 임베드 이미지(<xdr:pic>)를 포함한 앵커를 제거 → 기본 사진 공란화.
+// 도형(<xdr:sp>: 격자/타원 등)은 보존한다. (앵커는 중첩되지 않으므로 lazy 매칭 안전)
+function removeDrawingPics(dx: string): string {
+  return dx.replace(/<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:\1>/g,
+    (block, _t) => block.includes('<xdr:pic>') ? '' : block);
+}
+
+// 점검종별 타원(prst="ellipse") 앵커의 from/to 열·열오프셋을 지정 좌표로 교체 → 타원을 가로 이동.
+function moveTitleEllipse(dx: string, from: { col: number; colOff: number }, to: { col: number; colOff: number }): string {
+  return dx.replace(/<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:\1>/g, (block) => {
+    if (!/prst="ellipse"/.test(block)) return block;
+    let b = block.replace(/(<xdr:from>\s*<xdr:col>)\d+(<\/xdr:col>\s*<xdr:colOff>)\d+(<\/xdr:colOff>)/, `$1${from.col}$2${from.colOff}$3`);
+    b = b.replace(/(<xdr:to>\s*<xdr:col>)\d+(<\/xdr:col>\s*<xdr:colOff>)\d+(<\/xdr:colOff>)/, `$1${to.col}$2${to.colOff}$3`);
+    return b;
+  });
 }
 
 // ── 메인 ──
@@ -221,6 +255,8 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   // (반기점검은 같은 양식을 폴백으로 쓰므로 별지2 시트를 모두 유지한다)
   const removeB2 = d.inspection_type === '분기';
   const toRemove: Array<{ rid: string; target: string }> = [];
+  // 드로잉 후처리 대상: 별지7(사진 제거 + 반기 타원이동), 별지2-절연(반기 타원이동)
+  const drawingTargets: Array<{ path: string; kind: 'b7' | 'b2' }> = [];
 
   for (const [name, rid] of nameToRid) {
     const target = ridToTarget.get(rid); if (!target) continue;
@@ -233,6 +269,9 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     const isB7 = name.includes('별지7');
     const isB2 = name.includes('별지2');
     const isGround = isB2 && name.includes('접지');
+
+    if (isB7) drawingTargets.push({ path, kind: 'b7' });
+    else if (isB2 && !removeB2 && name.includes('절연')) drawingTargets.push({ path, kind: 'b2' });
 
     if (isB2 && removeB2) {
       // 분기: 별지2(접지저항/절연저항) 모두 채우지 않고 삭제 대상으로 표시
@@ -282,6 +321,28 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     zip.file('xl/workbook.xml', curWbx);
     zip.file('xl/_rels/workbook.xml.rels', curRels);
     if (ct) zip.file('[Content_Types].xml', ct);
+  }
+
+  // ── 드로잉 후처리 ──
+  //  · 별지7: 양식에 박혀 있던 기본 열화상 사진(임베드 이미지)을 제거 → 사진 미첨부 시 공란 생성
+  //  · 반기: 점검종별 동그라미(타원 도형)가 양식상 '분기' 위에 그려져 있어, '반기' 위로 이동
+  //    (분기·반기·연차 균등 간격, 별지7/별지2-절연 각각 측정한 좌표로 보정)
+  const isHalf = d.inspection_type === '반기';
+  for (const { path, kind } of drawingTargets) {
+    const sx = await zip.file(path)?.async('string'); if (!sx) continue;
+    const dm = sx.match(/<drawing r:id="([^"]+)"/); if (!dm) continue;
+    const relsPath = path.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
+    const dr = await zip.file(relsPath)?.async('string'); if (!dr) continue;
+    const tm = dr.match(new RegExp(`Id="${dm[1]}"[^>]*Target="([^"]+)"`)) || dr.match(new RegExp(`Target="([^"]+)"[^>]*Id="${dm[1]}"`));
+    if (!tm) continue;
+    const dp = 'xl/' + tm[1].replace(/^\.\.\//, '').replace(/^\//, '');
+    const df = zip.file(dp); if (!df) continue;
+    let dx = await df.async('string');
+    const before = dx;
+    if (kind === 'b7') dx = removeDrawingPics(dx);
+    if (isHalf && kind === 'b7') dx = moveTitleEllipse(dx, { col: 27, colOff: 133350 }, { col: 31, colOff: 19050 });
+    if (isHalf && kind === 'b2') dx = moveTitleEllipse(dx, { col: 6, colOff: 926306 }, { col: 7, colOff: 450056 });
+    if (dx !== before) zip.file(dp, dx);
   }
 
   // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)
