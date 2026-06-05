@@ -196,10 +196,15 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   const wbx = await zip.file('xl/workbook.xml')!.async('string');
   const nameToRid = new Map<string, string>();
   for (const m of wbx.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)) nameToRid.set(m[1], m[2]);
-  // rels: rId → target
+  // rels: rId → target (속성 순서 무관)
   const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
   const ridToTarget = new Map<string, string>();
-  for (const m of rels.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) ridToTarget.set(m[1], m[2]);
+  for (const m of rels.matchAll(/<Relationship\b[^>]*\/>/g)) {
+    const tag = m[0];
+    const id = (tag.match(/Id="([^"]+)"/) || [])[1];
+    const tg = (tag.match(/Target="([^"]+)"/) || [])[1];
+    if (id && tg) ridToTarget.set(id, tg);
+  }
 
   const ssFile = zip.file('xl/sharedStrings.xml');
   const ssRaw = ssFile ? await ssFile.async('string') : '';
@@ -207,6 +212,12 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
 
   const names = d.replace_names || [];
   const repl = d.inspector_name || '';
+
+  // 분기점검은 접지저항 측정 제외 → 별지2-접지저항 시트를 출력에서 완전히 삭제.
+  // (반기점검은 같은 양식을 폴백으로 쓰므로 시트를 유지한다)
+  const removeGround = d.inspection_type === '분기';
+  let groundRid: string | null = null;
+  let groundTarget: string | null = null;
 
   for (const [name, rid] of nameToRid) {
     const target = ridToTarget.get(rid); if (!target) continue;
@@ -219,6 +230,12 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     const isB7 = name.includes('별지7');
     const isB2 = name.includes('별지2');
     const isGround = isB2 && name.includes('접지');
+
+    if (isGround && removeGround) {
+      // 분기: 이 시트는 채우지 않고 삭제 대상으로 표시
+      groundRid = rid; groundTarget = target;
+      continue;
+    }
 
     if (isB1) xml = fillByeolji1(xml, d);
     else if (isB14) xml = fillByeolji14(xml, shared, d);
@@ -235,6 +252,41 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     // 채운 시트의 inline 문자열에 대해서도 이름 치환 적용
     xml = replaceNamesInXml(xml, names, repl);
     zip.file(path, xml);
+  }
+
+  // 별지2-접지저항 시트 실제 삭제 (workbook.xml / rels / 시트파일 / Content_Types / calcChain)
+  if (removeGround && groundRid) {
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let newWbx = wbx.replace(new RegExp(`<sheet\\b[^>]*r:id="${esc(groundRid)}"[^>]*/>`), '');
+    zip.file('xl/workbook.xml', newWbx);
+    let newRels = rels.replace(new RegExp(`<Relationship\\b[^>]*Id="${esc(groundRid)}"[^>]*/>`), '');
+    zip.file('xl/_rels/workbook.xml.rels', newRels);
+    if (groundTarget) {
+      const gp = 'xl/' + groundTarget.replace(/^\//, '').replace(/^xl\//, '');
+      zip.remove(gp);
+      const ctF = zip.file('[Content_Types].xml');
+      if (ctF) {
+        const ct = await ctF.async('string');
+        const newCt = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(gp)}"[^>]*/>`), '');
+        if (newCt !== ct) zip.file('[Content_Types].xml', newCt);
+      }
+      // 시트 인덱스가 바뀌면 calcChain 참조가 깨질 수 있으므로 제거(엑셀이 자동 재생성)
+      if (zip.file('xl/calcChain.xml')) {
+        zip.remove('xl/calcChain.xml');
+        const ctF2 = zip.file('[Content_Types].xml');
+        if (ctF2) {
+          const ct2 = await ctF2.async('string');
+          const newCt2 = ct2.replace(/<Override\b[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/>/, '');
+          if (newCt2 !== ct2) zip.file('[Content_Types].xml', newCt2);
+        }
+        const relF = zip.file('xl/_rels/workbook.xml.rels');
+        if (relF) {
+          const r2 = await relF.async('string');
+          const nr2 = r2.replace(/<Relationship\b[^>]*Target="calcChain\.xml"[^>]*\/>/, '');
+          if (nr2 !== r2) zip.file('xl/_rels/workbook.xml.rels', nr2);
+        }
+      }
+    }
   }
 
   // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)
