@@ -213,11 +213,10 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   const names = d.replace_names || [];
   const repl = d.inspector_name || '';
 
-  // 분기점검은 접지저항 측정 제외 → 별지2-접지저항 시트를 출력에서 완전히 삭제.
-  // (반기점검은 같은 양식을 폴백으로 쓰므로 시트를 유지한다)
-  const removeGround = d.inspection_type === '분기';
-  let groundRid: string | null = null;
-  let groundTarget: string | null = null;
+  // 분기점검은 접지저항·절연저항 측정 제외 → 별지2 시트(접지저항+절연저항)를 출력에서 완전히 삭제.
+  // (반기점검은 같은 양식을 폴백으로 쓰므로 별지2 시트를 모두 유지한다)
+  const removeB2 = d.inspection_type === '분기';
+  const toRemove: Array<{ rid: string; target: string }> = [];
 
   for (const [name, rid] of nameToRid) {
     const target = ridToTarget.get(rid); if (!target) continue;
@@ -231,9 +230,9 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     const isB2 = name.includes('별지2');
     const isGround = isB2 && name.includes('접지');
 
-    if (isGround && removeGround) {
-      // 분기: 이 시트는 채우지 않고 삭제 대상으로 표시
-      groundRid = rid; groundTarget = target;
+    if (isB2 && removeB2) {
+      // 분기: 별지2(접지저항/절연저항) 모두 채우지 않고 삭제 대상으로 표시
+      toRemove.push({ rid, target });
       continue;
     }
 
@@ -254,39 +253,31 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     zip.file(path, xml);
   }
 
-  // 별지2-접지저항 시트 실제 삭제 (workbook.xml / rels / 시트파일 / Content_Types / calcChain)
-  if (removeGround && groundRid) {
+  // 별지2 시트 실제 삭제 (workbook.xml / rels / 시트파일 / Content_Types / calcChain)
+  if (removeB2 && toRemove.length) {
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    let newWbx = wbx.replace(new RegExp(`<sheet\\b[^>]*r:id="${esc(groundRid)}"[^>]*/>`), '');
-    zip.file('xl/workbook.xml', newWbx);
-    let newRels = rels.replace(new RegExp(`<Relationship\\b[^>]*Id="${esc(groundRid)}"[^>]*/>`), '');
-    zip.file('xl/_rels/workbook.xml.rels', newRels);
-    if (groundTarget) {
-      const gp = 'xl/' + groundTarget.replace(/^\//, '').replace(/^xl\//, '');
+    let curWbx = wbx;
+    let curRels = rels;
+    let ct = (zip.file('[Content_Types].xml')) ? await zip.file('[Content_Types].xml')!.async('string') : '';
+
+    for (const { rid, target } of toRemove) {
+      curWbx = curWbx.replace(new RegExp(`<sheet\\b[^>]*r:id="${esc(rid)}"[^>]*/>`), '');
+      curRels = curRels.replace(new RegExp(`<Relationship\\b[^>]*Id="${esc(rid)}"[^>]*/>`), '');
+      const gp = 'xl/' + target.replace(/^\//, '').replace(/^xl\//, '');
       zip.remove(gp);
-      const ctF = zip.file('[Content_Types].xml');
-      if (ctF) {
-        const ct = await ctF.async('string');
-        const newCt = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(gp)}"[^>]*/>`), '');
-        if (newCt !== ct) zip.file('[Content_Types].xml', newCt);
-      }
-      // 시트 인덱스가 바뀌면 calcChain 참조가 깨질 수 있으므로 제거(엑셀이 자동 재생성)
-      if (zip.file('xl/calcChain.xml')) {
-        zip.remove('xl/calcChain.xml');
-        const ctF2 = zip.file('[Content_Types].xml');
-        if (ctF2) {
-          const ct2 = await ctF2.async('string');
-          const newCt2 = ct2.replace(/<Override\b[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/>/, '');
-          if (newCt2 !== ct2) zip.file('[Content_Types].xml', newCt2);
-        }
-        const relF = zip.file('xl/_rels/workbook.xml.rels');
-        if (relF) {
-          const r2 = await relF.async('string');
-          const nr2 = r2.replace(/<Relationship\b[^>]*Target="calcChain\.xml"[^>]*\/>/, '');
-          if (nr2 !== r2) zip.file('xl/_rels/workbook.xml.rels', nr2);
-        }
-      }
+      if (ct) ct = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(gp)}"[^>]*/>`), '');
     }
+
+    // 시트 인덱스가 바뀌면 calcChain 참조가 깨질 수 있으므로 제거(엑셀이 자동 재생성)
+    if (zip.file('xl/calcChain.xml')) {
+      zip.remove('xl/calcChain.xml');
+      if (ct) ct = ct.replace(/<Override\b[^>]*PartName="\/xl\/calcChain\.xml"[^>]*\/>/, '');
+      curRels = curRels.replace(/<Relationship\b[^>]*Target="calcChain\.xml"[^>]*\/>/, '');
+    }
+
+    zip.file('xl/workbook.xml', curWbx);
+    zip.file('xl/_rels/workbook.xml.rels', curRels);
+    if (ct) zip.file('[Content_Types].xml', ct);
   }
 
   // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)
