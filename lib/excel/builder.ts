@@ -36,13 +36,15 @@ export interface InspectionData {
 }
 
 // 별지1 수배전반별 측정값 셀 매핑 (#1, #2, #3 ...)
+// 개소마다 병합 행높이가 달라 균등 간격이 아니다. 각 셀은 병합셀(R{n}:S{m}, T{n}:V{m})의
+// 좌상단 앵커여야 값이 보인다. 앵커가 아닌 칸에 쓰면 병합에 가려 누락된다.
 const PANEL_CELL_MAP: Array<{
   v: { A: string; B: string; C: string; N: string };
   i: { A: string; B: string; C: string };
 }> = [
   { v: { A: 'R13', B: 'R14', C: 'R16', N: 'R19' }, i: { A: 'T13', B: 'T14', C: 'T16' } },
-  { v: { A: 'R23', B: 'R24', C: 'R26', N: 'R29' }, i: { A: 'T23', B: 'T24', C: 'T26' } },
-  { v: { A: 'R33', B: 'R34', C: 'R36', N: 'R39' }, i: { A: 'T33', B: 'T34', C: 'T36' } },
+  { v: { A: 'R23', B: 'R26', C: 'R28', N: 'R30' }, i: { A: 'T23', B: 'T26', C: 'T28' } },
+  { v: { A: 'R32', B: 'R33', C: 'R35', N: 'R37' }, i: { A: 'T32', B: 'T33', C: 'T35' } },
 ];
 
 // ── 날짜 포맷 헬퍼 ──
