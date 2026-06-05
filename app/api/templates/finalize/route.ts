@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     );
 
     // 그룹별 저장 파일명 (기존 분기 등록 호환을 위해 분기는 quarterly.xlsx 유지)
-    const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx' };
+    const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx', '연차': 'annual.xlsx' };
     const path = `${station_id}/${GROUP_FILE[inspection_group] || 'quarterly.xlsx'}`;
 
     // 1) 방금 브라우저가 올린 원본 내려받기

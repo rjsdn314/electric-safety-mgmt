@@ -1,9 +1,9 @@
 // ============================================================
 // app/api/inspection/create/route.ts  (v3.3)
 // 점검표 생성 — 충전소별 등록 양식 우선 사용
-//  · 분기/반기: station_templates 전용 양식 → XML 직접수정 엔진(buildInspectionXlsx)
-//    으로 생성 → 원본 테두리/서식 100% 보존 + 접지저항 입력 반영
-//  · 월차/연차(또는 등록양식 없음): 기존 공용 고압/저압 템플릿 + ExcelJS 폴백
+//  · 분기/반기/연차: station_templates 전용 양식 → XML 직접수정 엔진(buildInspectionXlsx)
+//    으로 생성 → 원본 테두리/서식 100% 보존 + 접지저항 입력 반영(반기·연차)
+//  · 월차(또는 등록양식 없음): 기존 공용 고압/저압 템플릿 + ExcelJS 폴백
 // ============================================================
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
@@ -43,9 +43,10 @@ export async function POST(req: NextRequest) {
     // 접지저항: 위치(수배전반 #N → D5+N) 보존을 위해 빈 값도 그대로 전달.
     // xmlFill이 인덱스별로 빈 칸은 건너뛰고 채운다.
     // ※ 분기점검은 운영 기준상 접지저항 측정 제외 → 값을 강제로 비운다.
-    //   반기점검만 접지저항을 채운다.
+    //   반기·연차점검만 접지저항을 채운다.
     const ground: any[] =
-      inspection_type === '반기' && Array.isArray(ground_resistance) ? ground_resistance : [];
+      (inspection_type === '반기' || inspection_type === '연차') && Array.isArray(ground_resistance)
+        ? ground_resistance : [];
 
     // ── 양식 내 치환할 기존 안전관리자명 (DB settings.manager_name, 기본값 황건우) ──
     // 등록 양식 파일에 인쇄돼 있는 고정 이름을 로그인 계정명으로 바꾸기 위함.
@@ -60,9 +61,12 @@ export async function POST(req: NextRequest) {
     let tplBuffer: ArrayBuffer | null = null;
     let usedRegistered = false;
 
-    if (inspection_type === '분기' || inspection_type === '반기') {
+    if (inspection_type === '분기' || inspection_type === '반기' || inspection_type === '연차') {
       // 1순위: 해당 종별 전용 그룹 양식 → 2순위(구버전 호환): '분기' 그룹 양식
-      const groupCandidates = inspection_type === '반기' ? ['반기', '분기'] : ['분기'];
+      // 연차는 충전소별 전용 연차 양식(모든 별지 + 별지2 접지저항 포함)만 사용.
+      const groupCandidates =
+        inspection_type === '반기' ? ['반기', '분기'] :
+        inspection_type === '연차' ? ['연차'] : ['분기'];
       for (const grp of groupCandidates) {
         const { data: tpl } = await sb
           .from('station_templates')

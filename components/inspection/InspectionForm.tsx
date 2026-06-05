@@ -262,7 +262,7 @@ export function InspectionForm() {
           inspector_name: inspector,
           count,
           measure_sets: measureSets,
-          ground_resistance: inspType==='반기' ? measureSets.map(s=>s.ground) : [],
+          ground_resistance: (inspType==='반기'||inspType==='연차') ? measureSets.map(s=>s.ground) : [],
           remarks: remarks || '특이사항없음',
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
@@ -464,7 +464,7 @@ export function InspectionForm() {
               </div>
             </div>
 
-            {inspType==='반기' && (
+            {(inspType==='반기'||inspType==='연차') && (
             <div style={{marginBottom:14}}>
               <label style={labelStyle}>접지저항 (Ω) — 별지2-접지저항 D{5 + idx}</label>
               <div style={{position:'relative',maxWidth:220}}>

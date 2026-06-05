@@ -45,9 +45,9 @@ export default function TemplateManager() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [userId, setUserId] = useState('');
-  const [group, setGroup] = useState<'분기' | '반기'>('분기');
+  const [group, setGroup] = useState<'분기' | '반기' | '연차'>('분기');
 
-  const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx' };
+  const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx', '연차': 'annual.xlsx' };
 
   const loadStatus = useCallback(async () => {
     const res = await fetch('/api/templates/list');
@@ -117,22 +117,22 @@ export default function TemplateManager() {
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 24px 40px' }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>충전소별 양식 등록</h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-        분기·반기 점검표 양식을 충전소별로 등록합니다. 파일은 브라우저에서 직접 업로드되어 용량 제한이 없습니다.
+        분기·반기·연차 점검표 양식을 충전소별로 등록합니다. 파일은 브라우저에서 직접 업로드되어 용량 제한이 없습니다.
         (등록 {registered} / 전체 {stations.length})
       </p>
 
       <div style={card}>
         <div style={{ fontWeight: 700, marginBottom: 12 }}>📤 양식 업로드 (여러 개 동시 선택 가능)</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          {(['분기', '반기'] as const).map((g) => (
+          {(['분기', '반기', '연차'] as const).map((g) => (
             <button key={g} type="button" disabled={busy} onClick={() => setGroup(g)}
               style={{ padding: '8px 18px', borderRadius: 10, border: `1.5px solid ${group === g ? 'var(--accent)' : 'var(--border)'}`, background: group === g ? 'var(--accent-soft)' : 'transparent', color: group === g ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {g}점검 양식{g === '반기' ? ' (접지저항 포함)' : ' (접지저항 제외)'}
+              {g}점검 양식{g === '분기' ? ' (접지저항 제외)' : ' (접지저항 포함)'}
             </button>
           ))}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          선택한 종별 양식으로 등록됩니다. 분기는 별지2(접지저항) 없는 양식, 반기는 별지2 포함 양식을 올리세요.
+          선택한 종별 양식으로 등록됩니다. 분기는 별지2(접지저항) 없는 양식, 반기·연차는 별지2 포함 양식을 올리세요.
         </div>
         <input type="file" multiple accept=".xlsx" disabled={busy}
           onChange={(e) => onPick(e.target.files)} style={{ marginBottom: 12 }} />
