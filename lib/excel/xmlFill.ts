@@ -216,8 +216,11 @@ function fillByeolji2(xml: string, shared: string[], d: FillData): string {
 // 드로잉에서 임베드 이미지(<xdr:pic>)를 포함한 앵커를 제거 → 기본 사진 공란화.
 // 도형(<xdr:sp>: 격자/타원 등)은 보존한다. (앵커는 중첩되지 않으므로 lazy 매칭 안전)
 function removeDrawingPics(dx: string): string {
-  return dx.replace(/<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:\1>/g,
-    (block, _t) => block.includes('<xdr:pic>') ? '' : block);
+  // 사진(<xdr:pic ...>) 또는 이미지 채우기(<a:blip>)를 가진 앵커를 제거.
+  // 주의: 양식에 따라 <xdr:pic> 에 속성이 붙어 있어(<xdr:pic macro="">) 정확 문자열 매칭은 누락된다.
+  // 종별 타원 등 이미지 없는 도형 앵커는 보존된다.
+  return dx.replace(/<xdr:(twoCellAnchor|oneCellAnchor|absoluteAnchor)\b[\s\S]*?<\/xdr:\1>/g,
+    (block, _t) => (/<xdr:pic[\s>]/.test(block) || /<a:blip\b/.test(block)) ? '' : block);
 }
 
 // 점검종별 타원(prst="ellipse") 앵커의 from/to 열·열오프셋을 지정 좌표로 교체 → 타원을 가로 이동.
@@ -347,6 +350,36 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     if (isHalf && kind === 'b7') dx = moveTitleEllipse(dx, { col: 27, colOff: 133350 }, { col: 31, colOff: 19050 });
     if (isHalf && kind === 'b2') dx = moveTitleEllipse(dx, { col: 6, colOff: 926306 }, { col: 7, colOff: 450056 });
     if (dx !== before) zip.file(dp, dx);
+  }
+
+  // ── 미디어 정리(GC) ──
+  // 별지7 사진 앵커 제거 후, 어떤 드로잉에서도 더 이상 참조되지 않는 이미지 관계·파일을 삭제한다.
+  // → 사진이 화면에서 사라질 뿐 아니라 파일 안에서도 완전히 제거되어 용량이 줄어든다.
+  //   (다른 별지의 실제 사용 중인 이미지는 참조가 남아 있으므로 보존된다.)
+  {
+    const usedMedia = new Set<string>();
+    const drawingRelsPaths = Object.keys(zip.files).filter((n) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(n));
+    for (const relsP of drawingRelsPaths) {
+      const drawXmlP = relsP.replace(/_rels\/(drawing\d+)\.xml\.rels$/, '$1.xml');
+      const drawXml = await zip.file(drawXmlP)?.async('string');
+      const relsXml = await zip.file(relsP)?.async('string');
+      if (!relsXml) continue;
+      const usedRids = new Set([...(drawXml || '').matchAll(/r:embed="([^"]+)"/g)].map((m) => m[1]));
+      let newRels = relsXml;
+      for (const rm of relsXml.matchAll(/<Relationship\b[^>]*\/>/g)) {
+        const tag = rm[0];
+        if (!/Type="[^"]*\/image"/.test(tag)) continue;
+        const rid = (tag.match(/Id="([^"]+)"/) || [])[1];
+        const tgt = (tag.match(/Target="([^"]+)"/) || [])[1];
+        const mediaPath = 'xl/' + (tgt || '').replace(/^\.\.\//, '').replace(/^\//, '');
+        if (rid && usedRids.has(rid)) usedMedia.add(mediaPath);
+        else newRels = newRels.replace(tag, ''); // 미참조 이미지 관계 제거
+      }
+      if (newRels !== relsXml) zip.file(relsP, newRels);
+    }
+    for (const name of Object.keys(zip.files)) {
+      if (/^xl\/media\//.test(name) && !usedMedia.has(name)) zip.remove(name);
+    }
   }
 
   // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)
