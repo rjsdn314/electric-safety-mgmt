@@ -214,15 +214,16 @@ function fillByeolji2(xml: string, shared: string[], d: FillData): string {
   return replaceDates(xml, shared, d.date, 8);
 }
 
-// 인쇄/PDF 저장 시 잘림 방지: 시트를 "너비 1페이지에 맞춤"으로 설정.
-//  · pageSetup fitToWidth="1" (너비 1페이지) + fitToHeight="0"(높이는 자유)
+// 인쇄/PDF 저장 시 잘림 방지: 시트를 "한 페이지에 맞춤"으로 설정.
+//  · pageSetup fitToWidth="1" + fitToHeight="1" (가로·세로 모두 1페이지)
 //  · sheetPr 안에 pageSetUpPr fitToPage="1" (맞춤 활성화) — 없으면 추가
+// (인쇄영역을 실제 내용까지만 잡은 뒤 호출하므로 시트당 깔끔하게 한 장으로 나온다)
 function fitSheetToWidth(xml: string): string {
   // pageSetup
   xml = xml.replace(/<(x:)?pageSetup\b([^>]*?)\s*\/>/, (_m, px = '', attrs) => {
     let a: string = attrs;
     a = /\bfitToWidth=/.test(a) ? a.replace(/fitToWidth="[^"]*"/, 'fitToWidth="1"') : a + ' fitToWidth="1"';
-    a = /\bfitToHeight=/.test(a) ? a.replace(/fitToHeight="[^"]*"/, 'fitToHeight="0"') : a + ' fitToHeight="0"';
+    a = /\bfitToHeight=/.test(a) ? a.replace(/fitToHeight="[^"]*"/, 'fitToHeight="1"') : a + ' fitToHeight="1"';
     return `<${px}pageSetup${a}/>`;
   });
   // pageSetUpPr fitToPage="1"
@@ -453,12 +454,60 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     if (newSs !== ssRaw) zip.file('xl/sharedStrings.xml', newSs);
   }
 
-  // 모든 시트: 인쇄/PDF 저장 시 잘림 방지 — 너비를 1페이지에 맞춤
-  for (const fname of Object.keys(zip.files)) {
-    if (/^xl\/worksheets\/sheet\d+\.xml$/.test(fname)) {
-      const sx = await zip.file(fname)!.async('string');
+  // 인쇄영역 + 페이지맞춤: 시트별로 "실제 내용까지만" 인쇄영역을 잡고 한 페이지에 맞춤.
+  //  → 표 밖 먼 행의 사진/빈 행이 제외되어, 빈 페이지·떠다니는 사진 없이 시트당 한 장으로 출력.
+  {
+    const wbXml = (await zip.file('xl/workbook.xml')?.async('string')) || '';
+    const PFX = /<x:sheets[ >]/.test(wbXml) ? 'x:' : '';
+    // 워크북의 시트 순서(이름·rId·0기반 index)
+    const sheets = [...wbXml.matchAll(/<(?:x:)?sheet [^>]*name="([^"]*)"[^>]*r:id="([^"]*)"[^>]*\/>/g)]
+      .map((m, i) => ({ name: m[1], rid: m[2], idx: i }));
+    const relsXml = (await zip.file('xl/_rels/workbook.xml.rels')?.async('string')) || '';
+    const rid2file: Record<string, string> = {};
+    for (const m of relsXml.matchAll(/Id="([^"]+)"[^>]*Target="([^"]*worksheets\/sheet\d+\.xml)"/g))
+      rid2file[m[1]] = 'xl/' + m[2].replace(/^\.\//, '').replace(/^\//, '');
+
+    const defs: string[] = [];
+    for (const s of sheets) {
+      const f = rid2file[s.rid];
+      if (!f || !zip.file(f)) continue;
+      const sx = await zip.file(f)!.async('string');
+      // 실제 값(<v>/<is>/<f>)이 있는 마지막 행
+      let lastRow = 0;
+      for (const rm of sx.matchAll(/<(?:x:)?row r="(\d+)"[^>]*>([\s\S]*?)<\/(?:x:)?row>/g))
+        if (/<(?:x:)?(?:v|is|f)>/.test(rm[2])) lastRow = Math.max(lastRow, +rm[1]);
+      // 실제 값이 있는 마지막 열
+      let valCol = 0;
+      for (const cm of sx.matchAll(/<(?:x:)?c r="([A-Z]+)\d+"[^>]*>([\s\S]*?)<\/(?:x:)?c>/g))
+        if (/<(?:x:)?(?:v|is|f)>/.test(cm[2])) valCol = Math.max(valCol, colToNum(cm[1]));
+      // 인쇄 폭: dimension의 최대 열(블로트면 값열로 대체)
+      const dm = sx.match(/<(?:x:)?dimension ref="[A-Z]+\d+:([A-Z]+)\d+"/);
+      let col = dm ? colToNum(dm[1]) : 0;
+      if (col > 70 || col === 0) col = valCol;
+      if (col === 0) col = valCol || 1;
+      lastRow = lastRow || 1;
+      const nm = s.name.replace(/'/g, "''");
+      defs.push(`<${PFX}definedName name="_xlnm.Print_Area" localSheetId="${s.idx}">'${nm}'!$A$1:$${numToCol(col)}$${lastRow}</${PFX}definedName>`);
+      // 페이지 맞춤(한 장)
       const nx = fitSheetToWidth(sx);
-      if (nx !== sx) zip.file(fname, nx);
+      if (nx !== sx) zip.file(f, nx);
+    }
+
+    // definedNames 삽입 — 스키마 순서(sheets→externalReferences→definedNames→calcPr) 준수.
+    // 함수 치환으로 $ 백레퍼런스 오류 회피.
+    if (defs.length && wbXml) {
+      const block = `<${PFX}definedNames>${defs.join('')}</${PFX}definedNames>`;
+      let nwb: string;
+      if (/<(?:x:)?definedNames>/.test(wbXml)) {
+        nwb = wbXml.replace(/<\/(?:x:)?definedNames>/, (m) => defs.join('') + m);
+      } else if (/<(?:x:)?calcPr\b/.test(wbXml)) {
+        nwb = wbXml.replace(/<(?:x:)?calcPr\b/, (m) => block + m);
+      } else if (/<\/(?:x:)?externalReferences>/.test(wbXml)) {
+        nwb = wbXml.replace(/<\/(?:x:)?externalReferences>/, (m) => m + block);
+      } else {
+        nwb = wbXml.replace(/<\/(?:x:)?sheets>/, (m) => m + block);
+      }
+      zip.file('xl/workbook.xml', nwb);
     }
   }
 
