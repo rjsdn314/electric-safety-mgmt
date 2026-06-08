@@ -6,6 +6,27 @@ import { cookies } from 'next/headers';
 export const runtime = 'nodejs';
 const KEY = 'calendar_embed_url';
 
+// 다양한 입력을 구글 캘린더 임베드 URL로 정규화:
+//  · 이미 임베드(.../embed?...) → 그대로
+//  · 캘린더 열기 주소(...?cid=BASE64) → cid 디코딩 → 임베드
+//  · 캘린더 ID(xxxx@group.calendar.google.com / @gmail.com) → 임베드
+function toEmbedUrl(raw: string): string | null {
+  const s = raw.trim();
+  if (/^https:\/\/calendar\.google\.com\/calendar\/(u\/\d+\/)?embed\?/.test(s)) return s;
+  let calId: string | null = null;
+  const cid = s.match(/[?&]cid=([^&]+)/);
+  if (cid) {
+    try {
+      const dec = Buffer.from(decodeURIComponent(cid[1]).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+      if (dec.includes('@')) calId = dec;
+    } catch { /* ignore */ }
+  } else if (/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(s)) {
+    calId = s; // 순수 캘린더 ID
+  }
+  if (calId) return `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calId)}&ctz=Asia%2FSeoul`;
+  return null;
+}
+
 async function ctx() {
   const cookieStore = await cookies();
   const authClient = createServerClient(
@@ -38,11 +59,11 @@ export async function POST(req: NextRequest) {
     if (prof?.role !== 'admin') return NextResponse.json({ error: '관리자만 설정할 수 있습니다' }, { status: 403 });
 
     const raw = String((await req.json()).url || '').trim();
-    // 구글 캘린더 임베드만 허용 (보안)
-    if (raw && !/^https:\/\/calendar\.google\.com\/calendar\/(embed|u\/\d+\/embed)\?/.test(raw))
-      return NextResponse.json({ error: '구글 캘린더 임베드 주소(https://calendar.google.com/calendar/embed?...)를 넣어주세요' }, { status: 400 });
+    const embed = raw ? toEmbedUrl(raw) : '';
+    if (raw && !embed)
+      return NextResponse.json({ error: '구글 캘린더 주소를 인식하지 못했습니다. 임베드 주소(.../embed?...), 캘린더 열기 주소(...?cid=...), 또는 캘린더 ID(....@group.calendar.google.com)를 넣어주세요.' }, { status: 400 });
 
-    const { error } = await sb.from('settings').upsert({ key: KEY, value: raw, label: '구글 캘린더 임베드 URL', updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const { error } = await sb.from('settings').upsert({ key: KEY, value: embed, label: '구글 캘린더 임베드 URL', updated_at: new Date().toISOString() }, { onConflict: 'key' });
     if (error) throw new Error(error.message);
     return NextResponse.json({ success: true });
   } catch (e: any) {
