@@ -49,6 +49,7 @@ export function Sidebar() {
     { href: '/dashboard',        label: '대시보드',      icon: '🏠' },
     { href: '/inspection',       label: '점검 생성',     icon: '📋' },
     { href: '/history',          label: '점검 이력',     icon: '📁' },
+    { href: '/calendar',         label: '캘린더',        icon: '📅' },
     { href: '/stations/upload',  label: '관리구역 등록', icon: '📂' },
     { href: '/admin/templates',  label: '양식 등록',     icon: '📑' },
     { href: '/signature',        label: '서명 등록',     icon: '✍️' },
