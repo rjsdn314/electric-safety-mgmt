@@ -81,6 +81,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 2순위(기본 베이스): 충전소 전용 양식이 없으면 같은 종별의 다른 충전소 양식을 기본 베이스로 사용.
+    // (분기/반기/연차 기본베이스는 충전소마다 비슷 — 엔진이 현장명·전압·측정값을 덮어쓰고 별지7 사진은 제거)
+    // → 공용 고압/저압 양식(별지1·14만 있음)보다 분기/반기/연차에 훨씬 적합.
+    if (!tplBuffer && (inspection_type === '연차' || inspection_type === '반기' || inspection_type === '분기')) {
+      const defGroups = inspection_type === '반기' ? ['반기', '분기'] : inspection_type === '연차' ? ['연차'] : ['분기'];
+      for (const grp of defGroups) {
+        const { data: cands } = await sb
+          .from('station_templates')
+          .select('file_path, station_id')
+          .eq('inspection_group', grp)
+          .order('updated_at', { ascending: false })
+          .limit(100);
+        if (!cands || !cands.length) continue;
+        // 같은 전압대(고압/저압) 충전소의 양식을 우선 선택 (구조가 다르므로)
+        const ids = [...new Set(cands.map((c) => c.station_id))];
+        const { data: sts } = await sb.from('stations').select('id, voltage').in('id', ids);
+        const vMap = new Map((sts || []).map((s) => [s.id, Number(s.voltage) >= 3000]));
+        const sameV = cands.find((c) => vMap.get(c.station_id) === isHighV);
+        const pick = sameV || cands[0];
+        if (pick?.file_path) {
+          const { data: dl, error: dlErr } = await sb.storage.from('templates').download(pick.file_path);
+          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; break; }
+        }
+      }
+    }
+
     if (!tplBuffer) {
       const templateUrl = `${process.env.NEXT_PUBLIC_APP_URL}/templates/template_${isHighV ? '고압' : '저압'}.xlsx`;
       const tplRes = await fetch(templateUrl);
