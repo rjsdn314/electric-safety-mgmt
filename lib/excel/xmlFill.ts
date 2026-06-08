@@ -22,6 +22,7 @@ export interface FillData {
   }>;
   ground_resistance?: any[];   // 접지저항 측정값 (별지2-접지저항 D5↓)
   replace_names?: string[];     // 양식에 인쇄된 기존 안전관리자명 → inspector_name 으로 치환
+  signature_b64?: string;       // 점검자 서명 이미지(data:image/png;base64,...) — 별지1·별지14 서명칸에 삽입
   remarks: string;
 }
 
@@ -380,6 +381,45 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     for (const name of Object.keys(zip.files)) {
       if (/^xl\/media\//.test(name) && !usedMedia.has(name)) zip.remove(name);
     }
+  }
+
+  // ── 점검자 서명 삽입 ──
+  // 별지1 우측하단 서명박스(하단부 행)·별지14 점검자칸(상단 행)에 들어가는 서명 이미지(미디어)를
+  // 등록된 점검자 서명으로 교체한다. 앵커(셀 범위)는 그대로라 박스 크기에 맞게 들어간다.
+  if (d.signature_b64) {
+    const sigBytes = Buffer.from(d.signature_b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64');
+    const sigMedia = new Set<string>();
+    for (const [name, rid] of nameToRid) {
+      const isB14 = name.includes('별지14');
+      const isB1 = name.includes('별지1') && !isB14;
+      if (!isB1 && !isB14) continue;
+      const target = ridToTarget.get(rid); if (!target) continue;
+      const sheetPath = 'xl/' + target.replace(/^\//, '').replace(/^xl\//, '');
+      const sx = await zip.file(sheetPath)?.async('string'); if (!sx) continue;
+      const dm = sx.match(/<drawing r:id="([^"]+)"/); if (!dm) continue;
+      const relsPath = sheetPath.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
+      const dr = await zip.file(relsPath)?.async('string'); if (!dr) continue;
+      const tm = dr.match(new RegExp(`Id="${dm[1]}"[^>]*Target="([^"]+)"`)); if (!tm) continue;
+      const dp = 'xl/' + tm[1].replace(/^\.\.\//, '').replace(/^\//, '');
+      const dx = await zip.file(dp)?.async('string'); if (!dx) continue;
+      const drelsP = dp.replace(/drawings\/(drawing\d+)\.xml$/, 'drawings/_rels/$1.xml.rels');
+      const drels = (await zip.file(drelsP)?.async('string')) || '';
+      const rid2media: Record<string, string> = {};
+      for (const rm of drels.matchAll(/Id="([^"]+)"[^>]*Target="([^"]+)"/g)) rid2media[rm[1]] = rm[2];
+      for (const a of dx.matchAll(/<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:\1>/g)) {
+        const blk = a[0];
+        const embed = (blk.match(/r:embed="([^"]+)"/) || [])[1]; if (!embed) continue;
+        const fr = blk.match(/<xdr:from>\s*<xdr:col>\d+<\/xdr:col>\s*<xdr:colOff>\d+<\/xdr:colOff>\s*<xdr:row>(\d+)<\/xdr:row>/);
+        if (!fr) continue;
+        const frow = +fr[1];
+        // 별지1: 하단 서명박스(행 50 이상), 별지14: 점검자칸(행 8 이하)
+        if (isB1 ? frow >= 50 : frow <= 8) {
+          const tgt = rid2media[embed];
+          if (tgt) sigMedia.add('xl/' + tgt.replace(/^\.\.\//, '').replace(/^\//, ''));
+        }
+      }
+    }
+    for (const m of sigMedia) if (zip.file(m)) zip.file(m, sigBytes);
   }
 
   // sharedStrings.xml 전체에 이름 치환 (V60 확인자 서명, 별지14 소속/성명 결합 셀 등 공유문자열 처리)

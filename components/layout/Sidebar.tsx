@@ -51,6 +51,7 @@ export function Sidebar() {
     { href: '/history',          label: '점검 이력',     icon: '📁' },
     { href: '/stations/upload',  label: '관리구역 등록', icon: '📂' },
     { href: '/admin/templates',  label: '양식 등록',     icon: '📑' },
+    { href: '/signature',        label: '서명 등록',     icon: '✍️' },
   ];
 
   const adminMenus = [

@@ -114,6 +114,14 @@ export async function POST(req: NextRequest) {
       tplBuffer = await tplRes.arrayBuffer();
     }
 
+    // ── 점검자 서명 조회 (점검자 이름 기준) ──
+    let signature_b64: string | undefined;
+    try {
+      const { data: sig } = await sb
+        .from('inspector_signatures').select('data_url').eq('inspector_name', inspector_name).maybeSingle();
+      if (sig?.data_url) signature_b64 = sig.data_url;
+    } catch { /* 서명 없어도 생성은 진행 */ }
+
     // ── 생성 ──
     let buffer: Buffer;
     if (usedRegistered) {
@@ -128,6 +136,7 @@ export async function POST(req: NextRequest) {
         measure_sets: sets,
         ground_resistance: ground,
         replace_names: replaceNames,
+        signature_b64,
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
       });
     } else {
