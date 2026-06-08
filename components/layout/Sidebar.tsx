@@ -50,11 +50,11 @@ export function Sidebar() {
     { href: '/inspection',       label: '점검 생성',     icon: '📋' },
     { href: '/history',          label: '점검 이력',     icon: '📁' },
     { href: '/stations/upload',  label: '관리구역 등록', icon: '📂' },
+    { href: '/admin/templates',  label: '양식 등록',     icon: '📑' },
   ];
 
   const adminMenus = [
     { href: '/admin/users', label: '사용자 관리', icon: '👥' },
-    { href: '/admin/templates', label: '양식 등록', icon: '📑' },
   ];
 
   const isActive = (href: string) =>

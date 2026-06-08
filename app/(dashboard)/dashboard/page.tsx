@@ -2,9 +2,8 @@
 // ============================================================
 // app/(dashboard)/dashboard/page.tsx — WATER 디자인 시스템 적용
 // ============================================================
-import { useState } from 'react';
-import { useStations } from '@/hooks/useStations';
-import { useInspections } from '@/hooks/useInspections';
+import { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
 
@@ -72,8 +71,31 @@ function TypeBadge({ type }: { type: string }) {
 // ── 페이지 본문 ──────────────────────────────────────────────
 export default function DashboardPage() {
   const { profile } = useAuth();
-  const { stations } = useStations();
-  const { inspections } = useInspections({ limit: 500 });
+  // 사용자별 대시보드: 본인이 등록한 관리구역(충전소) 기준. 관리자는 본인 + 소유자 없는(레거시) 포함.
+  const [stations, setStations] = useState<any[]>([]);
+  const [inspections, setInspections] = useState<any[]>([]);
+  useEffect(() => {
+    const load = async () => {
+      const sb = createClient();
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return;
+      const { data: prof } = await sb.from('profiles').select('role').eq('id', user.id).single();
+      const isAdmin = prof?.role === 'admin';
+      let sq = sb.from('stations').select('*').eq('is_active', true).order('name');
+      sq = isAdmin ? sq.or(`user_id.eq.${user.id},user_id.is.null`) : sq.eq('user_id', user.id);
+      const { data: sts } = await sq;
+      const list = sts || [];
+      setStations(list);
+      const ids = list.map((s: any) => s.id);
+      if (ids.length) {
+        const { data: insps } = await sb.from('inspections').select('*')
+          .in('station_id', ids).order('inspection_date', { ascending: false }).limit(500);
+        const stMap = new Map(list.map((s: any) => [s.id, s]));
+        setInspections((insps || []).map((i: any) => ({ ...i, station: stMap.get(i.station_id) })));
+      } else { setInspections([]); }
+    };
+    load();
+  }, []);
 
   const currentMonth = new Date().getMonth() + 1;
   const currentYear  = new Date().getFullYear();

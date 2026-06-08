@@ -1,19 +1,37 @@
-// 관리자: 등록된 충전소별 양식 현황 조회
+// 충전소별 양식 현황 조회 — 비관리자는 본인이 등록한 충전소만, 관리자는 전체
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+
     const sb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    const { data: stations } = await sb
-      .from('stations').select('id, name, base_name').eq('is_active', true).order('name');
-    const { data: templates } = await sb
-      .from('station_templates').select('*');
+
+    let isAdmin = false;
+    if (user) {
+      const { data: p } = await sb.from('profiles').select('role').eq('id', user.id).single();
+      isAdmin = p?.role === 'admin';
+    }
+
+    let sq = sb.from('stations').select('id, name, base_name').eq('is_active', true).order('name');
+    if (!isAdmin && user) sq = sq.eq('user_id', user.id); // 비관리자: 본인 등록 충전소만
+    const { data: stations } = await sq;
+
+    const { data: templates } = await sb.from('station_templates').select('*');
 
     const tplByStation = new Map<string, any[]>();
     for (const t of templates || []) {

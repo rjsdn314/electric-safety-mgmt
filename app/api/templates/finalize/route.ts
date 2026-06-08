@@ -6,6 +6,8 @@
 // (대용량 파일 전송은 브라우저↔Storage 직접 처리하므로 Vercel 4.5MB 한도 무관)
 // ============================================================
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeXlsx, detectSheetMeta } from '@/lib/excel/normalize';
 
@@ -21,6 +23,22 @@ export async function POST(req: NextRequest) {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
+
+    // 소유권 검증: 비관리자는 본인이 등록한 충전소의 양식만 등록 가능
+    const cookieStore = await cookies();
+    const authClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } },
+    );
+    const { data: { user } } = await authClient.auth.getUser();
+    if (!user) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
+    const { data: prof } = await sb.from('profiles').select('role').eq('id', user.id).single();
+    if (prof?.role !== 'admin') {
+      const { data: st } = await sb.from('stations').select('user_id').eq('id', station_id).single();
+      if (!st || st.user_id !== user.id)
+        return NextResponse.json({ error: '본인이 등록한 충전소의 양식만 등록할 수 있습니다' }, { status: 403 });
+    }
 
     // 그룹별 저장 파일명 (기존 분기 등록 호환을 위해 분기는 quarterly.xlsx 유지)
     const GROUP_FILE: Record<string, string> = { '분기': 'quarterly.xlsx', '반기': 'semiannual.xlsx', '연차': 'annual.xlsx' };
