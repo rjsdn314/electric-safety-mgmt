@@ -292,7 +292,7 @@ export function InspectionForm() {
   };
 
   if (done) return (
-    <div style={{maxWidth: 940, margin: 0, padding: '0 24px'}}>
+    <div style={{maxWidth: 940, margin: 0, padding: 0}}>
       <div style={{background:'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))',border:'1px solid rgba(5,192,114,.3)',borderRadius:20,padding:40,textAlign:'center'}}>
         <div style={{fontSize:64}}>✅</div>
         <h2 style={{fontSize:22,fontWeight:800,margin:'14px 0 10px'}}>저장 완료</h2>
@@ -321,7 +321,7 @@ export function InspectionForm() {
   );
 
   return (
-    <div style={{maxWidth: 940, margin: 0, padding: '0 24px 24px'}}>
+    <div style={{maxWidth: 940, margin: 0, padding: 0}}>
 
       {/* 저장 폴더 */}
       <div style={{background:'var(--bg-card)',borderRadius:16,padding:18,display:'flex',alignItems:'center',gap:14,marginBottom:14}}>
