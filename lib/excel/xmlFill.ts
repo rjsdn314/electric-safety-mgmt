@@ -214,6 +214,31 @@ function fillByeolji2(xml: string, shared: string[], d: FillData): string {
   return replaceDates(xml, shared, d.date, 8);
 }
 
+// 인쇄/PDF 저장 시 잘림 방지: 시트를 "너비 1페이지에 맞춤"으로 설정.
+//  · pageSetup fitToWidth="1" (너비 1페이지) + fitToHeight="0"(높이는 자유)
+//  · sheetPr 안에 pageSetUpPr fitToPage="1" (맞춤 활성화) — 없으면 추가
+function fitSheetToWidth(xml: string): string {
+  // pageSetup
+  xml = xml.replace(/<(x:)?pageSetup\b([^>]*?)\s*\/>/, (_m, px = '', attrs) => {
+    let a: string = attrs;
+    a = /\bfitToWidth=/.test(a) ? a.replace(/fitToWidth="[^"]*"/, 'fitToWidth="1"') : a + ' fitToWidth="1"';
+    a = /\bfitToHeight=/.test(a) ? a.replace(/fitToHeight="[^"]*"/, 'fitToHeight="0"') : a + ' fitToHeight="0"';
+    return `<${px}pageSetup${a}/>`;
+  });
+  // pageSetUpPr fitToPage="1"
+  if (/<(x:)?pageSetUpPr\b/.test(xml)) {
+    xml = xml.replace(/<(x:)?pageSetUpPr\b([^>]*?)(\/?)>/, (_m, px = '', attrs, sl) =>
+      `<${px}pageSetUpPr${/\bfitToPage=/.test(attrs) ? attrs.replace(/fitToPage="[^"]*"/, 'fitToPage="1"') : attrs + ' fitToPage="1"'}${sl}>`);
+  } else if (/<(x:)?sheetPr\b[^>]*\/>/.test(xml)) {
+    xml = xml.replace(/<(x:)?sheetPr\b([^>]*?)\s*\/>/, (_m, px = '', attrs) => `<${px}sheetPr${attrs}><${px}pageSetUpPr fitToPage="1"/></${px}sheetPr>`);
+  } else if (/<(x:)?sheetPr\b[^>]*>/.test(xml)) {
+    xml = xml.replace(/(<(x:)?sheetPr\b[^>]*>)/, (_m, open, px = '') => `${open}<${px}pageSetUpPr fitToPage="1"/>`);
+  } else {
+    xml = xml.replace(/(<(x:)?worksheet\b[^>]*>)/, (_m, open, px = '') => `${open}<${px}sheetPr><${px}pageSetUpPr fitToPage="1"/></${px}sheetPr>`);
+  }
+  return xml;
+}
+
 // 드로잉에서 임베드 이미지(<xdr:pic>)를 포함한 앵커를 제거 → 기본 사진 공란화.
 // 도형(<xdr:sp>: 격자/타원 등)은 보존한다. (앵커는 중첩되지 않으므로 lazy 매칭 안전)
 function removeDrawingPics(dx: string): string {
@@ -426,6 +451,15 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   if (ssRaw && repl && names.length) {
     const newSs = replaceNamesInXml(ssRaw, names, repl);
     if (newSs !== ssRaw) zip.file('xl/sharedStrings.xml', newSs);
+  }
+
+  // 모든 시트: 인쇄/PDF 저장 시 잘림 방지 — 너비를 1페이지에 맞춤
+  for (const fname of Object.keys(zip.files)) {
+    if (/^xl\/worksheets\/sheet\d+\.xml$/.test(fname)) {
+      const sx = await zip.file(fname)!.async('string');
+      const nx = fitSheetToWidth(sx);
+      if (nx !== sx) zip.file(fname, nx);
+    }
   }
 
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });

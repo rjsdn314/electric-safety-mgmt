@@ -214,6 +214,9 @@ export function fillWorkbook(
   opts?: { forceLowVerdicts?: boolean; replaceNames?: string[] }
 ) {
   for (const ws of wb.worksheets) {
+    // 인쇄/PDF 저장 시 잘림 방지 — 너비를 1페이지에 맞춤
+    ws.pageSetup = { ...(ws.pageSetup || {}), fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+
     const name = ws.name || '';
     const isB14 = name.includes('별지14');
     const isB1 = name.includes('별지1') && !isB14;
