@@ -33,7 +33,7 @@ export default function CalendarPage() {
   const btn = (bg: string): React.CSSProperties => ({ padding: '9px 16px', borderRadius: 9, border: 'none', background: bg, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' });
 
   return (
-    <div style={{ padding: '40px 48px 80px' }}>
+    <div style={{ padding: '32px 36px 60px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 4 }}>📅 점검 일정 캘린더</h1>

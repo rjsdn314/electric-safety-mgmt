@@ -100,7 +100,7 @@ export default function SignaturePage() {
   const input: React.CSSProperties = { width: '100%', padding: '12px 14px', background: 'var(--bg-input, var(--bg))', border: '1.5px solid var(--border)', borderRadius: 10, fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 720 }}>
+    <div style={{ padding: '32px 36px 60px', maxWidth: 720 }}>
       <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>✍️ 점검자 서명 등록</h1>
       <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
         점검자별로 서명을 한 번 등록해두면, 그 점검자로 생성하는 점검표(별지1·별지14 서명칸)에 자동으로 들어갑니다.

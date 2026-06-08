@@ -326,7 +326,7 @@ export default function HistoryPage() {
   const [visibleCount, setVisibleCount] = useState(10);
 
   return (
-    <div style={{padding: '40px 48px 80px'}}>
+    <div style={{padding: '32px 36px 60px'}}>
       <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
         <div>
           <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>

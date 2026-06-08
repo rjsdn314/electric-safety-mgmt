@@ -118,7 +118,7 @@ export default function DashboardPage() {
   const pendingStations = stations.filter(st => !doneStationIds.has(st.id)); const [pendingShow, setPendingShow] = useState(10); const visiblePending = pendingStations.slice(0, pendingShow);
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 900 }}>
+    <div style={{ padding: '32px 36px 60px', maxWidth: 900 }}>
 
       {/* 헤더 */}
       <div style={{ marginBottom: 28 }}>

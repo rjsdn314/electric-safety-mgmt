@@ -123,7 +123,7 @@ export default function AdminUsersPage() {
   const badge = (status: string) => STATUS_BADGE[status] || STATUS_BADGE.pending;
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 1100 }}>
+    <div style={{ padding: '32px 36px 60px', maxWidth: 1100 }}>
       {/* 헤더 */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-1px', marginBottom: 8 }}>

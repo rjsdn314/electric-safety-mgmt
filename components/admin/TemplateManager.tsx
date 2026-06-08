@@ -114,7 +114,7 @@ export default function TemplateManager() {
   const statusLabel: Record<string, string> = { ready: '대기', uploading: '업로드중…', done: '✅ 완료', error: '❌ 실패', skip: '⚠️ 미지정' };
 
   return (
-    <div style={{ maxWidth: 1000, padding: '40px 48px 80px' }}>
+    <div style={{ maxWidth: 1000, padding: '32px 36px 60px' }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>충전소별 양식 등록</h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
         분기·반기·연차 점검표 양식을 충전소별로 등록합니다. 파일은 브라우저에서 직접 업로드되어 용량 제한이 없습니다.

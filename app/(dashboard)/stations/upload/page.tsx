@@ -199,7 +199,7 @@ export default function StationUploadPage() {
   };
 
   return (
-    <div style={{ padding: '40px 48px 80px', maxWidth: 700 }}>
+    <div style={{ padding: '32px 36px 60px', maxWidth: 700 }}>
       {/* 헤더 */}
       <div style={{ marginBottom: 32 }}>
         <h1 style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-1px', marginBottom: 8 }}>
