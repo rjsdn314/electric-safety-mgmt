@@ -261,6 +261,19 @@ function fitSheetToWidth(xml: string): string {
   return xml;
 }
 
+// 대형 블로트 시트 슬림화.
+//  · 일부 양식(특히 별지2-절연)은 dimension A1:XFD265 에 빈 자기닫음 셀이 수백만 개 깔려
+//    압축해제 시 수십 MB가 된다(예: 378만 셀, 75MB). 이를 그대로 처리하면 Vercel 함수가
+//    폭주/타임아웃("An error..." 크래시)한다.
+//  · 양식 본문은 100열 이내이므로, 값 없는 자기닫음 셀 중 열 100 초과를 제거하고 dimension을 줄인다.
+//    (값 셀<v>/<is>/<f> 및 100열 이내 서식 셀은 모두 보존 → 양식 레이아웃 유지)
+function deBloatSheet(xml: string): string {
+  if (xml.length < 1_000_000) return xml;            // 정상 시트(<1MB)는 건드리지 않음
+  xml = xml.replace(/<(?:x:)?c r="([A-Z]+)\d+"[^>]*?\/>/g, (m, col) => colToNum(col) > 100 ? '' : m);
+  xml = xml.replace(/(<(?:x:)?dimension ref="[A-Z]+\d+:)[A-Z]+(\d+")/, '$1CV$2');
+  return xml;
+}
+
 // 드로잉에서 임베드 이미지(<xdr:pic>)를 포함한 앵커를 제거 → 기본 사진 공란화.
 // 도형(<xdr:sp>: 격자/타원 등)은 보존한다. (앵커는 중첩되지 않으므로 lazy 매칭 안전)
 function removeDrawingPics(dx: string): string {
@@ -333,6 +346,9 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
       toRemove.push({ rid, target });
       continue;
     }
+
+    // 대형 블로트 시트(별지2-절연 A1:XFD265 등, 수백만 빈셀·수십MB) 슬림화 → 처리 폭주/타임아웃 방지
+    xml = deBloatSheet(xml);
 
     if (isB1) xml = fillByeolji1(xml, d);
     else if (isB14) xml = fillByeolji14(xml, shared, d);
@@ -480,7 +496,8 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
 
   // 인쇄영역 + 페이지맞춤: 시트별로 "실제 내용까지만" 인쇄영역을 잡고 한 페이지에 맞춤.
   //  → 표 밖 먼 행의 사진/빈 행이 제외되어, 빈 페이지·떠다니는 사진 없이 시트당 한 장으로 출력.
-  {
+  //  ⚠ 어떤 양식에서도 생성이 깨지지 않도록 전체를 try/catch로 보호한다.
+  try {
     const wbXml = (await zip.file('xl/workbook.xml')?.async('string')) || '';
     const PFX = /<x:sheets[ >]/.test(wbXml) ? 'x:' : '';
     // 워크북의 시트 순서(이름·rId·0기반 index)
@@ -496,14 +513,14 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
       const f = rid2file[s.rid];
       if (!f || !zip.file(f)) continue;
       const sx = await zip.file(f)!.async('string');
-      // 실제 값(<v>/<is>/<f>)이 있는 마지막 행
-      let lastRow = 0;
-      for (const rm of sx.matchAll(/<(?:x:)?row r="(\d+)"[^>]*>([\s\S]*?)<\/(?:x:)?row>/g))
-        if (/<(?:x:)?(?:v|is|f)>/.test(rm[2])) lastRow = Math.max(lastRow, +rm[1]);
-      // 실제 값이 있는 마지막 열
-      let valCol = 0;
-      for (const cm of sx.matchAll(/<(?:x:)?c r="([A-Z]+)\d+"[^>]*>([\s\S]*?)<\/(?:x:)?c>/g))
-        if (/<(?:x:)?(?:v|is|f)>/.test(cm[2])) valCol = Math.max(valCol, colToNum(cm[1]));
+      // 값이 있는 셀(여는태그 직후 <v>/<is>/<f>)에서 마지막 행·열 산출.
+      // ⚠ 빈 셀/빈 행을 [\s\S]*?로 스캔하면 자기닫음 셀이 많은 대형 양식에서 O(n²) 폭주
+      //    → Vercel 함수 타임아웃("An error..." 크래시). 값셀을 직접 매칭해 선형으로 처리.
+      let lastRow = 0, valCol = 0;
+      for (const cm of sx.matchAll(/<(?:x:)?c r="([A-Z]+)(\d+)"[^>]*?>\s*<(?:x:)?(?:v|is|f)\b/g)) {
+        valCol = Math.max(valCol, colToNum(cm[1]));
+        lastRow = Math.max(lastRow, +cm[2]);
+      }
       // 인쇄 폭: dimension의 최대 열(블로트면 값열로 대체)
       const dm = sx.match(/<(?:x:)?dimension ref="[A-Z]+\d+:([A-Z]+)\d+"/);
       let col = dm ? colToNum(dm[1]) : 0;
@@ -533,7 +550,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
       }
       zip.file('xl/workbook.xml', nwb);
     }
-  }
+  } catch { /* 인쇄영역/페이지맞춤 실패해도 생성은 정상 진행 */ }
 
   return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
