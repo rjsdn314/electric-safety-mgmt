@@ -118,6 +118,27 @@ function replaceDates(xml: string, shared: string[], date: string, maxRow: numbe
     });
 }
 
+// 헤더의 '년'/'월'/'일' 라벨 옆 숫자 날짜셀 채우기.
+//  · 정부 표준 별지는 [연(2칸)] 년 [월(2칸)] 월 [일(2칸)] 일 구조 → 라벨 2칸 왼쪽이 숫자값.
+//  · 텍스트형 날짜는 replaceDates가, 숫자형(전원품질 AA3/AE3/AI3, 고압 AA5/AE5/AI5 등)은 이 함수가 처리.
+//  → 전원품질·변압기·고압처럼 별도 채우기 함수가 없던 시트의 날짜가 양식 원본값으로 남던 문제 해결.
+function fillHeaderDateNumbers(xml: string, shared: string[], date: string): string {
+  const t = ymd(date);
+  const labels: Array<[string, number]> = [['년', +t.yy], ['월', +t.m], ['일', +t.d]];
+  const found = [...xml.matchAll(/<c r="([A-Z]+)(\d+)"[^>]*?t="s"[^>]*?><v>(\d+)<\/v>/g)];
+  for (const m of found) {
+    const col = m[1], row = +m[2];
+    if (row > 10) continue;                       // 헤더 영역 한정
+    const txt = (shared[+m[3]] || '').trim();
+    const lab = labels.find(([l]) => txt === l);
+    if (!lab) continue;
+    const numColNum = colToNum(col) - 2;
+    if (numColNum < 1) continue;
+    xml = setCell(xml, `${numToCol(numColNum)}${row}`, lab[1], true);
+  }
+  return xml;
+}
+
 function num(v: any) { return v !== '' && v !== null && v !== undefined && !isNaN(Number(v)) ? Number(v) : null; }
 
 // 컬럼 번호(1-base) → 문자 (8 → "H", 31 → "AE")
@@ -319,9 +340,12 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     else if (isGround) xml = fillByeolji2Ground(xml, shared, d);
     else if (isB2) xml = fillByeolji2(xml, shared, d);
     else {
-      // 별지 매핑이 없는 시트도 이름 치환은 적용 (inline 문자열 한정)
-      const nx = replaceNamesInXml(xml, names, repl);
-      if (nx !== xml) zip.file(path, nx);
+      // 별지 매핑이 없는 시트(전원품질·변압기·고압 등): 날짜를 점검일자로 동기화 + 이름 치환
+      //  → 시트별 날짜 불일치(이 시트들만 양식 원본 날짜로 남던 문제) 해결
+      xml = replaceDates(xml, shared, d.date, 10);            // 텍스트형 날짜
+      xml = fillHeaderDateNumbers(xml, shared, d.date);       // 숫자형 날짜(년/월/일 라벨 옆)
+      xml = replaceNamesInXml(xml, names, repl);
+      zip.file(path, xml);
       continue;
     }
 
