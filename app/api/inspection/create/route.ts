@@ -14,6 +14,50 @@ import ExcelJS from 'exceljs';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+// ── 날씨 자동 조회 (Nominatim 지오코딩 + Open-Meteo 날씨, 모두 무료·키 불필요) ──
+// 충전소 좌표를 한 번 지오코딩해 stations에 캐시 → 점검일 날씨 → 맑음/흐림/우천. 실패 시 null.
+async function fetchJson(url: string, ms = 4000, headers?: Record<string, string>): Promise<any> {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { const r = await fetch(url, { signal: ctrl.signal, headers }); return r.ok ? await r.json() : null; }
+  catch { return null; } finally { clearTimeout(t); }
+}
+function geoQueries(name: string): string[] {
+  const base = name.replace(/\([^)]*\)/g, ' ').replace(/^워터\s*/, '').replace(/-\s*\d+$/, '').replace(/\s+/g, ' ').trim();
+  const qs = [base];
+  const hue = base.match(/(\S+?)휴게소/);              // '강릉휴게소' → 지명 '강릉'
+  if (hue) qs.push(hue[1]); else qs.push(base.split(' ')[0]);
+  return [...new Set(qs)].filter(Boolean);
+}
+async function geocode(name: string): Promise<{ lat: number; lon: number } | null> {
+  for (const q of geoQueries(name)) {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q + ', 대한민국')}&format=json&countrycodes=kr&limit=1`;
+    const j = await fetchJson(url, 4500, { 'User-Agent': 'electric-safety-mgmt/1.0 (inspection-weather)' });
+    if (Array.isArray(j) && j[0]?.lat) return { lat: +j[0].lat, lon: +j[0].lon };
+  }
+  return null;
+}
+async function resolveWeather(sb: any, station: any, date: string): Promise<string | null> {
+  try {
+    let lat = station.latitude, lon = station.longitude;
+    if (lat == null || lon == null) {
+      const g = await geocode(station.name);
+      if (!g) return null;
+      lat = g.lat; lon = g.lon;
+      try { await sb.from('stations').update({ latitude: lat, longitude: lon }).eq('id', station.id); } catch { /* 캐시 실패 무시 */ }
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const base = date < today ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast';
+    const w = await fetchJson(`${base}?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&daily=weather_code,precipitation_sum&timezone=Asia%2FSeoul`);
+    const code = w?.daily?.weather_code?.[0];
+    const precip = w?.daily?.precipitation_sum?.[0] ?? 0;
+    if (code == null) return null;
+    if (precip >= 1 || code >= 51) return '우천';   // 51+ : 이슬비·비·눈·뇌우
+    if (code <= 1) return '맑음';                     // 0,1 : 맑음·대체로 맑음
+    return '흐림';                                    // 2,3,45,48 : 구름·안개
+  } catch { return null; }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -33,6 +77,12 @@ export async function POST(req: NextRequest) {
     if (stErr || !station) throw new Error('충전소 정보를 찾을 수 없습니다');
 
     const isHighV = Number(station.voltage) >= 3000;
+
+    // 날씨: '자동'(또는 미지정)이면 실제 날씨 조회를 양식 다운로드와 병렬로 시작.
+    const weatherPromise: Promise<string> =
+      (weather && weather !== '자동')
+        ? Promise.resolve(weather)
+        : resolveWeather(sb, station, date).then((w) => w || '맑음');
 
     let sets: any[] = Array.isArray(measure_sets) && measure_sets.length ? measure_sets : [{
       voltage_A: body.voltage_A1 ?? '', voltage_B: body.voltage_B1 ?? '',
@@ -137,7 +187,7 @@ export async function POST(req: NextRequest) {
         ground_resistance: ground,
         replace_names: replaceNames,
         signature_b64,
-        weather: weather || '맑음',
+        weather: await weatherPromise,
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
       });
     } else {

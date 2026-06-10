@@ -25,7 +25,7 @@ export function InspectionForm() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [inspector, setInspector] = useState('');
   const [count, setCount] = useState(1);
-  const [weather, setWeather] = useState('맑음');
+  const [weather, setWeather] = useState('자동');
   const [measureSets, setMeasureSets] = useState<any[]>([emptyMeasureSet()]);
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
@@ -407,6 +407,7 @@ export function InspectionForm() {
           <div>
             <label style={labelStyle}>날씨(일기)</label>
             <select className="toss-input" value={weather} onChange={e=>setWeather(e.target.value)}>
+              <option value="자동">자동(실제 날씨)</option>
               <option value="맑음">맑음</option>
               <option value="흐림">흐림</option>
               <option value="우천">우천</option>
