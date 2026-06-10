@@ -25,6 +25,7 @@ export function InspectionForm() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [inspector, setInspector] = useState('');
   const [count, setCount] = useState(1);
+  const [weather, setWeather] = useState('맑음');
   const [measureSets, setMeasureSets] = useState<any[]>([emptyMeasureSet()]);
   const [remarks, setRemarks] = useState('');
   const [loading, setLoading] = useState(false);
@@ -261,6 +262,7 @@ export function InspectionForm() {
           date,
           inspector_name: inspector,
           count,
+          weather,
           measure_sets: measureSets,
           ground_resistance: (inspType==='반기'||inspType==='연차') ? measureSets.map(s=>s.ground) : [],
           remarks: remarks,   // 종합의견 빈값은 서버/엔진에서 처리(개소 특이사항 있으면 공란 유지)
@@ -401,6 +403,14 @@ export function InspectionForm() {
           <div>
             <label style={labelStyle}>점검횟수</label>
             <input type="number" className="toss-input" min={1} value={count} onChange={e=>setCount(Number(e.target.value))}/>
+          </div>
+          <div>
+            <label style={labelStyle}>날씨(일기)</label>
+            <select className="toss-input" value={weather} onChange={e=>setWeather(e.target.value)}>
+              <option value="맑음">맑음</option>
+              <option value="흐림">흐림</option>
+              <option value="우천">우천</option>
+            </select>
           </div>
         </div>
       </div>

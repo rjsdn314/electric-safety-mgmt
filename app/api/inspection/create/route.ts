@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     const {
       station_id, inspection_type, date,
       inspector_name, count, remarks,
-      measure_sets, ground_resistance, is_mobile,
+      measure_sets, ground_resistance, is_mobile, weather,
     } = body;
 
     const sb = createClient(
@@ -137,6 +137,7 @@ export async function POST(req: NextRequest) {
         ground_resistance: ground,
         replace_names: replaceNames,
         signature_b64,
+        weather: weather || '맑음',
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
       });
     } else {

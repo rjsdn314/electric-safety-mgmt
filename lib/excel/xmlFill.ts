@@ -23,6 +23,7 @@ export interface FillData {
   ground_resistance?: any[];   // 접지저항 측정값 (별지2-접지저항 D5↓)
   replace_names?: string[];     // 양식에 인쇄된 기존 안전관리자명 → inspector_name 으로 치환
   signature_b64?: string;       // 점검자 서명 이미지(data:image/png;base64,...) — 별지1·별지14 서명칸에 삽입
+  weather?: string;             // 날씨/일기: 맑음·흐림·우천 — 별지14 D4 "(일기:OO)"
   remarks: string;
 }
 
@@ -195,6 +196,7 @@ function fillByeolji1(xml: string, d: FillData): string {
 function fillByeolji14(xml: string, shared: string[], d: FillData): string {
   const t = ymd(d.date);
   xml = setCell(xml, 'G4', `${t.yy}년${t.mm}월${t.dd}일`, false);
+  xml = setCell(xml, 'D4', `(일기:${d.weather || '맑음'})`, false);   // 날씨/일기
   xml = setCell(xml, 'C7', d.station_name, false);
   const vNum = parseInt(d.voltage.replace(/[^0-9]/g, '') || '0', 10);
   const cNum = d.capacity.replace(/[^0-9]/g, '');
