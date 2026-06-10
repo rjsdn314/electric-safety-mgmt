@@ -237,6 +237,28 @@ function fillByeolji2(xml: string, shared: string[], d: FillData): string {
   return replaceDates(xml, shared, d.date, 8);
 }
 
+// 전원품질측정기록표: 전압(L열)·전류(V열)를 별지1 측정값(measure_sets)으로 복사.
+//  · A열에 'TR…KVA' 라벨이 있는 행이 각 변압기 블록의 시작(상 R/S/T = +0/+1/+2 행).
+//  · 수배전반#k → k번째 TR 블록, 상 A/B/C 순서로 전압→L, 전류→V.
+//  → "전원품질 전압/전류 = 별지1 값" 요구 반영(별지1에 입력하면 전원품질에 자동 반영).
+function fillPowerQuality(xml: string, shared: string[], d: FillData): string {
+  const trRows: number[] = [];
+  for (const m of xml.matchAll(/<c r="A(\d+)"[^>]*?t="s"[^>]*?><v>(\d+)<\/v>/g)) {
+    const txt = shared[+m[2]] || '';
+    if (/KVA|KVＡ|TR/i.test(txt)) trRows.push(+m[1]);
+  }
+  trRows.sort((a, b) => a - b);
+  (d.measure_sets || []).forEach((set, k) => {
+    const base = trRows[k]; if (!base) return;
+    const map: [string, any][] = [
+      [`L${base}`, set.voltage_A], [`L${base + 1}`, set.voltage_B], [`L${base + 2}`, set.voltage_C],
+      [`V${base}`, set.current_A], [`V${base + 1}`, set.current_B], [`V${base + 2}`, set.current_C],
+    ];
+    for (const [ref, v] of map) { const n = num(v); if (n !== null) xml = setCell(xml, ref, n, true); }
+  });
+  return xml;
+}
+
 // 인쇄/PDF 저장 시 잘림 방지: 시트를 "한 페이지에 맞춤"으로 설정.
 //  · pageSetup fitToWidth="1" + fitToHeight="1" (가로·세로 모두 1페이지)
 //  · sheetPr 안에 pageSetUpPr fitToPage="1" (맞춤 활성화) — 없으면 추가
@@ -362,6 +384,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
       //  → 시트별 날짜 불일치(이 시트들만 양식 원본 날짜로 남던 문제) 해결
       xml = replaceDates(xml, shared, d.date, 10);            // 텍스트형 날짜
       xml = fillHeaderDateNumbers(xml, shared, d.date);       // 숫자형 날짜(년/월/일 라벨 옆)
+      if (name.includes('전원품질')) xml = fillPowerQuality(xml, shared, d);  // 전압/전류 = 별지1 값
       xml = replaceNamesInXml(xml, names, repl);
       zip.file(path, xml);
       continue;
