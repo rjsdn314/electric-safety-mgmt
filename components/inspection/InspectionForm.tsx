@@ -202,7 +202,7 @@ export function InspectionForm() {
       setFolderHandle(handle);
       setFolderName(handle.name);
       await saveStationFolder(selected, handle);
-      alert(\`✅ 폴더 저장 완료\\n\\n충전소: \${selected.name}\\n폴더: \${handle.name}\\n\\n이 충전소는 앞으로 항상 이 폴더에 저장됩니다.\`);
+      alert(`✅ 폴더 저장 완료\\n\\n충전소: ${selected.name}\\n폴더: ${handle.name}\\n\\n이 충전소는 앞으로 항상 이 폴더에 저장됩니다.`);
     } catch (e: any) {
       if (e.name !== 'AbortError') alert('폴더 선택 실패: ' + e.message);
     }
@@ -262,7 +262,7 @@ export function InspectionForm() {
       if (!res.ok) throw new Error(r.error);
       if (folderHandle && r.fileBase64) {
         const dateNum = date.replace(/-/g, '');
-        const subFolderName = \`\${dateNum}_\${selected.name}_\${inspType}\`;
+        const subFolderName = `${dateNum}_${selected.name}_${inspType}`;
         await saveToLocal(r.fileBase64, r.fileName, subFolderName);
       }
       setSavedFile(r.fileName);
@@ -300,7 +300,7 @@ export function InspectionForm() {
         </div>
       </div>
       {result && <PrintableSheet data={result} />}
-      <style jsx global>{\`
+      <style jsx global>{`
         @media print {
           body * { visibility: hidden; }
           #print-sheet, #print-sheet * { visibility: visible; }
@@ -310,7 +310,7 @@ export function InspectionForm() {
         }
         #print-sheet { display: none; }
         @media print { #print-sheet { display: block; } }
-      \`}</style>
+      `}</style>
     </>
   );
 
@@ -320,7 +320,7 @@ export function InspectionForm() {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: folderHandle ? 'rgba(5,192,114,.15)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📁</div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>저장 폴더</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName ? (selected ? \`\${folderName} / \${selected.name}\` : folderName) : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName ? (selected ? `${folderName} / ${selected.name}` : folderName) : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}</div>
         </div>
         <button onClick={selectFolder} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>{folderHandle ? '변경' : '선택'}</button>
       </div>
@@ -366,7 +366,7 @@ export function InspectionForm() {
         <div style={sectionTitle}>점검 정보</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
           {TYPE_OPTIONS.map(t => (
-            <button key={t.value} onClick={() => setInspType(t.value)} style={{ padding: '16px 4px', borderRadius: 12, border: \`1.5px solid \${inspType === t.value ? 'var(--accent)' : 'transparent'}\`, background: inspType === t.value ? 'var(--accent-soft)' : 'var(--bg-input)', color: inspType === t.value ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}>
+            <button key={t.value} onClick={() => setInspType(t.value)} style={{ padding: '16px 4px', borderRadius: 12, border: `1.5px solid ${inspType === t.value ? 'var(--accent)' : 'transparent'}`, background: inspType === t.value ? 'var(--accent-soft)' : 'var(--bg-input)', color: inspType === t.value ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}>
               {t.value}
               <div style={{ fontSize: 11, opacity: .7, marginTop: 4, fontWeight: 500 }}>{t.months}</div>
             </button>
@@ -403,7 +403,7 @@ export function InspectionForm() {
               <div className="measure-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 {(['A','B','C','N'] as const).map((phase) => (
                   <div key={phase} style={{ position: 'relative' }}>
-                    <input type="number" inputMode="decimal" className="toss-input" placeholder={phase === 'N' ? 'N' : \`\${phase}상\`} style={{ paddingRight: 36 }} value={set[\`voltage_\${phase}\`] ?? ''} onChange={e => updateMeasureSet(idx, \`voltage_\${phase}\`, e.target.value)} />
+                    <input type="number" inputMode="decimal" className="toss-input" placeholder={phase === 'N' ? 'N' : `${phase}상`} style={{ paddingRight: 36 }} value={set[`voltage_${phase}`] ?? ''} onChange={e => updateMeasureSet(idx, `voltage_${phase}`, e.target.value)} />
                     <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text-secondary)', pointerEvents: 'none', fontWeight: 600 }}>V</span>
                   </div>
                 ))}
@@ -414,7 +414,7 @@ export function InspectionForm() {
               <div className="measure-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10 }}>
                 {(['A','B','C'] as const).map((phase) => (
                   <div key={phase} style={{ position: 'relative' }}>
-                    <input type="number" inputMode="decimal" className="toss-input" placeholder={\`\${phase}상\`} style={{ paddingRight: 36 }} value={set[\`current_\${phase}\`] ?? ''} onChange={e => updateMeasureSet(idx, \`current_\${phase}\`, e.target.value)} />
+                    <input type="number" inputMode="decimal" className="toss-input" placeholder={`${phase}상`} style={{ paddingRight: 36 }} value={set[`current_${phase}`] ?? ''} onChange={e => updateMeasureSet(idx, `current_${phase}`, e.target.value)} />
                     <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text-secondary)', pointerEvents: 'none', fontWeight: 600 }}>A</span>
                   </div>
                 ))}
@@ -453,12 +453,12 @@ export function InspectionForm() {
 
       <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', padding: 18, borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: loading ? .6 : 1, fontFamily: 'inherit' }}>{loading ? '⏳ 생성 중...' : '⚡ 직무고시 엑셀 생성 및 저장'}</button>
 
-      <style jsx>{\`
+      <style jsx>{`
         @media (max-width: 768px) {
           .info-grid { grid-template-columns: 1fr !important; }
           .measure-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
-      \`}</style>
+      `}</style>
     </div>
   );
 }
