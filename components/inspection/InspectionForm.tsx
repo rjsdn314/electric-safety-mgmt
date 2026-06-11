@@ -237,7 +237,7 @@ export function InspectionForm() {
     if (!selected) return alert('충전소를 선택해주세요');
     if (!inspector) return alert('점검자를 입력해주세요');
     if (!folderHandle) {
-      const proceed = confirm('⚠️ 저장 폴더가 지정되지 않았습니다.\\n\\n폴더를 지정하지 않으면 파일이 로컬 폴더에 자동 저장되지 않고, 생성 후 직접 다운로드만 가능합니다.\\n\\n그래도 계속 진행하시겠습니까?');
+      const proceed = confirm('⚠️ 저장 폴더가 지정되지 않았습니다.\n\n폴더를 지정하지 않으면 파일이 로컬 폴더에 자동 저장되지 않고, 생성 후 직접 다운로드만 가능합니다.\n\n그래도 계속 진행하시겠습니까?');
       if (!proceed) return;
     }
     setLoading(true);
@@ -276,6 +276,44 @@ export function InspectionForm() {
 
   const handlePrintPdf = () => { window.print(); };
 
+  // ── PDF 변환 도우미 연동 (데스크톱 + 저장폴더 지정 시) ──
+  // 저장 폴더에 마커(.pdfonly/.pdfboth)를 만들면 PC의 "PDF 변환 도우미"
+  // (바탕화면 PDF변환도우미.bat)가 감지해 실제 엑셀 모양 그대로 PDF 생성.
+  const [saveMsg, setSaveMsg] = useState('');
+  const writeMarker = async (kind: 'pdfonly' | 'pdfboth') => {
+    if (!folderHandle || !result?.fileBase64) return false;
+    const dateNum = (result.date || date).replace(/-/g, '');
+    const sub = `${dateNum}_${(result.station || selected)?.name}_${result.inspType || inspType}`;
+    const okx = await saveToLocal(result.fileBase64, result.fileName || savedFile, sub); // 변환 원본 보장
+    if (!okx) return false;
+    const dir = await folderHandle.getDirectoryHandle(sub, { create: true });
+    const fh = await dir.getFileHandle(`${result.fileName || savedFile}.${kind}`, { create: true });
+    const w = await fh.createWritable(); await w.write(kind); await w.close();
+    return true;
+  };
+  const savePdf = async () => {
+    if (folderHandle && result?.fileBase64) {
+      try {
+        const ok = await writeMarker('pdfonly');
+        setSaveMsg(ok ? '🕒 PDF 변환 요청됨 — "PDF 변환 도우미"가 켜져 있으면 잠시 후 폴더에 PDF만 남습니다.' : '');
+      } catch (e: any) { setSaveMsg('❌ ' + e.message); }
+    } else {
+      handlePrintPdf(); // 폴더 미지정/모바일: 브라우저 인쇄로 대체
+    }
+  };
+  const saveBoth = async () => {
+    if (folderHandle && result?.fileBase64) {
+      try {
+        const ok = await writeMarker('pdfboth');
+        setSaveMsg(ok ? '🕒 엑셀 저장 + PDF 변환 요청됨 — 도우미가 켜져 있으면 잠시 후 PDF가 함께 생성됩니다.' : '');
+      } catch (e: any) { setSaveMsg('❌ ' + e.message); }
+    } else {
+      const a = document.createElement('a'); a.href = downloadUrl; a.download = savedFile;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(handlePrintPdf, 600);
+    }
+  };
+
   const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 8, color: 'var(--text-secondary)' };
 
@@ -291,9 +329,15 @@ export function InspectionForm() {
             {downloadUrl && (
               <a href={downloadUrl} download={savedFile} style={{ display: 'block', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}>⬇️ 엑셀 저장 (.xlsx)</a>
             )}
-            <button onClick={handlePrintPdf} style={{ display: 'block', width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1.5px solid var(--accent)', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>🖨️ PDF 저장 (인쇄 → PDF로 저장)</button>
+            <button onClick={savePdf} style={{ display: 'block', width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1.5px solid var(--accent)', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📄 PDF 저장{folderHandle && result?.fileBase64 ? ' (엑셀 모양 그대로)' : ' (인쇄 → PDF로 저장)'}</button>
             {downloadUrl && (
-              <button onClick={() => { const a = document.createElement('a'); a.href = downloadUrl; a.download = savedFile; document.body.appendChild(a); a.click(); a.remove(); setTimeout(handlePrintPdf, 600); }} style={{ display: 'block', width: '100%', background: 'rgba(49,130,246,.12)', color: 'var(--accent)', border: 'none', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📦 엑셀 + PDF 저장</button>
+              <button onClick={saveBoth} style={{ display: 'block', width: '100%', background: 'rgba(49,130,246,.12)', color: 'var(--accent)', border: 'none', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📦 엑셀 + PDF 저장</button>
+            )}
+            {saveMsg && <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{saveMsg}</div>}
+            {folderHandle && result?.fileBase64 && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+                PDF는 PC의 <b>“PDF 변환 도우미”</b>(바탕화면 <code>PDF변환도우미</code>)가 켜져 있을 때 실제 엑셀 모양 그대로 자동 생성됩니다.
+              </div>
             )}
           </div>
           <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); }} style={{ width: '100%', maxWidth: 400, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginTop: 8 }}>새 점검 생성</button>

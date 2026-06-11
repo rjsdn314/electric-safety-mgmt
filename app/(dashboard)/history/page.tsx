@@ -337,17 +337,22 @@ export default function HistoryPage() {
                                         <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>
                                                               )}
                                               </div>
-                                              <div style={{display: 'flex', gap: 6, justifyContent: 'center'}}>
+                                              <div style={{display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center'}}>
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
                                         <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>
                                                               )}
                                                 {item.file_path && (
                                         <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
                                                               )}
-                                                {isDesktop && !item.measure_values?.local_deleted && (
-                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬(PC) 저장 파일만 삭제" style={{ padding: 6, borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg></button>
-                                                              )}
-                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ padding: 6, borderRadius: 6, background: 'transparent', color: 'var(--text-tertiary)', border: '1px solid var(--border)', cursor: 'pointer', fontSize: 12, lineHeight: 1, fontFamily: 'inherit' }}>✕</button>
+                                                {/* 로컬 파일 삭제 — 우측 끝 고정, 직관적 🗑 */}
+                                                {isDesktop && (
+                                                  item.measure_values?.local_deleted ? (
+                                                    <span title="로컬 파일 없음" style={{ padding: 6, fontSize: 15, lineHeight: 1, opacity: .25, cursor: 'default' }}>🗑</span>
+                                                  ) : (
+                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬 저장 파일 삭제 (PC의 엑셀 파일만 삭제, 이력은 유지)" style={{ padding: 6, borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 15, lineHeight: 1 }}>🗑</button>
+                                                  )
+                                                )}
                                               </div>
                                 </div>
                     </div> ))
