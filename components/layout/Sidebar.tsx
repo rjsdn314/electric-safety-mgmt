@@ -44,6 +44,7 @@ export function Sidebar() {
   };
 
   const isAdmin = userInfo?.role === 'admin';
+  const canUseCalendar = ['황건우', '조강민'].includes((userInfo?.name || '').trim());
 
   const menus = [
     { href: '/dashboard',        label: '대시보드',      icon: '🏠' },
@@ -125,7 +126,7 @@ export function Sidebar() {
       }}>메뉴</div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {menus.map(m => (
+        {menus.filter(m => m.href !== '/calendar' || canUseCalendar).map(m => (
           <Link key={m.href} href={m.href} style={linkStyle(m.href)} onClick={() => setOpen(false)}>
             <span style={{ fontSize: 18 }}>{m.icon}</span>
             <span>{m.label}</span>
