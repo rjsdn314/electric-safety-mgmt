@@ -7,6 +7,8 @@ export default function CalendarPage() {
   const isAdmin = profile?.role === 'admin';
   const [url, setUrl] = useState('');
   const [draft, setDraft] = useState('');
+  const [icsDraft, setIcsDraft] = useState('');
+  const [hasIcs, setHasIcs] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [msg, setMsg] = useState('');
@@ -14,7 +16,11 @@ export default function CalendarPage() {
 
   useEffect(() => {
     (async () => {
-      try { const r = await fetch('/api/calendar'); const j = await r.json(); setUrl(j.url || ''); setDraft(j.url || ''); }
+      try {
+        const r = await fetch('/api/calendar'); const j = await r.json();
+        setUrl(j.url || ''); setDraft(j.url || '');
+        setIcsDraft(j.icsUrl || ''); setHasIcs(!!j.hasIcs);
+      }
       finally { setLoaded(true); }
     })();
   }, []);
@@ -22,10 +28,10 @@ export default function CalendarPage() {
   const save = async () => {
     setSaving(true); setMsg('');
     try {
-      const r = await fetch('/api/calendar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: draft.trim() }) });
+      const r = await fetch('/api/calendar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: draft.trim(), icsUrl: icsDraft.trim() }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || '저장 실패');
-      setUrl(draft.trim()); setEditing(false); setMsg('✅ 저장되었습니다.');
+      setUrl(draft.trim()); setHasIcs(!!icsDraft.trim()); setEditing(false); setMsg('✅ 저장되었습니다.');
     } catch (e: any) { setMsg('❌ ' + e.message); } finally { setSaving(false); }
   };
 
@@ -52,6 +58,14 @@ export default function CalendarPage() {
           <div style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '10px 0', lineHeight: 1.7 }}>
             구글 캘린더 → 설정 → 해당 캘린더 → <b>“캘린더 통합”</b> → <b>“삽입 코드”</b> 의 <code>src="..."</code> 안 주소(또는 <b>공개 URL</b>)를 붙여넣으세요.<br />
             팀원이 보려면 그 캘린더를 <b>공유(보기/변경 권한)</b> 해두세요.
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, margin: '14px 0 8px' }}>
+            iCal 비공개 주소 <span style={{ fontWeight: 500, color: 'var(--text-tertiary)' }}>— 오늘 점검현장 우선검색용 {hasIcs && '(연결됨 ✓)'}</span>
+          </div>
+          <input style={input} placeholder="https://calendar.google.com/calendar/ical/.../private-.../basic.ics" value={icsDraft} onChange={e => setIcsDraft(e.target.value)} />
+          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '10px 0', lineHeight: 1.7 }}>
+            구글 캘린더 → 설정 → 해당 캘린더 → <b>“캘린더 통합”</b> → <b>“iCal 형식의 비공개 주소”</b>를 복사해 붙여넣으세요.<br />
+            연결하면 <b>점검 생성 검색에서 오늘 일정에 있는 충전소가 맨 위에 표시</b>됩니다. (주소는 서버에만 저장되며 외부에 노출되지 않습니다)
           </div>
           {msg && <div style={{ fontSize: 13, marginBottom: 10 }}>{msg}</div>}
           <button onClick={save} disabled={saving} style={btn(saving ? 'var(--border)' : 'var(--accent, #0066ff)')}>{saving ? '저장 중...' : '저장'}</button>

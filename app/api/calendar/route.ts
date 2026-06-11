@@ -38,12 +38,19 @@ async function ctx() {
 
 export async function GET() {
     try {
-          const { sb } = await ctx();
+          const { user, sb } = await ctx();
           const { data } = await sb.from('settings').select('key, value').in('key', [KEY, ICS_KEY]);
           const map = new Map((data || []).map((r: any) => [r.key, r.value]));
-          return NextResponse.json({ url: map.get(KEY) || '', icsUrl: map.get(ICS_KEY) || '' });
+          // 비공개 iCal 주소는 비밀 토큰이 포함되므로 관리자에게만 원문 반환, 그 외엔 설정여부만.
+          let isAdmin = false;
+          if (user) {
+                  const { data: prof } = await sb.from('profiles').select('role').eq('id', user.id).single();
+                  isAdmin = prof?.role === 'admin';
+          }
+          const ics = map.get(ICS_KEY) || '';
+          return NextResponse.json({ url: map.get(KEY) || '', icsUrl: isAdmin ? ics : '', hasIcs: !!ics });
     } catch (e: any) {
-          return NextResponse.json({ url: '', icsUrl: '', error: e.message });
+          return NextResponse.json({ url: '', icsUrl: '', hasIcs: false, error: e.message });
     }
 }
 
