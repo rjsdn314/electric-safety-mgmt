@@ -192,16 +192,30 @@ export function InspectionForm() {
     });
   };
 
+  // ── 오늘 작성 완료한 충전소: 목록 맨 아래로 (남은 현장이 위에 오도록) ──
+  const [doneTodayNames, setDoneTodayNames] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!stations.length) return;
+    (async () => {
+      try {
+        const sb = createClient();
+        const start = new Date(); start.setHours(0, 0, 0, 0);
+        const { data } = await sb.from('inspections').select('station_id').gte('created_at', start.toISOString());
+        const ids = new Set((data || []).map((r: any) => r.station_id));
+        setDoneTodayNames(new Set(stations.filter(s => ids.has(s.id)).map(s => s.name)));
+      } catch {}
+    })();
+  }, [stations]);
+  const isDoneToday = (s: any) => doneTodayNames.has(s.name);
+
   const filtered = useMemo(() => {
     const base = stations
       .filter(s => matchStation(s, query))
       .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
-    return [...base].sort((a, b) => {
-      const ta = isTodayStation(a) ? 0 : 1;
-      const tb = isTodayStation(b) ? 0 : 1;
-      return ta - tb;
-    });
-  }, [stations, query, todayTitles]);
+    // 정렬: 오늘 일정(미작성) 맨 위 → 일반 → 오늘 작성 완료 맨 아래
+    const rank = (s: any) => (isDoneToday(s) ? 2 : isTodayStation(s) ? 0 : 1);
+    return [...base].sort((a, b) => rank(a) - rank(b));
+  }, [stations, query, todayTitles, doneTodayNames]);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
     setMeasureSets(prev => {
@@ -292,6 +306,7 @@ export function InspectionForm() {
       setSavedFile(r.fileName);
       setDownloadUrl(r.downloadUrl);
       setResult({ ...r, station: selected, inspType, date, inspector, count, weather, measureSets, remarks });
+      setDoneTodayNames(prev => new Set(prev).add(selected.name));  // 작성 완료 → 목록 맨 아래로 즉시 반영
       setDone(true);
     } catch (e: any) {
       alert('오류: ' + e.message);
@@ -400,13 +415,15 @@ export function InspectionForm() {
           {open && filtered.length > 0 && (
             <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'var(--bg-elevated)', border: '1px solid var(--border-hover)', borderRadius: 14, padding: 6, boxShadow: '0 8px 32px rgba(0,0,0,.4)', maxHeight: 320, overflowY: 'auto' }}>
               {filtered.map(s => {
-                const today = isTodayStation(s);
+                const doneToday = isDoneToday(s);
+                const today = !doneToday && isTodayStation(s);
                 return (
-                  <button key={s.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, border: 'none', background: today ? 'rgba(5,192,114,.08)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left' }} onClick={() => handleSelectStation(s)}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#05C072', flexShrink: 0 }} />
+                  <button key={s.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, border: 'none', background: today ? 'rgba(5,192,114,.08)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', opacity: doneToday ? 0.55 : 1 }} onClick={() => handleSelectStation(s)}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: doneToday ? 'var(--text-tertiary)' : '#05C072', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {today && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(5,192,114,.18)', color: '#05a862' }}>📅 오늘</span>}
+                        {doneToday && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,.18)', color: 'var(--text-secondary)' }}>✅ 오늘 작성됨</span>}
                         {s.name}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{s.voltage}V · {s.capacity}kW</div>
