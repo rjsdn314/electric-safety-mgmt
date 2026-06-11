@@ -536,7 +536,7 @@ export function InspectionForm() {
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', padding: 18, borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: loading ? .6 : 1, fontFamily: 'inherit' }}>{loading ? '⏳ 생성 중...' : '⚡ 직무고시 엑셀 생성 및 저장'}</button>
+      <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', padding: 18, borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: loading ? .6 : 1, fontFamily: 'inherit' }}>{loading ? '⏳ 생성 중...' : '⚡ 직무고시 점검표 생성 — 완료 후 엑셀/PDF 선택'}</button>
 
       <style jsx>{`
         @media (max-width: 768px) {
