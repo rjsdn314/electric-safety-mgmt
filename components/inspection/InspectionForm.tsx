@@ -160,26 +160,35 @@ export function InspectionForm() {
   };
 
   // 일정 제목 ↔ 충전소명 매칭.
-  //  · 전체 포함(양방향) 또는 단어(토큰) 단위 매칭: 일정 "일산 호수공원 (1,2,3,4) 주차장"이
-  //    충전소 "일산호수공원 제1주차장"과 정확히 안 겹쳐도 의미 토큰 절반 이상이면 매칭.
+  //  · 한 일정에 여러 현장이 들어갈 수 있어("1일차 / 괴산휴게소(마산방향), 문경휴게소(창원방향), …")
+  //    쉼표·슬래시로 구간을 나눠 구간별로 매칭한다.
+  //  · "호수공원(1,2,3,4)"처럼 괄호 안 번호목록은 분리 전에 제거(제1~4주차장 모두 매칭).
+  //  · 구간 매칭: 전체 포함(양방향) 또는 핵심 토큰(가장 긴 의미 토큰, 예: '영천휴게소') 일치 +
+  //    의미 토큰 절반 이상 일치. 'N일차'·'오전/오후/점검' 등 불용어는 무시.
   const STOP_TOKENS = new Set(['오전', '오후', '점검', '월차', '분기', '반기', '연차', '예정', '및', '외']);
   const GENERIC_TOKENS = new Set(['주차장', '휴게소', '충전소', '공영', '제']);
+  const isStopToken = (x: string) => STOP_TOKENS.has(x) || /^\d+일차$/.test(x);
+  const segMatch = (seg: string, cands: string[]): boolean => {
+    const nt = norm(seg);
+    if (!nt) return false;
+    if (cands.some(c => nt.includes(c) || c.includes(nt))) return true;   // 전체 포함(양방향)
+    const tokens = seg.split(/[\s()\[\]·~-]+/).map(norm).filter(x => x.length >= 2 && !isStopToken(x));
+    if (!tokens.length) return false;
+    const specific = tokens.filter(x => !GENERIC_TOKENS.has(x));
+    const primary = specific.sort((a, b) => b.length - a.length)[0];      // 핵심 토큰(가장 긴 의미 토큰)
+    if (!primary) return false;
+    return cands.some(c => {
+      if (!c.includes(primary)) return false;
+      const hits = tokens.filter(x => c.includes(x));
+      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.5));
+    });
+  };
   const isTodayStation = (s: any): boolean => {
     if (!todayTitles.length) return false;
     const cands = [norm(s.name), norm(s.base_name)].filter(Boolean);
     return todayTitles.some(t => {
-      const nt = norm(t);
-      if (!nt) return false;
-      // 1) 전체 포함(양방향)
-      if (cands.some(c => nt.includes(c) || c.includes(nt))) return true;
-      // 2) 토큰 매칭: 의미 토큰(2자+, 불용어 제외) 절반 이상이 충전소명에 포함 + 일반어 아닌 토큰 1개 이상 일치
-      const tokens = t.split(/[\s(),\[\]\/·~-]+/).map(norm).filter(x => x.length >= 2 && !STOP_TOKENS.has(x));
-      if (!tokens.length) return false;
-      return cands.some(c => {
-        const hits = tokens.filter(x => c.includes(x));
-        const specificHit = hits.some(x => !GENERIC_TOKENS.has(x));
-        return specificHit && hits.length >= Math.max(1, Math.ceil(tokens.length * 0.6));
-      });
+      const cleaned = t.replace(/\(\s*[\d,\s]+\s*\)/g, ' ');              // "(1,2,3,4)" 등 번호목록 제거
+      return cleaned.split(/[,\/]+/).some(seg => segMatch(seg, cands));   // 구간별 매칭
     });
   };
 
