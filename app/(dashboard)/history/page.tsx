@@ -278,85 +278,84 @@ export default function HistoryPage() {
         <div style={{padding: '32px 36px 60px'}}>
                 <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
                           <div>
-                                    <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>h1>
-                                    <p style={{color: 'var(--text-secondary)'}}>생성된 직무고시 파일 목록</p>p>
-                          </div>div>
+                                    <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
+                                    <p style={{color: 'var(--text-secondary)'}}>생성된 직무고시 파일 목록</p>
+                          </div>
                   {isDesktop && (<button onClick={handleSync} disabled={syncing}
                                              style={{ padding: '12px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                     {syncing ? `⏳ ${syncProgress || '동기화 중...'}` : '📥 PC 폴더로 일괄 동기화'}
-                  </button>button>)}
-                </div>div>
+                  </button>)}
+                </div>
         
               <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>
                 {TYPES.map(t => (
                     <button key={t} onClick={() => setFilterType(t)}
-                                  style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${filterType === t ? 'var(--accent)' : 'var(--border)'}`, background: filterType === t ? 'var(--accent-soft)' : 'transparent', color: filterType === t ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>button>
+                                  style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${filterType === t ? 'var(--accent)' : 'var(--border)'}`, background: filterType === t ? 'var(--accent-soft)' : 'transparent', color: filterType === t ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>
                   ))}
                       <input className="toss-input" placeholder="충전소 검색" value={search} onChange={e => setSearch(e.target.value)} style={{flex: 1, minWidth: 200, marginLeft: 'auto'}}/>
-              </div>div>
+              </div>
         
           {selectedIds.size > 0 && (
                   <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '12px 16px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)'}}>
-                            <div style={{fontSize: 13, fontWeight: 700, color: '#ef4444'}}>{selectedIds.size}건 선택됨</div>div>
+                            <div style={{fontSize: 13, fontWeight: 700, color: '#ef4444'}}>{selectedIds.size}건 선택됨</div>
                             <div style={{display: 'flex', gap: 8}}>
-                                        <button onClick={() => setSelectedIds(new Set())} style={{padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'}}>선택 해제</button>button>
-                                        <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkDeleting ? 'wait' : 'pointer', opacity: bulkDeleting ? 0.6 : 1, fontFamily: 'inherit'}}>{bulkDeleting ? '삭제 중...' : `🗑 선택 ${selectedIds.size}건 삭제`}</button>button>
-                            </div>div>
-                  </div>div>
+                                        <button onClick={() => setSelectedIds(new Set())} style={{padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'}}>선택 해제</button>
+                                        <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkDeleting ? 'wait' : 'pointer', opacity: bulkDeleting ? 0.6 : 1, fontFamily: 'inherit'}}>{bulkDeleting ? '삭제 중...' : `🗑 선택 ${selectedIds.size}건 삭제`}</button>
+                            </div>
+                  </div>
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
                       <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 110px', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', alignItems: 'center'}}>
-                                <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>div>
-                                <div>충전소</div>div><div>점검유형</div>div><div>점검일자</div>div><div>점검자</div>div><div>파일명</div>div><div style={{textAlign: 'center'}}>액션</div>div>
-                      </div>div>
+                                <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
+                                <div>충전소</div><div>점검유형</div><div>점검일자</div><div>점검자</div><div>파일명</div><div style={{textAlign: 'center'}}>액션</div>
+                      </div>
               
                 {loading ? (
-                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>로딩 중...</div>div>
+                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>로딩 중...</div>
                   ) : filtered.length === 0 ? (
-                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>div>
+                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
                   ) : (
-                    visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>div>)}
+                    visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>)}
                                 <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 110px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'rgba(239,68,68,0.04)' : 'transparent'}}>
-                                              <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>div>
+                                              <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
                                                 {item.measure_values?.device === 'mobile' && (
-                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,0.12)', color: '#6366f1'}}>📱 휴대폰</span>span>
+                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,0.12)', color: '#6366f1'}}>📱 휴대폰</span>
                                                               )}
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
-                                        <span style={{marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>PC 저장 대기</span>span>
+                                        <span style={{marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>PC 저장 대기</span>
                                                               )}
-                                              </div>div>
-                                              <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span>span></div>div>
-                                              <div>{item.inspection_date}</div>div>
-                                              <div>{item.inspector_name}</div>div>
+                                              </div>
+                                              <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span></div>
+                                              <div>{item.inspection_date}</div>
+                                              <div>{item.inspector_name}</div>
                                               <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>
                                                 {item.file_name}
                                                 {item.measure_values?.local_deleted && (
-                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>span>
+                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>
                                                               )}
-                                              </div>div>
+                                              </div>
                                               <div style={{display: 'flex', gap: 6, justifyContent: 'center'}}>
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
-                                        <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>button>
+                                        <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>
                                                               )}
                                                 {item.file_path && (
-                                        <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>svg></a>a>
+                                        <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
                                                               )}
                                                 {isDesktop && !item.measure_values?.local_deleted && (
-                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬(PC) 저장 파일만 삭제" style={{ padding: 6, borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg>svg></button>button>
+                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬(PC) 저장 파일만 삭제" style={{ padding: 6, borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9.5" y1="12.5" x2="14.5" y2="17.5"/><line x1="14.5" y1="12.5" x2="9.5" y2="17.5"/></svg></button>
                                                               )}
-                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>svg></button>button>
-                                              </div>div>
-                                </div>div>
-                    </div>div> ))
+                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ padding: 6, borderRadius: 6, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: 'none', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                                              </div>
+                                </div>
+                    </div> ))
                   )}
-              </div>div>
+              </div>
           {!loading && visibleCount < filtered.length && (
-                  <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>button>
+                  <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>
               )}
-        </div>div>
+        </div>
       );
 }
-</div>
