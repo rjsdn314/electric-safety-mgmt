@@ -85,11 +85,13 @@ export async function GET(req: Request) {
       const body = block.split('END:VEVENT')[0];
       const lines = body.split('\n');
       let summary = '';
+      let desc = '';
       let start: string | null = null;
       let end: string | null = null;
       let rrule: string | null = null;
       for (const line of lines) {
         if (/^SUMMARY/i.test(line)) summary = unescapeIcs(line.replace(/^SUMMARY[^:]*:/i, ''));
+        else if (/^DESCRIPTION/i.test(line)) desc = unescapeIcs(line.replace(/^DESCRIPTION[^:]*:/i, ''));
         else if (/^DTSTART/i.test(line)) start = icsDateToYmd(line.split(':').pop() || '');
         else if (/^DTEND/i.test(line)) end = icsDateToYmd(line.split(':').pop() || '');
         else if (/^RRULE/i.test(line)) rrule = line.replace(/^RRULE[^:]*:/i, '').trim();
@@ -97,7 +99,10 @@ export async function GET(req: Request) {
       if (!summary || !start) continue;
       const hit = occursToday(start, end, rrule, today);
       if (debug) dbg.push({ summary, start, end, rrule, hit });
-      if (hit) titles.push(summary);
+      if (hit) {
+        titles.push(summary);
+        if (desc) titles.push(desc);   // 일정 설명(메모)란의 현장 목록도 매칭 대상에 포함
+      }
     }
 
     if (debug) return NextResponse.json({ titles, today, total: blocks.length, events: dbg });
