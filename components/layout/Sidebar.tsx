@@ -46,6 +46,23 @@ export function Sidebar() {
   const isAdmin = userInfo?.role === 'admin';
   const canUseCalendar = ['황건우', '조강민'].includes((userInfo?.name || '').trim());
 
+  // 회원가입 승인요청(NEW) 배지 — 관리자에게만, 1분마다 갱신
+  const [pendingCount, setPendingCount] = useState(0);
+  useEffect(() => {
+    if (!isAdmin) return;
+    const supabase = createClient();
+    const load = async () => {
+      const { count } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending');
+      setPendingCount(count || 0);
+    };
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [isAdmin]);
+
   const menus = [
     { href: '/dashboard',        label: '대시보드',      icon: '🏠' },
     { href: '/inspection',       label: '점검 생성',     icon: '📋' },
@@ -147,6 +164,13 @@ export function Sidebar() {
               <Link key={m.href} href={m.href} style={linkStyle(m.href)} onClick={() => setOpen(false)}>
                 <span style={{ fontSize: 18 }}>{m.icon}</span>
                 <span>{m.label}</span>
+                {m.href === '/admin/users' && pendingCount > 0 && (
+                  <span style={{
+                    marginLeft: 'auto', fontSize: 10, fontWeight: 800, lineHeight: 1,
+                    padding: '4px 7px', borderRadius: 999, background: '#ef4444', color: '#fff',
+                    boxShadow: '0 0 0 2px rgba(239,68,68,.25)', flexShrink: 0,
+                  }}>NEW {pendingCount > 1 ? pendingCount : ''}</span>
+                )}
               </Link>
             ))}
           </nav>
