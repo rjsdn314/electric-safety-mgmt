@@ -344,16 +344,16 @@ export default function HistoryPage() {
                                                 {item.file_path && (
                                         <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
                                                               )}
-                                                {/* 로컬 파일 삭제 — PC의 엑셀 파일만 */}
+                                                {/* 로컬 파일 삭제 — PC의 엑셀 파일만 (🗑) */}
                                                 {isDesktop && (
                                                   item.measure_values?.local_deleted ? (
-                                                    <span title="로컬 파일 없음" style={{ padding: 6, fontSize: 15, lineHeight: 1, opacity: .25, cursor: 'default' }}>🗑</span>
+                                                    <span title="로컬 파일 없음" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, lineHeight: 1, opacity: .25, cursor: 'default' }}>🗑</span>
                                                   ) : (
-                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬 저장 파일 삭제 (PC의 엑셀 파일만 삭제, 이력은 유지)" style={{ padding: 6, borderRadius: 8, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 15, lineHeight: 1 }}>🗑</button>
+                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬 저장 파일 삭제 (PC의 엑셀 파일만 삭제, 이력은 유지)" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 15, lineHeight: 1 }}>🗑</button>
                                                   )
                                                 )}
-                                                {/* 점검이력 삭제 — 맨 오른쪽, 빨간색 */}
-                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ padding: 6, borderRadius: 8, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                                                {/* 점검이력 삭제 — 맨 오른쪽, 빨간 ✕ */}
+                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)', cursor: 'pointer', fontSize: 14, fontWeight: 800, lineHeight: 1, fontFamily: 'inherit' }}>✕</button>
                                               </div>
                                 </div>
                     </div> ))
