@@ -216,9 +216,10 @@ function fillByeolji7(xml: string, shared: string[], d: FillData): string {
   xml = setCell(xml, 'AI3', +t.d, true);
   xml = replaceDates(xml, shared, d.date, 5);
   // 기본값 비우기: 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거.
-  // 사용자가 직접 입력하기 전까지 공란으로 생성한다. (H=8 ~ AE=31)
+  // 사용자가 직접 입력하기 전까지 공란으로 생성한다. (H=8 ~ AE=31, Point 1/2/3 온도값)
   for (const row of [13, 15, 17]) {
     for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
+    xml = setCell(xml, `AF${row}`, '5℃ 이하', false);   // 온도차 기본값
   }
   return xml;
 }
