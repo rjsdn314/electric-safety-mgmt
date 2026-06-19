@@ -8,6 +8,8 @@ export default function HistoryPage() {
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterType, setFilterType] = useState('전체');
+    const [filterInspector, setFilterInspector] = useState('전체');
+    const [inspectors, setInspectors] = useState<string[]>([]);
     const [search, setSearch] = useState('');
     const [syncing, setSyncing] = useState(false);
     const [syncProgress, setSyncProgress] = useState('');
@@ -25,6 +27,7 @@ export default function HistoryPage() {
           .order('created_at', { ascending: false })
           .limit(100);
         if (filterType !== '전체') q = q.eq('inspection_type', filterType);
+        if (filterInspector !== '전체') q = q.eq('inspector_name', filterInspector);
         const { data: insps, error } = await q;
         if (error) { console.error('점검 조회 오류:', error); setLoading(false); return; }
         if (insps && insps.length > 0) {
@@ -41,7 +44,17 @@ export default function HistoryPage() {
         setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, [filterType]);
+  useEffect(() => { loadData(); }, [filterType, filterInspector]);
+
+  // 점검자 목록(중복 제거) — 드롭다운 채우기용
+  useEffect(() => {
+        (async () => {
+                const sb = createClient();
+                const { data } = await sb.from('inspections').select('inspector_name').limit(2000);
+                const names = [...new Set((data || []).map((r: any) => (r.inspector_name || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ko'));
+                setInspectors(names);
+        })();
+  }, []);
 
   const removeStorageFile = async (sb: any, item: any) => {
         if (!item.file_path) return;
@@ -292,7 +305,12 @@ export default function HistoryPage() {
                     <button key={t} onClick={() => setFilterType(t)}
                                   style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${filterType === t ? 'var(--accent)' : 'var(--border)'}`, background: filterType === t ? 'var(--accent-soft)' : 'transparent', color: filterType === t ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>
                   ))}
-                      <input className="toss-input" placeholder="충전소 검색" value={search} onChange={e => setSearch(e.target.value)} style={{flex: 1, minWidth: 200, marginLeft: 'auto'}}/>
+                      <select value={filterInspector} onChange={e => setFilterInspector(e.target.value)}
+                                  style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${filterInspector !== '전체' ? 'var(--accent)' : 'var(--border)'}`, background: filterInspector !== '전체' ? 'var(--accent-soft)' : 'var(--bg-elevated)', color: filterInspector !== '전체' ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit', marginLeft: 'auto' }}>
+                                <option value="전체">점검자 전체</option>
+                                {inspectors.map(n => (<option key={n} value={n}>{n}</option>))}
+                      </select>
+                      <input className="toss-input" placeholder="충전소 검색" value={search} onChange={e => setSearch(e.target.value)} style={{flex: 1, minWidth: 160}}/>
               </div>
         
           {selectedIds.size > 0 && (
