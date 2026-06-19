@@ -3,10 +3,31 @@ import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 const TYPE_OPTIONS = [
-  { value: '월차', months: '1,2,4,5,7,8,12월' },
+  { value: '월차', months: '1,2,4,5,7,8,10,12월' },
   { value: '분기', months: '3, 9월' },
   { value: '반기', months: '6월' },
   { value: '연차', months: '11월' },
+];
+
+// 점검일자의 '월'에 따라 점검유형 자동 결정
+//  6월→반기, 11월→연차, 3·9월→분기, 그 외(1,2,4,5,7,8,10,12월)→월차
+const typeForMonth = (m: number): string =>
+  m === 6 ? '반기' : m === 11 ? '연차' : (m === 3 || m === 9) ? '분기' : '월차';
+
+// 캘린더에 '경상북도'/'경상남도'(지역명)만 적혀 있을 때, 해당 권역 현장으로 자동 확장.
+//  · 경북: '1일차'~'3일차' 표기가 있으면 그 날짜 현장만, 없으면 전체.
+const GB_DAYS: Record<string, string[]> = {
+  '1': ['괴산휴게소(마산방향)', '문경휴게소(창원방향)', '의성휴게소(청주방향)', '안동휴게(부산방향)', '군위휴게소(부산방향)'],
+  '2': ['칠곡휴게소(서울방향)', '경주휴게소(부산방향)', '영천휴게소(익산방향)', '청통휴게소(익산방향)'],
+  '3': ['남성주참외휴게소(양평방향)', '선산휴게소(양평방향)', '문경휴게소(양평방향)', '충주휴게소(양평방향)'],
+};
+const GN_STATIONS = [
+  '거제식물원', '거제시 농업기술 센터', '고현종합시장 공영주차장', '거제 능포수변공원 우측공영주차장',
+  '산청휴게소(대전방향)', '영산휴게소(창원방향)', '진주휴게소(부산방향)',
+  '함안휴게소(부산방향)-1', '함안휴게소(부산방향)-2', '함안휴게소(순천방향)-1', '함안휴게소(순천방향)-2',
+  '고성공룡나라휴게소(대전방향)-1', '고성공룡나라휴게소(대전방향)-2', '고성공룡나라휴게소(통영방향)-1', '고성공룡나라휴게소(통영방향)-2',
+  '산청휴게소(통영방향)', '장유휴게소(서부산방향)-1', '장유휴게소(서부산방향)-2', '진영휴게소(순천방향)',
+  '김해금관가야휴게소(기장방향)', '김해금관가야휴게소(창원방향)',
 ];
 
 const emptyMeasureSet = () => ({
@@ -58,6 +79,13 @@ export function InspectionForm() {
     };
     load();
   }, []);
+
+  // 점검일자(월)에 따라 점검유형 자동 선택 — 날짜 변경 시마다 갱신
+  useEffect(() => {
+    if (!date) return;
+    const m = parseInt(date.slice(5, 7), 10);
+    if (m >= 1 && m <= 12) setInspType(typeForMonth(m));
+  }, [date]);
 
   useEffect(() => {
     (async () => {
@@ -183,13 +211,28 @@ export function InspectionForm() {
       return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.5));
     });
   };
-  const isTodayStation = (s: any): boolean => {
-    if (!todayTitles.length) return false;
-    const cands = [norm(s.name), norm(s.base_name)].filter(Boolean);
-    return todayTitles.some(t => {
+  // 오늘 일정 제목들 → 매칭 대상 '구간' 목록(지역명은 권역 현장으로 확장)
+  const todaySegments = useMemo(() => {
+    const segs: string[] = [];
+    for (const t of todayTitles) {
+      // 지역명 확장: 경상북도/경북, 경상남도/경남
+      if (/경상북도|경북/.test(t)) {
+        const days = (t.match(/[123]\s*일차/g) || []).map(x => x.match(/[123]/)![0]);
+        const useDays = days.length ? days : ['1', '2', '3'];
+        useDays.forEach(d => segs.push(...(GB_DAYS[d] || [])));
+      }
+      if (/경상남도|경남/.test(t)) segs.push(...GN_STATIONS);
+      // 원본 제목 구간(기존 동작 유지)
       const cleaned = t.replace(/\(\s*[\d,\s]+\s*\)/g, ' ');              // "(1,2,3,4)" 등 번호목록 제거
-      return cleaned.split(/[,\/]+/).some(seg => segMatch(seg, cands));   // 구간별 매칭
-    });
+      cleaned.split(/[,\/]+/).forEach(seg => { if (seg.trim()) segs.push(seg); });
+    }
+    return segs;
+  }, [todayTitles]);
+
+  const isTodayStation = (s: any): boolean => {
+    if (!todaySegments.length) return false;
+    const cands = [norm(s.name), norm(s.base_name)].filter(Boolean);
+    return todaySegments.some(seg => segMatch(seg, cands));            // 구간별 매칭
   };
 
   // ── 오늘 작성 완료한 충전소: 목록 맨 아래로 (남은 현장이 위에 오도록) ──
@@ -215,7 +258,7 @@ export function InspectionForm() {
     // 정렬: 오늘 일정(미작성) 맨 위 → 일반 → 오늘 작성 완료 맨 아래
     const rank = (s: any) => (isDoneToday(s) ? 2 : isTodayStation(s) ? 0 : 1);
     return [...base].sort((a, b) => rank(a) - rank(b));
-  }, [stations, query, todayTitles, doneTodayNames]);
+  }, [stations, query, todaySegments, doneTodayNames]);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
     setMeasureSets(prev => {
