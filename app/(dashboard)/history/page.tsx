@@ -17,19 +17,44 @@ export default function HistoryPage() {
     const [isDesktop, setIsDesktop] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkDeleting, setBulkDeleting] = useState(false);
+    const [hasMore, setHasMore] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const PAGE_SIZE = 50;
     useEffect(() => { setIsDesktop('showDirectoryPicker' in window); }, []);
 
-  const loadData = async () => {
-        setLoading(true);
+  // reset=true: 필터/검색 변경 → 처음부터. reset=false: '더보기' → 다음 페이지 누적.
+  const loadData = async (reset: boolean, offsetOverride?: number) => {
+        if (reset) setLoading(true); else setLoadingMore(true);
         const sb = createClient();
+        const offset = reset ? 0 : (offsetOverride ?? 0);
+
+        // 충전소명 검색 → 매칭되는 station_id로 서버 필터 (전체 이력 대상)
+        let stationIdFilter: string[] | null = null;
+        const term = search.trim();
+        if (term) {
+                const like = `%${term}%`;
+                const [r1, r2] = await Promise.all([
+                  sb.from('stations').select('id').ilike('name', like),
+                  sb.from('stations').select('id').ilike('base_name', like),
+                ]);
+                stationIdFilter = [...new Set([...(r1.data || []), ...(r2.data || [])].map((s: any) => s.id))];
+                if (stationIdFilter.length === 0) {
+                          setItems([]); setHasMore(false); setSelectedIds(new Set());
+                          setLoading(false); setLoadingMore(false); return;
+                }
+        }
+
         let q = sb.from('inspections')
           .select('*')
           .order('created_at', { ascending: false })
-          .limit(100);
+          .range(offset, offset + PAGE_SIZE - 1);
         if (filterType !== '전체') q = q.eq('inspection_type', filterType);
         if (filterInspector !== '전체') q = q.eq('inspector_name', filterInspector);
+        if (stationIdFilter) q = q.in('station_id', stationIdFilter);
         const { data: insps, error } = await q;
-        if (error) { console.error('점검 조회 오류:', error); setLoading(false); return; }
+        if (error) { console.error('점검 조회 오류:', error); setLoading(false); setLoadingMore(false); return; }
+
+        let merged: any[] = [];
         if (insps && insps.length > 0) {
                 const stationIds = [...new Set(insps.map(i => i.station_id))];
                 const { data: stations } = await sb
@@ -37,14 +62,20 @@ export default function HistoryPage() {
                   .select('id, base_name, name, voltage, capacity')
                   .in('id', stationIds);
                 const stationMap = new Map(stations?.map(s => [s.id, s]) || []);
-                const merged = insps.map(i => ({ ...i, station: stationMap.get(i.station_id) }));
-                setItems(merged);
-        } else { setItems([]); }
-        setSelectedIds(new Set());
-        setLoading(false);
+                merged = insps.map(i => ({ ...i, station: stationMap.get(i.station_id) }));
+        }
+        setItems(prev => reset ? merged : [...prev, ...merged]);
+        setHasMore((insps?.length || 0) === PAGE_SIZE);
+        if (reset) setSelectedIds(new Set());
+        setLoading(false); setLoadingMore(false);
   };
 
-  useEffect(() => { loadData(); }, [filterType, filterInspector]);
+  // 필터/검색 변경 → 처음부터 다시 로드 (검색은 300ms 디바운스)
+  useEffect(() => {
+        const t = setTimeout(() => loadData(true), search ? 300 : 0);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType, filterInspector, search]);
 
   // 점검자 목록(중복 제거) — 드롭다운 채우기용
   useEffect(() => {
@@ -72,7 +103,7 @@ export default function HistoryPage() {
         const { error } = await sb.from('inspections').delete().eq('id', item.id);
         if (error) { alert('삭제 실패: ' + error.message); return; }
         alert('삭제되었습니다');
-        loadData();
+        loadData(true);
   };
 
   // ── 일괄 삭제 (선택 항목의 서버 기록 + 파일 모두 삭제) ──
@@ -101,7 +132,7 @@ export default function HistoryPage() {
                   const { error } = await sb.from('inspections').delete().in('id', ids);
                   if (error) { alert('일괄 삭제 실패: ' + error.message); return; }
                   alert(`${ids.length}건이 삭제되었습니다.`);
-                  loadData();
+                  loadData(true);
           } finally { setBulkDeleting(false); }
     };
 
@@ -279,11 +310,8 @@ export default function HistoryPage() {
         } finally { setSavingId(null); }
   };
 
-  const filtered = items.filter(i =>
-        !search || i.station?.name?.includes(search) || i.station?.base_name?.includes(search)
-                                  );
-    const [visibleCount, setVisibleCount] = useState(10);
-    const visibleItems = filtered.slice(0, visibleCount);
+    // 검색·필터는 서버에서 처리하므로 items가 곧 표시 목록
+    const visibleItems = items;
     const visibleIds = visibleItems.map(i => i.id);
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
 
@@ -331,7 +359,7 @@ export default function HistoryPage() {
               
                 {loading ? (
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>로딩 중...</div>
-                  ) : filtered.length === 0 ? (
+                  ) : visibleItems.length === 0 ? (
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
                   ) : (
                     visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>)}
@@ -377,8 +405,8 @@ export default function HistoryPage() {
                     </div> ))
                   )}
               </div>
-          {!loading && visibleCount < filtered.length && (
-                  <button onClick={() => setVisibleCount(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>더보기 ({filtered.length - visibleCount}건 더)</button>
+          {!loading && hasMore && (
+                  <button onClick={() => loadData(false, items.length)} disabled={loadingMore} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: loadingMore ? 'wait' : 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>{loadingMore ? '불러오는 중...' : '더보기'}</button>
               )}
         </div>
       );
