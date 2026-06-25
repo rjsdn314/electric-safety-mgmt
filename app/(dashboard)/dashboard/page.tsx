@@ -74,15 +74,43 @@ export default function DashboardPage() {
   // 사용자별 대시보드: 본인이 등록한 관리구역(충전소) 기준. 관리자는 본인 + 소유자 없는(레거시) 포함.
   const [stations, setStations] = useState<any[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  // 관리자 보기 대상: 'mine'(내 관리구역=본인+미지정) | 회원 id | 'all'(전체)
+  const [viewOwner, setViewOwner] = useState<string>('mine');
+
+  // 최초: 권한 확인 + 회원 목록(사이트를 가진 다른 회원) 로드
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       const sb = createClient();
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
+      setMeId(user.id);
       const { data: prof } = await sb.from('profiles').select('role').eq('id', user.id).single();
-      const isAdmin = prof?.role === 'admin';
+      const admin = prof?.role === 'admin';
+      setIsAdmin(admin);
+      if (admin) {
+        const { data: owners } = await sb.from('stations').select('user_id').not('user_id', 'is', null);
+        const ownerIds = [...new Set((owners || []).map((o: any) => o.user_id))].filter(id => id !== user.id);
+        if (ownerIds.length) {
+          const { data: profs } = await sb.from('profiles').select('id, name').in('id', ownerIds);
+          setMembers((profs || []).map((p: any) => ({ id: p.id, name: p.name || '이름없음' })));
+        }
+      }
+    })();
+  }, []);
+
+  // 보기 대상이 정해지면 충전소+이력 로드
+  useEffect(() => {
+    if (!meId) return;
+    (async () => {
+      const sb = createClient();
       let sq = sb.from('stations').select('*').eq('is_active', true).order('name');
-      sq = isAdmin ? sq.or(`user_id.eq.${user.id},user_id.is.null`) : sq.eq('user_id', user.id);
+      if (!isAdmin) sq = sq.eq('user_id', meId);
+      else if (viewOwner === 'mine') sq = sq.or(`user_id.eq.${meId},user_id.is.null`);
+      else if (viewOwner !== 'all') sq = sq.eq('user_id', viewOwner);
+      // viewOwner==='all'이면 필터 없음(전체)
       const { data: sts } = await sq;
       const list = sts || [];
       setStations(list);
@@ -93,9 +121,8 @@ export default function DashboardPage() {
         const stMap = new Map(list.map((s: any) => [s.id, s]));
         setInspections((insps || []).map((i: any) => ({ ...i, station: stMap.get(i.station_id) })));
       } else { setInspections([]); }
-    };
-    load();
-  }, []);
+    })();
+  }, [meId, isAdmin, viewOwner]);
 
   const currentMonth = new Date().getMonth() + 1;
   const currentYear  = new Date().getFullYear();
@@ -126,15 +153,25 @@ export default function DashboardPage() {
           fontSize: 28, fontWeight: 900, letterSpacing: '-1px',
           color: 'var(--text-primary)', margin: '0 0 8px 0', lineHeight: 1.2,
         }}>대시보드</h1>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center',
-          background: 'rgba(0,102,255,.08)', color: '#0066ff',
-          borderRadius: 99, padding: '3px 10px',
-          fontSize: 11, fontWeight: 700,
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          {currentYear}년 {currentMonth}월 — {profile?.sector?.name ?? ''} 충전소 현황
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center',
+            background: 'rgba(0,102,255,.08)', color: '#0066ff',
+            borderRadius: 99, padding: '3px 10px',
+            fontSize: 11, fontWeight: 700,
+            fontFamily: "'JetBrains Mono', monospace",
+          }}>
+            {currentYear}년 {currentMonth}월 — {viewOwner === 'mine' ? '내 관리구역' : viewOwner === 'all' ? '전체 회원' : (members.find(m => m.id === viewOwner)?.name + ' 관리구역')} 충전소 현황
+          </span>
+          {isAdmin && (
+            <select value={viewOwner} onChange={e => setViewOwner(e.target.value)}
+              style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-elevated)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <option value="mine">내 관리구역 (기본)</option>
+              {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
+              <option value="all">전체 (모든 회원)</option>
+            </select>
+          )}
+        </div>
       </div>
 
       {/* 통계 카드 4열 */}

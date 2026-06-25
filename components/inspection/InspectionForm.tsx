@@ -40,6 +40,10 @@ const norm = (s: string) => (s || '').replace(/[\s()\-_.]/g, '').toLowerCase();
 
 export function InspectionForm() {
   const [stations, setStations] = useState<any[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [meId, setMeId] = useState<string | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  const [viewOwner, setViewOwner] = useState<string>('mine'); // 'mine' | 회원id | 'all'
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<any>(null);
@@ -59,26 +63,46 @@ export function InspectionForm() {
   const [todayTitles, setTodayTitles] = useState<string[]>([]);
   const [result, setResult] = useState<any>(null);
 
+  // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       const sb = createClient();
       const { data: { user } } = await sb.auth.getUser();
-      if (user) {
-        const { data: profile } = await sb
-          .from('profiles')
-          .select('inspector_name, name, sector_id, role')
-          .eq('id', user.id)
-          .single();
-        if (profile?.inspector_name) setInspector(profile.inspector_name);
-        else if (profile?.name) setInspector(profile.name);
-        let q = sb.from('stations').select('*').eq('is_active', true).order('name');
-        if (profile?.role !== 'admin') q = q.eq('user_id', user.id);
-        const { data } = await q;
-        setStations(data || []);
+      if (!user) return;
+      setMeId(user.id);
+      const { data: profile } = await sb
+        .from('profiles')
+        .select('inspector_name, name, sector_id, role')
+        .eq('id', user.id)
+        .single();
+      if (profile?.inspector_name) setInspector(profile.inspector_name);
+      else if (profile?.name) setInspector(profile.name);
+      const admin = profile?.role === 'admin';
+      setIsAdmin(admin);
+      if (admin) {
+        const { data: owners } = await sb.from('stations').select('user_id').not('user_id', 'is', null);
+        const ownerIds = [...new Set((owners || []).map((o: any) => o.user_id))].filter(id => id !== user.id);
+        if (ownerIds.length) {
+          const { data: profs } = await sb.from('profiles').select('id, name').in('id', ownerIds);
+          setMembers((profs || []).map((p: any) => ({ id: p.id, name: p.name || '이름없음' })));
+        }
       }
-    };
-    load();
+    })();
   }, []);
+
+  // 보기 대상(관리자: 내 관리구역=본인+미지정 / 회원별 / 전체)에 따라 충전소 로드
+  useEffect(() => {
+    if (!meId) return;
+    (async () => {
+      const sb = createClient();
+      let q = sb.from('stations').select('*').eq('is_active', true).order('name');
+      if (!isAdmin) q = q.eq('user_id', meId);
+      else if (viewOwner === 'mine') q = q.or(`user_id.eq.${meId},user_id.is.null`);
+      else if (viewOwner !== 'all') q = q.eq('user_id', viewOwner);
+      const { data } = await q;
+      setStations(data || []);
+    })();
+  }, [meId, isAdmin, viewOwner]);
 
   // 점검일자(월)에 따라 점검유형 자동 선택 — 날짜 변경 시마다 갱신
   useEffect(() => {
@@ -452,7 +476,17 @@ export function InspectionForm() {
       </div>
 
       <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 14 }}>
-        <div style={sectionTitle}>충전소 선택</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <div style={sectionTitle}>충전소 선택</div>
+          {isAdmin && (
+            <select value={viewOwner} onChange={e => { setViewOwner(e.target.value); setSelected(null); setQuery(''); }}
+              style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-input)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 8 }}>
+              <option value="mine">내 관리구역 (기본)</option>
+              {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
+              <option value="all">전체 (모든 회원)</option>
+            </select>
+          )}
+        </div>
         <div style={{ position: 'relative' }}>
           <input className="toss-input" placeholder="충전소명 검색..." value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} />
           {open && filtered.length > 0 && (
