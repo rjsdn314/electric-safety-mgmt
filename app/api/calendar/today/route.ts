@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { gunzipSync, inflateSync, brotliDecompressSync } from 'zlib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // 항상 최신(캐시 없이) — 오늘 일정 반영
@@ -73,14 +74,16 @@ export async function GET(req: Request) {
     const icsUrl = data?.value;
     if (!icsUrl) return NextResponse.json({ titles: [], today: todaySeoul() });
 
-    // 비압축(identity)으로 요청하고 바이트를 직접 UTF-8로 디코드한다.
-    // (배포 환경에서 res.text()가 gzip/charset 처리를 잘못해 한글이 깨지는 문제 방지)
-    const res = await fetch(icsUrl, {
-      headers: { 'User-Agent': 'electric-safety-mgmt', 'Accept-Encoding': 'identity' },
-      cache: 'no-store',
-    });
+    const res = await fetch(icsUrl, { headers: { 'User-Agent': 'electric-safety-mgmt' }, cache: 'no-store' });
     if (!res.ok) return NextResponse.json({ titles: [], today: todaySeoul(), error: 'ICS fetch failed' });
-    const raw = unfold(new TextDecoder('utf-8').decode(await res.arrayBuffer()));
+    // 배포 환경(undici)이 gzip을 자동 해제하지 않는 경우가 있어, 매직바이트로 판별해 직접 해제 후 UTF-8 디코드.
+    let bytes = Buffer.from(await res.arrayBuffer());
+    try {
+      if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes);                    // gzip
+      else if ((res.headers.get('content-encoding') || '').includes('br')) bytes = brotliDecompressSync(bytes);
+      else if (bytes[0] === 0x78 && (bytes[1] === 0x9c || bytes[1] === 0x01 || bytes[1] === 0xda)) bytes = inflateSync(bytes); // zlib/deflate
+    } catch { /* 이미 해제된 경우 원본 사용 */ }
+    const raw = unfold(new TextDecoder('utf-8').decode(bytes));
 
     const today = todaySeoul();
     const titles: string[] = [];
