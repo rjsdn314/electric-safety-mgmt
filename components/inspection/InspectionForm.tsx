@@ -36,7 +36,8 @@ const emptyMeasureSet = () => ({
   ground: '', remarks: '',
 });
 
-const norm = (s: string) => (s || '').replace(/[\s()\-_.]/g, '').toLowerCase();
+// 매칭용 정규화: 영문·숫자·한글만 남기고 공백/괄호/기호(*, /, ·, - 등) 모두 제거
+const norm = (s: string) => (s || '').replace(/[^0-9a-z가-힣]/gi, '').toLowerCase();
 
 export function InspectionForm() {
   const [stations, setStations] = useState<any[]>([]);
@@ -220,11 +221,14 @@ export function InspectionForm() {
   const STOP_TOKENS = new Set(['오전', '오후', '점검', '월차', '분기', '반기', '연차', '예정', '및', '외']);
   const GENERIC_TOKENS = new Set(['주차장', '휴게소', '충전소', '공영', '제']);
   const isStopToken = (x: string) => STOP_TOKENS.has(x) || /^\d+일차$/.test(x);
-  const segMatch = (seg: string, cands: string[]): boolean => {
-    const nt = norm(seg);
+  // 별칭 정규화: 캘린더의 '킨텍스'/'킨텍'을 DB 표기 'KINTEX'(→kintex)와 맞춤
+  const ka = (x: string) => x.replace(/킨텍스|킨텍/g, 'kintex');
+  const segMatch = (seg: string, candsRaw: string[]): boolean => {
+    const cands = candsRaw.map(ka);
+    const nt = ka(norm(seg));
     if (!nt) return false;
     if (cands.some(c => nt.includes(c) || c.includes(nt))) return true;   // 전체 포함(양방향)
-    const tokens = seg.split(/[\s()\[\]·~-]+/).map(norm).filter(x => x.length >= 2 && !isStopToken(x));
+    const tokens = seg.split(/[\s()\[\]·~-]+/).map(x => ka(norm(x))).filter(x => x.length >= 2 && !isStopToken(x));
     if (!tokens.length) return false;
     const specific = tokens.filter(x => !GENERIC_TOKENS.has(x));
     const primary = specific.sort((a, b) => b.length - a.length)[0];      // 핵심 토큰(가장 긴 의미 토큰)

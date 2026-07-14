@@ -72,9 +72,14 @@ export async function GET(req: Request) {
     const icsUrl = data?.value;
     if (!icsUrl) return NextResponse.json({ titles: [], today: todaySeoul() });
 
-    const res = await fetch(icsUrl, { headers: { 'User-Agent': 'electric-safety-mgmt' }, next: { revalidate: 0 } });
+    // 비압축(identity)으로 요청하고 바이트를 직접 UTF-8로 디코드한다.
+    // (배포 환경에서 res.text()가 gzip/charset 처리를 잘못해 한글이 깨지는 문제 방지)
+    const res = await fetch(icsUrl, {
+      headers: { 'User-Agent': 'electric-safety-mgmt', 'Accept-Encoding': 'identity' },
+      cache: 'no-store',
+    });
     if (!res.ok) return NextResponse.json({ titles: [], today: todaySeoul(), error: 'ICS fetch failed' });
-    const raw = unfold(await res.text());
+    const raw = unfold(new TextDecoder('utf-8').decode(await res.arrayBuffer()));
 
     const today = todaySeoul();
     const titles: string[] = [];
