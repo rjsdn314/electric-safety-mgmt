@@ -19,8 +19,44 @@ export default function HistoryPage() {
     const [bulkDeleting, setBulkDeleting] = useState(false);
     const [hasMore, setHasMore] = useState(false);
     const [loadingMore, setLoadingMore] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [meId, setMeId] = useState<string | null>(null);
+    const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+    const [viewOwner, setViewOwner] = useState<string>('mine'); // 'mine' | 회원id | 'all'
     const PAGE_SIZE = 50;
     useEffect(() => { setIsDesktop('showDirectoryPicker' in window); }, []);
+
+  // 권한·회원 목록 (관리자: 사이트 보유 다른 회원)
+  useEffect(() => {
+        (async () => {
+                const sb = createClient();
+                const { data: { user } } = await sb.auth.getUser();
+                if (!user) return;
+                setMeId(user.id);
+                const { data: prof } = await sb.from('profiles').select('role').eq('id', user.id).single();
+                const admin = prof?.role === 'admin';
+                setIsAdmin(admin);
+                if (admin) {
+                          const { data: owners } = await sb.from('stations').select('user_id').not('user_id', 'is', null);
+                          const ownerIds = [...new Set((owners || []).map((o: any) => o.user_id))].filter(id => id !== user.id);
+                          if (ownerIds.length) {
+                                    const { data: profs } = await sb.from('profiles').select('id, name').in('id', ownerIds);
+                                    setMembers((profs || []).map((p: any) => ({ id: p.id, name: p.name || '이름없음' })));
+                          }
+                }
+        })();
+  }, []);
+
+  // 보기 대상 충전소 id 목록(소유자 스코프). null = 제약 없음(전체)
+  const ownerStationIds = async (sb: any): Promise<string[] | null> => {
+        let target: string | null = null;
+        if (!isAdmin) target = meId;
+        else if (viewOwner === 'mine') target = meId;
+        else if (viewOwner !== 'all') target = viewOwner;
+        if (!target) return null; // 'all'
+        const { data } = await sb.from('stations').select('id').eq('user_id', target);
+        return (data || []).map((s: any) => s.id);
+  };
 
   // reset=true: 필터/검색 변경 → 처음부터. reset=false: '더보기' → 다음 페이지 누적.
   const loadData = async (reset: boolean, offsetOverride?: number) => {
@@ -28,8 +64,11 @@ export default function HistoryPage() {
         const sb = createClient();
         const offset = reset ? 0 : (offsetOverride ?? 0);
 
-        // 충전소명 검색 → 매칭되는 station_id로 서버 필터 (전체 이력 대상)
-        let stationIdFilter: string[] | null = null;
+        // 소유자 스코프(내 관리구역/회원별/전체)
+        const ownerIds = await ownerStationIds(sb);
+
+        // 충전소명 검색 → 매칭되는 station_id (전체 이력 대상)
+        let searchIds: string[] | null = null;
         const term = search.trim();
         if (term) {
                 const like = `%${term}%`;
@@ -37,11 +76,16 @@ export default function HistoryPage() {
                   sb.from('stations').select('id').ilike('name', like),
                   sb.from('stations').select('id').ilike('base_name', like),
                 ]);
-                stationIdFilter = [...new Set([...(r1.data || []), ...(r2.data || [])].map((s: any) => s.id))];
-                if (stationIdFilter.length === 0) {
-                          setItems([]); setHasMore(false); setSelectedIds(new Set());
-                          setLoading(false); setLoadingMore(false); return;
-                }
+                searchIds = [...new Set([...(r1.data || []), ...(r2.data || [])].map((s: any) => s.id))];
+        }
+
+        // 소유자 스코프 ∩ 검색 결과
+        let stationIdFilter: string[] | null = null;
+        if (ownerIds && searchIds) stationIdFilter = ownerIds.filter(id => searchIds!.includes(id));
+        else stationIdFilter = ownerIds ?? searchIds;
+        if (stationIdFilter && stationIdFilter.length === 0) {
+                setItems([]); setHasMore(false); setSelectedIds(new Set());
+                setLoading(false); setLoadingMore(false); return;
         }
 
         let q = sb.from('inspections')
@@ -70,12 +114,13 @@ export default function HistoryPage() {
         setLoading(false); setLoadingMore(false);
   };
 
-  // 필터/검색 변경 → 처음부터 다시 로드 (검색은 300ms 디바운스)
+  // 필터/검색/보기대상 변경 → 처음부터 다시 로드 (검색은 300ms 디바운스)
   useEffect(() => {
+        if (!meId) return; // 권한 확인 전엔 대기
         const t = setTimeout(() => loadData(true), search ? 300 : 0);
         return () => clearTimeout(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterType, filterInspector, search]);
+  }, [filterType, filterInspector, search, viewOwner, meId, isAdmin]);
 
   // 점검자 목록(중복 제거) — 드롭다운 채우기용
   useEffect(() => {
@@ -329,6 +374,14 @@ export default function HistoryPage() {
                 </div>
         
               <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>
+                {isAdmin && (
+                  <select value={viewOwner} onChange={e => setViewOwner(e.target.value)}
+                    style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-elevated)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', marginRight: 4 }}>
+                          <option value="mine">내 관리구역 (기본)</option>
+                          {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
+                          <option value="all">전체 (모든 회원)</option>
+                  </select>
+                )}
                 {TYPES.map(t => (
                     <button key={t} onClick={() => setFilterType(t)}
                                   style={{ padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: `1px solid ${filterType === t ? 'var(--accent)' : 'var(--border)'}`, background: filterType === t ? 'var(--accent-soft)' : 'transparent', color: filterType === t ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit' }}>{t}</button>
