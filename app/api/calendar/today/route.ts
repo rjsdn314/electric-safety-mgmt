@@ -84,7 +84,9 @@ export async function GET(req: Request) {
 
     const today = todaySeoul();
     const titles: string[] = [];
+    const events: { text: string; desc: string; dayIndex: number; span: number }[] = [];
     const dbg: any[] = [];
+    const dayDiff = (a: string, b: string) => Math.round((ymdToDate(b).getTime() - ymdToDate(a).getTime()) / 86400000);
 
     const blocks = raw.split('BEGIN:VEVENT').slice(1);
     for (const block of blocks) {
@@ -106,14 +108,18 @@ export async function GET(req: Request) {
       const hit = occursToday(start, end, rrule, today);
       if (debug) dbg.push({ summary, start, end, rrule, hit });
       if (hit) {
+        // 다일 출장: 오늘이 시작일 기준 며칠째인지(dayIndex), 총 며칠인지(span)
+        const dayIndex = rrule ? 0 : Math.max(0, dayDiff(start, today));
+        const span = (!rrule && end) ? Math.max(1, dayDiff(start, end)) : 1;
+        events.push({ text: summary, desc, dayIndex, span });
         titles.push(summary);
         if (desc) titles.push(desc);   // 일정 설명(메모)란의 현장 목록도 매칭 대상에 포함
       }
     }
 
     const noStore = { headers: { 'Cache-Control': 'no-store, max-age=0' } };
-    if (debug) return NextResponse.json({ titles, today, total: blocks.length, events: dbg }, noStore);
-    return NextResponse.json({ titles, today }, noStore);
+    if (debug) return NextResponse.json({ titles, events, today, total: blocks.length, dbg }, noStore);
+    return NextResponse.json({ titles, events, today }, noStore);
   } catch (e: any) {
     return NextResponse.json({ titles: [], today: todaySeoul(), error: e.message }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }

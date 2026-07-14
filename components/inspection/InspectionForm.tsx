@@ -17,8 +17,8 @@ const typeForMonth = (m: number): string =>
 // 캘린더에 '경상북도'/'경상남도'(지역명)만 적혀 있을 때, 해당 권역 현장으로 자동 확장.
 //  · 경북: '1일차'~'3일차' 표기가 있으면 그 날짜 현장만, 없으면 전체.
 const GB_DAYS: Record<string, string[]> = {
-  '1': ['괴산휴게소(마산방향)', '문경휴게소(창원방향)', '의성휴게소(청주방향)', '안동휴게(부산방향)', '군위휴게소(부산방향)'],
-  '2': ['칠곡휴게소(서울방향)', '경주휴게소(부산방향)', '영천휴게소(익산방향)', '청통휴게소(익산방향)'],
+  '1': ['괴산휴게소(마산방향)', '문경휴게소(창원방향)', '의성휴게소(청주방향)', '안동휴게소(부산방향)', '군위휴게소(부산방향)'],
+  '2': ['칠곡휴게소(서울)', '경주휴게소(부산방향)', '영천휴게소(대구방향)', '청통휴게소(대구방향)'],
   '3': ['남성주참외휴게소(양평방향)', '선산휴게소(양평방향)', '문경휴게소(양평방향)', '충주휴게소(양평방향)'],
 };
 const GN_STATIONS = [
@@ -61,7 +61,7 @@ export function InspectionForm() {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [folderHandle, setFolderHandle] = useState<any>(null);
   const [folderName, setFolderName] = useState('');
-  const [todayTitles, setTodayTitles] = useState<string[]>([]);
+  const [todayEvents, setTodayEvents] = useState<{ text: string; desc?: string; dayIndex: number; span: number }[]>([]);
   const [result, setResult] = useState<any>(null);
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
@@ -117,7 +117,8 @@ export function InspectionForm() {
       try {
         const r = await fetch('/api/calendar/today', { cache: 'no-store' });
         const j = await r.json();
-        if (Array.isArray(j.titles)) setTodayTitles(j.titles);
+        if (Array.isArray(j.events)) setTodayEvents(j.events);
+        else if (Array.isArray(j.titles)) setTodayEvents(j.titles.map((t: string) => ({ text: t, dayIndex: 0, span: 1 })));
       } catch {}
     })();
   }, []);
@@ -223,43 +224,76 @@ export function InspectionForm() {
   const isStopToken = (x: string) => STOP_TOKENS.has(x) || /^\d+일차$/.test(x);
   // 별칭 정규화: 캘린더의 '킨텍스'/'킨텍'을 DB 표기 'KINTEX'(→kintex)와 맞춤
   const ka = (x: string) => x.replace(/킨텍스|킨텍/g, 'kintex');
+  // 방향 추출: 마지막 괄호 안 내용(숫자목록 제외) 또는 'X방향' — 예 (양평방향)→양평, (인천)→인천
+  const dirOf = (raw: string): string => {
+    const parens = [...String(raw).matchAll(/\(([^)]*)\)/g)].map(m => m[1]).filter(p => !/^[\d,\s]*$/.test(p));
+    const p = parens.length ? parens[parens.length - 1] : '';
+    if (p) return norm(p.replace(/방향/g, ''));
+    const m = String(raw).match(/([가-힣]{2,})방향/);
+    return m ? norm(m[1]) : '';
+  };
+  // seg(캘린더 구간) ↔ cand(충전소명, 원문) 매칭. 방향이 서로 다르면 배제(예: 문경 양평 vs 창원).
   const segMatch = (seg: string, candsRaw: string[]): boolean => {
-    const cands = candsRaw.map(ka);
+    const segDir = dirOf(seg);
+    const cands = candsRaw.map(c => ({ n: ka(norm(c)), dir: dirOf(c) }));
+    const okDir = (cd: string) => !segDir || !cd || cd.includes(segDir) || segDir.includes(cd);
     const nt = ka(norm(seg));
     if (!nt) return false;
-    if (cands.some(c => nt.includes(c) || c.includes(nt))) return true;   // 전체 포함(양방향)
+    if (cands.some(c => okDir(c.dir) && (nt.includes(c.n) || c.n.includes(nt)))) return true;   // 전체 포함(양방향)
     const tokens = seg.split(/[\s()\[\]·~-]+/).map(x => ka(norm(x))).filter(x => x.length >= 2 && !isStopToken(x));
     if (!tokens.length) return false;
     const specific = tokens.filter(x => !GENERIC_TOKENS.has(x));
     const primary = specific.sort((a, b) => b.length - a.length)[0];      // 핵심 토큰(가장 긴 의미 토큰)
     if (!primary) return false;
     return cands.some(c => {
-      if (!c.includes(primary)) return false;
-      const hits = tokens.filter(x => c.includes(x));
+      if (!okDir(c.dir)) return false;
+      if (!c.n.includes(primary)) return false;
+      const hits = tokens.filter(x => c.n.includes(x));
       return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.5));
     });
   };
-  // 오늘 일정 제목들 → 매칭 대상 '구간' 목록(지역명은 권역 현장으로 확장)
+  // 괄호 밖의 '/'만 일자 구분자로 분리 (예: "내린천휴게소(양양/서울)"의 /는 유지)
+  const splitDaysBySlash = (s: string): string[] => {
+    const out: string[] = []; let depth = 0, cur = '';
+    for (const ch of s) {
+      if (ch === '(') depth++;
+      else if (ch === ')') depth = Math.max(0, depth - 1);
+      if (ch === '/' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+    }
+    out.push(cur);
+    return out.map(x => x.trim()).filter(Boolean);
+  };
+  // 오늘 일정 → 매칭 대상 '구간' 목록. 다일 출장은 오늘이 며칠째(dayIndex)인지로 그날 현장만.
   const todaySegments = useMemo(() => {
     const segs: string[] = [];
-    for (const t of todayTitles) {
-      // 지역명 확장: 경상북도/경북, 경상남도/경남
-      if (/경상북도|경북/.test(t)) {
-        const days = (t.match(/[123]\s*일차/g) || []).map(x => x.match(/[123]/)![0]);
-        const useDays = days.length ? days : ['1', '2', '3'];
-        useDays.forEach(d => segs.push(...(GB_DAYS[d] || [])));
+    const addFromText = (raw: string, dayIndex: number, span: number) => {
+      if (!raw || !raw.trim()) return;
+      // 지역 키워드: 경상북도(3일차 분할) / 경상남도(전체)
+      if (/경상북도|경북/.test(raw)) {
+        const day = GB_DAYS[String(dayIndex + 1)];
+        segs.push(...(day || Object.values(GB_DAYS).flat()));
+        return;
       }
-      if (/경상남도|경남/.test(t)) segs.push(...GN_STATIONS);
-      // 원본 제목 구간(기존 동작 유지)
-      const cleaned = t.replace(/\(\s*[\d,\s]+\s*\)/g, ' ');              // "(1,2,3,4)" 등 번호목록 제거
-      cleaned.split(/[,\/]+/).forEach(seg => { if (seg.trim()) segs.push(seg); });
+      if (/경상남도|경남/.test(raw)) { segs.push(...GN_STATIONS); return; }
+      // "(1,2,3,4)" 등 번호목록 제거
+      const cleaned = raw.replace(/\(\s*[\d,\s]+\s*\)/g, ' ');
+      // "/"로 나뉜 다일 일정이면 오늘 날짜에 해당하는 그룹만
+      const groups = splitDaysBySlash(cleaned);
+      const chosen = (span > 1 && groups.length > 1)
+        ? (groups[dayIndex] ?? groups[groups.length - 1])
+        : groups.join(',');
+      chosen.split(',').forEach(seg => { if (seg.trim()) segs.push(seg); });
+    };
+    for (const e of todayEvents) {
+      addFromText(e.text, e.dayIndex, e.span);
+      if (e.desc) addFromText(e.desc, e.dayIndex, e.span);
     }
     return segs;
-  }, [todayTitles]);
+  }, [todayEvents]);
 
   const isTodayStation = (s: any): boolean => {
     if (!todaySegments.length) return false;
-    const cands = [norm(s.name), norm(s.base_name)].filter(Boolean);
+    const cands = [s.name, s.base_name].filter(Boolean);   // 원문 전달(segMatch가 정규화·방향추출)
     return todaySegments.some(seg => segMatch(seg, cands));            // 구간별 매칭
   };
 
