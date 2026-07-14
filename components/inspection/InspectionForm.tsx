@@ -115,7 +115,7 @@ export function InspectionForm() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch('/api/calendar/today');
+        const r = await fetch('/api/calendar/today', { cache: 'no-store' });
         const j = await r.json();
         if (Array.isArray(j.titles)) setTodayTitles(j.titles);
       } catch {}

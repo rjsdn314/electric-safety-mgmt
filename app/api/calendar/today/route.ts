@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic'; // 항상 최신(캐시 없이) — 오늘 일정 반영
 const ICS_KEY = 'calendar_ics_url';
 
 function unfold(text: string): string {
@@ -110,9 +111,10 @@ export async function GET(req: Request) {
       }
     }
 
-    if (debug) return NextResponse.json({ titles, today, total: blocks.length, events: dbg });
-    return NextResponse.json({ titles, today });
+    const noStore = { headers: { 'Cache-Control': 'no-store, max-age=0' } };
+    if (debug) return NextResponse.json({ titles, today, total: blocks.length, events: dbg }, noStore);
+    return NextResponse.json({ titles, today }, noStore);
   } catch (e: any) {
-    return NextResponse.json({ titles: [], today: todaySeoul(), error: e.message });
+    return NextResponse.json({ titles: [], today: todaySeoul(), error: e.message }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
   }
 }
