@@ -112,13 +112,19 @@ function occursToday(start: string, end: string | null, rrule: string | null, to
   return false;
 }
 
+// 응답을 순수 ASCII(\uXXXX)로 직렬화 — 배포 환경의 UTF-8 인코더가 한글을 깨뜨리는 문제 회피
+function jsonAscii(obj: any) {
+  const body = JSON.stringify(obj).replace(/[\u0080-\uFFFF]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+  return new NextResponse(body, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store, max-age=0' } });
+}
+
 export async function GET(req: Request) {
   const debug = new URL(req.url).searchParams.get('debug') === '1';
   try {
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
     const { data } = await sb.from('settings').select('value').eq('key', ICS_KEY).maybeSingle();
     const icsUrl = data?.value;
-    if (!icsUrl) return NextResponse.json({ titles: [], today: todaySeoul() });
+    if (!icsUrl) return jsonAscii({ titles: [], today: todaySeoul() });
 
     const bytes = await fetchIcsBuffer(icsUrl);
     const raw = unfold(decodeUtf8(bytes));
@@ -158,10 +164,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const noStore = { headers: { 'Cache-Control': 'no-store, max-age=0' } };
-    if (debug) return NextResponse.json({ titles, events, today, total: blocks.length, dbg }, noStore);
-    return NextResponse.json({ titles, events, today }, noStore);
+    if (debug) return jsonAscii({ titles, events, today, total: blocks.length, dbg });
+    return jsonAscii({ titles, events, today });
   } catch (e: any) {
-    return NextResponse.json({ titles: [], today: todaySeoul(), error: e.message }, { headers: { 'Cache-Control': 'no-store, max-age=0' } });
+    return jsonAscii({ titles: [], today: todaySeoul(), error: e.message });
   }
 }
