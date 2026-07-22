@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { gunzipSync, inflateSync, brotliDecompressSync } from 'zlib';
+import { gunzipSync, brotliDecompressSync } from 'zlib';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // 항상 최신(캐시 없이) — 오늘 일정 반영
@@ -78,25 +78,13 @@ export async function GET(req: Request) {
     if (!res.ok) return NextResponse.json({ titles: [], today: todaySeoul(), error: 'ICS fetch failed' });
     // 배포 환경(undici)이 gzip을 자동 해제하지 않는 경우가 있어, 매직바이트로 판별해 직접 해제 후 UTF-8 디코드.
     let bytes = Buffer.from(await res.arrayBuffer());
-    const rawByteLen = bytes.length;
-    const probe = new URL(req.url).searchParams.get('probe') === '1';
+    // 압축이 자동 해제 안 된 경우 매직바이트로 판별해 직접 해제
     try {
-      if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes);                    // gzip
-      else if ((res.headers.get('content-encoding') || '').includes('br')) bytes = brotliDecompressSync(bytes);
-      else if (bytes[0] === 0x78 && (bytes[1] === 0x9c || bytes[1] === 0x01 || bytes[1] === 0xda)) bytes = inflateSync(bytes); // zlib/deflate
-    } catch { /* 이미 해제된 경우 원본 사용 */ }
-    const raw = unfold(new TextDecoder('utf-8').decode(bytes));
-
-    if (probe) {
-      const marker = Buffer.from('SUMMARY:');
-      const bi = bytes.indexOf(marker);
-      const korBytes = bi >= 0 ? Array.from(bytes.slice(bi + 8, bi + 8 + 30)).map(b => b.toString(16).padStart(2, '0')).join(' ') : 'no-summary';
-      return NextResponse.json({
-        contentEncoding: res.headers.get('content-encoding'),
-        rawByteLen, afterLen: bytes.length,
-        summaryByteHex: korBytes,
-      }, { headers: { 'Cache-Control': 'no-store' } });
-    }
+      if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes);
+      else if ((res.headers.get('content-encoding') || '').includes('br') && bytes[0] !== 0x42) bytes = brotliDecompressSync(bytes);
+    } catch { /* 이미 해제됨 */ }
+    // Node 네이티브 UTF-8 디코드 (배포 환경의 TextDecoder가 한글을 깨뜨리는 문제 회피)
+    const raw = unfold(bytes.toString('utf-8'));
 
     const today = todaySeoul();
     const titles: string[] = [];
