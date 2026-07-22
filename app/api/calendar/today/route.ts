@@ -104,6 +104,19 @@ export async function GET(req: Request) {
     const bytes = await fetchIcsBuffer(icsUrl);
     const raw = unfold(bytes.toString('utf-8'));
 
+    if (new URL(req.url).searchParams.get('probe') === '1') {
+      const needle = Buffer.from('천등산', 'utf-8');           // ec b2 9c eb 93 b1 ec 82 b0
+      const bi = bytes.indexOf(needle);
+      return NextResponse.json({
+        byteLen: bytes.length,
+        needleFound: bi,
+        hexAround: bi >= 0 ? bytes.slice(bi, bi + 18).toString('hex') : bytes.slice(0, 18).toString('hex'),
+        decodedAround: bi >= 0 ? bytes.slice(bi, bi + 30).toString('utf-8') : '(needle not found)',
+        nodeVersion: process.version,
+        defaultEncoding: Buffer.isEncoding('utf-8'),
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+
     const today = todaySeoul();
     const titles: string[] = [];
     const events: { text: string; desc: string; dayIndex: number; span: number }[] = [];
