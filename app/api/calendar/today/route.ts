@@ -88,14 +88,13 @@ export async function GET(req: Request) {
     const raw = unfold(new TextDecoder('utf-8').decode(bytes));
 
     if (probe) {
-      const head = Array.from(bytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-      const idx = raw.indexOf('SUMMARY');
+      const marker = Buffer.from('SUMMARY:');
+      const bi = bytes.indexOf(marker);
+      const korBytes = bi >= 0 ? Array.from(bytes.slice(bi + 8, bi + 8 + 30)).map(b => b.toString(16).padStart(2, '0')).join(' ') : 'no-summary';
       return NextResponse.json({
         contentEncoding: res.headers.get('content-encoding'),
-        contentType: res.headers.get('content-type'),
-        rawByteLen, afterLen: bytes.length, decompressed: rawByteLen !== bytes.length,
-        headHex: head,
-        sample: raw.slice(idx, idx + 120),
+        rawByteLen, afterLen: bytes.length,
+        summaryByteHex: korBytes,
       }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
