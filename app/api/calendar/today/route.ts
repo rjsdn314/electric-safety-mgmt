@@ -33,6 +33,25 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic'; // 항상 최신(캐시 없이) — 오늘 일정 반영
 const ICS_KEY = 'calendar_ics_url';
 
+// 순수 JS UTF-8 디코더. 배포 환경(Vercel)의 Buffer.toString('utf-8')/TextDecoder가
+// 유효 UTF-8을 EUC-KR식으로 잘못 디코드하는 문제를 우회한다.
+function decodeUtf8(buf: Buffer): string {
+  let out = '';
+  const n = buf.length;
+  for (let i = 0; i < n;) {
+    const b0 = buf[i];
+    if (b0 < 0x80) { out += String.fromCharCode(b0); i += 1; }
+    else if (b0 >= 0xc0 && b0 < 0xe0 && i + 1 < n) {
+      out += String.fromCharCode(((b0 & 0x1f) << 6) | (buf[i + 1] & 0x3f)); i += 2;
+    } else if (b0 >= 0xe0 && b0 < 0xf0 && i + 2 < n) {
+      out += String.fromCharCode(((b0 & 0x0f) << 12) | ((buf[i + 1] & 0x3f) << 6) | (buf[i + 2] & 0x3f)); i += 3;
+    } else if (b0 >= 0xf0 && i + 3 < n) {
+      out += String.fromCodePoint(((b0 & 0x07) << 18) | ((buf[i + 1] & 0x3f) << 12) | ((buf[i + 2] & 0x3f) << 6) | (buf[i + 3] & 0x3f)); i += 4;
+    } else { i += 1; }
+  }
+  return out;
+}
+
 function unfold(text: string): string {
   return text.replace(/\r\n/g, '\n').replace(/\n[ \t]/g, '');
 }
@@ -102,20 +121,7 @@ export async function GET(req: Request) {
     if (!icsUrl) return NextResponse.json({ titles: [], today: todaySeoul() });
 
     const bytes = await fetchIcsBuffer(icsUrl);
-    const raw = unfold(bytes.toString('utf-8'));
-
-    if (new URL(req.url).searchParams.get('probe') === '1') {
-      const needle = Buffer.from('천등산', 'utf-8');           // ec b2 9c eb 93 b1 ec 82 b0
-      const bi = bytes.indexOf(needle);
-      return NextResponse.json({
-        byteLen: bytes.length,
-        needleFound: bi,
-        hexAround: bi >= 0 ? bytes.slice(bi, bi + 18).toString('hex') : bytes.slice(0, 18).toString('hex'),
-        decodedAround: bi >= 0 ? bytes.slice(bi, bi + 30).toString('utf-8') : '(needle not found)',
-        nodeVersion: process.version,
-        defaultEncoding: Buffer.isEncoding('utf-8'),
-      }, { headers: { 'Cache-Control': 'no-store' } });
-    }
+    const raw = unfold(decodeUtf8(bytes));
 
     const today = todaySeoul();
     const titles: string[] = [];
