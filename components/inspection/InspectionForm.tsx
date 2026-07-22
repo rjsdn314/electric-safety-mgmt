@@ -313,13 +313,24 @@ export function InspectionForm() {
   }, [stations]);
   const isDoneToday = (s: any) => doneTodayNames.has(s.name);
 
+  // 오늘 일정 충전소가 캘린더에 적힌 순서(=todaySegments 순서)대로 정렬되도록 인덱스 계산
+  const segIndexOf = (s: any): number => {
+    const cands = [s.name, s.base_name].filter(Boolean);
+    for (let i = 0; i < todaySegments.length; i++) if (segMatch(todaySegments[i], cands)) return i;
+    return Infinity;
+  };
   const filtered = useMemo(() => {
     const base = stations
       .filter(s => matchStation(s, query))
       .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
     // 정렬: 오늘 일정(미작성) 맨 위 → 일반 → 오늘 작성 완료 맨 아래
     const rank = (s: any) => (isDoneToday(s) ? 2 : isTodayStation(s) ? 0 : 1);
-    return [...base].sort((a, b) => rank(a) - rank(b));
+    return [...base].sort((a, b) => {
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      if (ra === 0) return segIndexOf(a) - segIndexOf(b);   // 오늘 일정: 캘린더 나열 순서대로
+      return 0;
+    });
   }, [stations, query, todaySegments, doneTodayNames]);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
