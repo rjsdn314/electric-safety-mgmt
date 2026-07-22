@@ -78,12 +78,26 @@ export async function GET(req: Request) {
     if (!res.ok) return NextResponse.json({ titles: [], today: todaySeoul(), error: 'ICS fetch failed' });
     // 배포 환경(undici)이 gzip을 자동 해제하지 않는 경우가 있어, 매직바이트로 판별해 직접 해제 후 UTF-8 디코드.
     let bytes = Buffer.from(await res.arrayBuffer());
+    const rawByteLen = bytes.length;
+    const probe = new URL(req.url).searchParams.get('probe') === '1';
     try {
       if (bytes[0] === 0x1f && bytes[1] === 0x8b) bytes = gunzipSync(bytes);                    // gzip
       else if ((res.headers.get('content-encoding') || '').includes('br')) bytes = brotliDecompressSync(bytes);
       else if (bytes[0] === 0x78 && (bytes[1] === 0x9c || bytes[1] === 0x01 || bytes[1] === 0xda)) bytes = inflateSync(bytes); // zlib/deflate
     } catch { /* 이미 해제된 경우 원본 사용 */ }
     const raw = unfold(new TextDecoder('utf-8').decode(bytes));
+
+    if (probe) {
+      const head = Array.from(bytes.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+      const idx = raw.indexOf('SUMMARY');
+      return NextResponse.json({
+        contentEncoding: res.headers.get('content-encoding'),
+        contentType: res.headers.get('content-type'),
+        rawByteLen, afterLen: bytes.length, decompressed: rawByteLen !== bytes.length,
+        headHex: head,
+        sample: raw.slice(idx, idx + 120),
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
 
     const today = todaySeoul();
     const titles: string[] = [];
