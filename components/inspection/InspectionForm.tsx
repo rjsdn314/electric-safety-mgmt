@@ -229,8 +229,12 @@ export function InspectionForm() {
   const GENERIC_TOKENS = new Set(['주차장', '휴게소', '충전소', '공영', '제']);
   const isStopToken = (x: string) => STOP_TOKENS.has(x) || /^\d+일차$/.test(x);
   // 캘린더 표기 ↔ DB 표기 차이 별칭 (실제 캘린더 전수 점검으로 발견된 것들. 계속 추가 가능)
+  // ⚠ 치환값은 norm() 이후 형태(소문자 영문·한글, 공백 없음)로만 작성할 것 —
+  //   ka()는 norm() *다음*에 적용되므로, 대문자·공백이 섞이면 재정규화가 안 돼 매칭이 깨진다.
   const CALENDAR_ALIASES: [RegExp, string][] = [
-    [/킨텍스|킨텍/g, 'KINTEX'],
+    [/(킨텍스|킨텍|kintex)\s*제?\s*2\s*주차장/gi, 'kintex제2전시장'],
+    [/킨텍스|킨텍/g, 'kintex'],
+    [/탄현체육센터/g, '일산탄현마을'],
     [/고양\s*농수산물\s*(종합)?\s*(유통)?\s*센터/g, '농수산물종합유통센터'],
     [/서울시\s*교통회관/g, '서울교통회관'],
     [/워터\s*서피비치/g, '양양서피비치'],
