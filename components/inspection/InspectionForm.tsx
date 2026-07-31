@@ -228,15 +228,42 @@ export function InspectionForm() {
   const STOP_TOKENS = new Set(['오전', '오후', '점검', '월차', '분기', '반기', '연차', '예정', '및', '외']);
   const GENERIC_TOKENS = new Set(['주차장', '휴게소', '충전소', '공영', '제']);
   const isStopToken = (x: string) => STOP_TOKENS.has(x) || /^\d+일차$/.test(x);
-  // 별칭 정규화: 캘린더의 '킨텍스'/'킨텍'을 DB 표기 'KINTEX'(→kintex)와 맞춤
-  const ka = (x: string) => x.replace(/킨텍스|킨텍/g, 'kintex');
-  // 방향 추출: 마지막 괄호 안 내용(숫자목록 제외) 또는 'X방향' — 예 (양평방향)→양평, (인천)→인천
+  // 캘린더 표기 ↔ DB 표기 차이 별칭 (실제 캘린더 전수 점검으로 발견된 것들. 계속 추가 가능)
+  const CALENDAR_ALIASES: [RegExp, string][] = [
+    [/킨텍스|킨텍/g, 'KINTEX'],
+    [/고양\s*농수산물\s*(종합)?\s*(유통)?\s*센터/g, '농수산물종합유통센터'],
+    [/서울시\s*교통회관/g, '서울교통회관'],
+    [/워터\s*서피비치/g, '양양서피비치'],
+    [/남성주\s*(참외)?\s*휴게소/g, '남성주참외휴게소'],
+    [/북한산\s*(국립공원)?\s*제\s*1\s*(공영)?\s*주차장/g, '워터북한산제1주차장'],
+  ];
+  const ka = (x: string) => { let r = x; for (const [re, to] of CALENDAR_ALIASES) r = r.replace(re, to); return r; };
+  // 방향 추출: 마지막 괄호 안 내용(숫자목록 제외) 또는 'X방향' — 예 (양평방향)→양평, (인천)→인천.
+  // '양방향'(왕복/전체)은 특정 방향이 아니므로 방향 미지정으로 취급.
   const dirOf = (raw: string): string => {
+    const clean = (x: string) => { const d = norm(x.replace(/방향/g, '')); return d === '양' ? '' : d; };
     const parens = [...String(raw).matchAll(/\(([^)]*)\)/g)].map(m => m[1]).filter(p => !/^[\d,\s]*$/.test(p));
     const p = parens.length ? parens[parens.length - 1] : '';
-    if (p) return norm(p.replace(/방향/g, ''));
+    if (p) return clean(p);
     const m = String(raw).match(/([가-힣]{2,})방향/);
-    return m ? norm(m[1]) : '';
+    return m ? clean(m[1]) : '';
+  };
+  // 이름만으로 매칭(방향 무시) — 캘린더의 방향 오표기(예: '익산방향'인데 DB는 '대구방향') 대비 폴백용
+  const nameOnlyMatch = (seg: string, candsRaw: string[]): boolean => {
+    const cands = candsRaw.map(c => ka(norm(c)));
+    const nt = ka(norm(seg));
+    if (!nt) return false;
+    if (cands.some(c => nt.includes(c) || c.includes(nt))) return true;
+    const tokens = seg.split(/[\s()\[\]·~-]+/).map(x => ka(norm(x))).filter(x => x.length >= 2 && !isStopToken(x));
+    if (!tokens.length) return false;
+    const specific = tokens.filter(x => !GENERIC_TOKENS.has(x));
+    const primary = specific.sort((a, b) => b.length - a.length)[0];
+    if (!primary) return false;
+    return cands.some(c => {
+      if (!c.includes(primary)) return false;
+      const hits = tokens.filter(x => c.includes(x));
+      return hits.length >= Math.max(1, Math.ceil(tokens.length * 0.5));
+    });
   };
   // seg(캘린더 구간) ↔ cand(충전소명, 원문) 매칭. 방향이 서로 다르면 배제(예: 문경 양평 vs 창원).
   const segMatch = (seg: string, candsRaw: string[]): boolean => {
@@ -297,10 +324,19 @@ export function InspectionForm() {
     return segs;
   }, [todayEvents]);
 
+  // 캘린더 매칭 판정용 전체 후보군(관리자는 전체, 일반 사용자는 본인 관리구역)
+  const calendarPool = isAdmin && allStationsForCalendar.length ? allStationsForCalendar : stations;
   const isTodayStation = (s: any): boolean => {
     if (!todaySegments.length) return false;
     const cands = [s.name, s.base_name].filter(Boolean);   // 원문 전달(segMatch가 정규화·방향추출)
-    return todaySegments.some(seg => segMatch(seg, cands));            // 구간별 매칭
+    if (todaySegments.some(seg => segMatch(seg, cands))) return true;   // 방향까지 정밀 매칭
+    // 방향이 달라 실패했어도, 이름으로는 유일하게 이 현장만 해당되면 허용
+    // (캘린더의 방향 오표기 대비 — 예: '영천휴게소(익산방향)'인데 DB는 '대구방향')
+    return todaySegments.some(seg => {
+      if (!nameOnlyMatch(seg, cands)) return false;
+      const others = calendarPool.filter((st: any) => st.id !== s.id && nameOnlyMatch(seg, [st.name, st.base_name]));
+      return others.length === 0;
+    });
   };
 
   // ── 오늘 작성 완료한 충전소: 목록 맨 아래로 (남은 현장이 위에 오도록) ──
