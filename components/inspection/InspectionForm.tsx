@@ -63,6 +63,9 @@ export function InspectionForm() {
   const [folderName, setFolderName] = useState('');
   const [todayEvents, setTodayEvents] = useState<{ text: string; desc?: string; dayIndex: number; span: number }[]>([]);
   const [result, setResult] = useState<any>(null);
+  // 캘린더 오늘 일정 매칭용 전체 현장(관리자 전용) — "내 관리구역" 보기 중이어도
+  // 다른 회원 소유 현장이 오늘 일정이면 놓치지 않도록 소유자 필터와 무관하게 별도 로드.
+  const [allStationsForCalendar, setAllStationsForCalendar] = useState<any[]>([]);
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
   useEffect(() => {
@@ -87,6 +90,9 @@ export function InspectionForm() {
           const { data: profs } = await sb.from('profiles').select('id, name').in('id', ownerIds);
           setMembers((profs || []).map((p: any) => ({ id: p.id, name: p.name || '이름없음' })));
         }
+        // 캘린더 매칭용: 소유자 필터 없이 전체 활성 현장 로드
+        const { data: all } = await sb.from('stations').select('*').eq('is_active', true).order('name');
+        setAllStationsForCalendar(all || []);
       }
     })();
   }, []);
@@ -319,10 +325,21 @@ export function InspectionForm() {
     for (let i = 0; i < todaySegments.length; i++) if (segMatch(todaySegments[i], cands)) return i;
     return Infinity;
   };
+  // 현재 보기(예: "내 관리구역")에 없더라도, 오늘 캘린더 일정에 매칭되는 다른 회원 소유 현장은
+  // 놓치지 않도록 별도로 끌어와 목록에 합친다. (소유자 필터가 캘린더 자동인식을 막지 않도록)
+  const extraTodayStations = useMemo(() => {
+    if (!isAdmin || !todaySegments.length || !allStationsForCalendar.length) return [];
+    const currentIds = new Set(stations.map(s => s.id));
+    return allStationsForCalendar.filter(s => !currentIds.has(s.id) && isTodayStation(s));
+  }, [isAdmin, stations, allStationsForCalendar, todaySegments]);
+
+  const memberName = (userId: string | null) => members.find(m => m.id === userId)?.name;
+
   const filtered = useMemo(() => {
-    const base = stations
+    const merged = [...stations, ...extraTodayStations];
+    const base = merged
       .filter(s => matchStation(s, query))
-      .filter((s, i, arr) => arr.findIndex(x => x.name === s.name) === i);
+      .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i);
     // 정렬: 오늘 일정(미작성) 맨 위 → 일반 → 오늘 작성 완료 맨 아래
     const rank = (s: any) => (isDoneToday(s) ? 2 : isTodayStation(s) ? 0 : 1);
     return [...base].sort((a, b) => {
@@ -331,7 +348,7 @@ export function InspectionForm() {
       if (ra === 0) return segIndexOf(a) - segIndexOf(b);   // 오늘 일정: 캘린더 나열 순서대로
       return 0;
     });
-  }, [stations, query, todaySegments, doneTodayNames]);
+  }, [stations, extraTodayStations, query, todaySegments, doneTodayNames]);
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
     setMeasureSets(prev => {
@@ -543,6 +560,7 @@ export function InspectionForm() {
               {filtered.map(s => {
                 const doneToday = isDoneToday(s);
                 const today = !doneToday && isTodayStation(s);
+                const otherOwner = isAdmin && s.user_id && s.user_id !== meId ? memberName(s.user_id) : null;
                 return (
                   <button key={s.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, border: 'none', background: today ? 'rgba(5,192,114,.08)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', opacity: doneToday ? 0.55 : 1 }} onClick={() => handleSelectStation(s)}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: doneToday ? 'var(--text-tertiary)' : '#05C072', flexShrink: 0 }} />
@@ -550,6 +568,7 @@ export function InspectionForm() {
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {today && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(5,192,114,.18)', color: '#05a862' }}>📅 오늘</span>}
                         {doneToday && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,.18)', color: 'var(--text-secondary)' }}>✅ 오늘 작성됨</span>}
+                        {otherOwner && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,.14)', color: '#6366f1' }}>👤 {otherOwner}</span>}
                         {s.name}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{s.voltage}V · {s.capacity}kW</div>
