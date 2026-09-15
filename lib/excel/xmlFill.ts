@@ -27,7 +27,8 @@ export interface FillData {
   remarks: string;
   // 별지7 열화상: 수배전반 순서(= 별지7 시트 순서)별 부위 데이터.
   //  temps = Point1~3 중심온도(촬영순), photo_y/photo_x = 최고온도 사진(실화상/열화상, base64 JPEG)
-  b7_panels?: Array<Partial<Record<'PF' | 'PT' | 'CH', { temps: number[]; photo_y?: string; photo_x?: string }>> | null>;
+  //  키 = 계정별 부위 이름(기본 PF/PT/CH), 키 순서 = 양식 라벨과 안 맞을 때의 행 순서
+  b7_panels?: Array<Record<string, { temps: number[]; photo_y?: string; photo_x?: string }> | null>;
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -223,12 +224,22 @@ function cellText(xml: string, shared: string[], ref: string): string {
   return t ? t[1] : v ? v[1] : '';
 }
 
-type B7Part = 'PF' | 'PT' | 'CH';
-// 라벨 셀(A12/A14/A16 = 측정 행 라벨, A28/A38/A48 = 사진 라벨)에서 부위 순서를 읽는다. 판독 실패 시 PF/PT/CH.
-function b7PartOrder(xml: string, shared: string[], refs: string[]): B7Part[] {
-  const def: B7Part[] = ['PF', 'PT', 'CH'];
-  const got = refs.map((r) => (cellText(xml, shared, r).toUpperCase().match(/PF|PT|CH/) || [])[0] as B7Part | undefined);
-  return got.every(Boolean) && new Set(got).size === 3 ? (got as B7Part[]) : def;
+// 라벨 셀(A12/A14/A16 = 측정 행 라벨, A28/A38/A48 = 사진 라벨) → 각 행에 들어갈 부위 이름.
+//  · 라벨과 부위 이름이 같으면(공백·대소문자 무시, 포함관계 허용) 그 행에 배치
+//  · 못 맞춘 행(예: 라벨이 '측정부위'뿐인 양식)은 남은 부위를 계정 목록 순서대로 채움
+function b7RowParts(xml: string, shared: string[], refs: string[], panel: Record<string, unknown> | null): (string | null)[] {
+  const norm = (s: string) => s.replace(/\s+/g, '').toUpperCase();
+  const keys = Object.keys(panel || {});
+  const used = new Set<string>();
+  const rows = refs.map((r) => {
+    const label = norm(cellText(xml, shared, r));
+    if (!label) return null;
+    const k = keys.find((k) => !used.has(k) && (norm(k) === label || (norm(k).length >= 2 && label.length <= 12 && (label.includes(norm(k)) || norm(k).includes(label)))));
+    if (k) used.add(k);
+    return k || null;
+  });
+  const rest = keys.filter((k) => !used.has(k));
+  return rows.map((k) => k ?? rest.shift() ?? null);
 }
 
 // 3점 온도차(최고−최저) 판정
@@ -253,10 +264,11 @@ type B7Panel = NonNullable<NonNullable<FillData['b7_panels']>[number]>;
 
 // 별지7 측정 행 기입: 부위별 Point1~3 온도 + AF 판정 (데이터 없는 부위는 공란 + '5℃ 이하')
 function writeB7Temps(xml: string, shared: string[], panel: B7Panel | null): string {
-  const order = b7PartOrder(xml, shared, ['A12', 'A14', 'A16']);
+  const order = b7RowParts(xml, shared, ['A12', 'A14', 'A16'], panel);
   [13, 15, 17].forEach((row, k) => {
     for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
-    const temps = (panel?.[order[k]]?.temps || []).filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 3);
+    const part = order[k];
+    const temps = ((part && panel?.[part]?.temps) || []).filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 3);
     temps.forEach((v, i) => { xml = setCell(xml, `${['H', 'P', 'X'][i]}${row}`, v, true); });
     xml = setCell(xml, `AF${row}`, b7Verdict(temps), false);
   });
@@ -483,11 +495,12 @@ function moveTitleEllipse(dx: string, from: { col: number; colOff: number }, to:
 async function insertB7Photos(zip: JSZip, sheetPath: string, shared: string[], panel: B7Panel, i: number) {
   const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
   const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return;
-  const order = b7PartOrder(sx, shared, ['A28', 'A38', 'A48']);
+  const order = b7RowParts(sx, shared, ['A28', 'A38', 'A48'], panel);
   const pics: SheetPic[] = [];
   order.forEach((part, k) => {
     const top = 18 + k * 10;   // 0기반 행: 19행 / 29행 / 39행 (9행 높이)
-    const y = toBuf(panel[part]?.photo_y), x = toBuf(panel[part]?.photo_x);
+    const data = part ? panel[part] : undefined;
+    const y = toBuf(data?.photo_y), x = toBuf(data?.photo_x);
     if (y) pics.push({ buf: y, c1: 0, r1: top, c2: 19, r2: top + 9 });    // 실화상 A:S
     if (x) pics.push({ buf: x, c1: 19, r1: top, c2: 38, r2: top + 9 });   // 열화상 T:AL
   });

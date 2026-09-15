@@ -1,12 +1,14 @@
 'use client';
 // 별지7 열화상 사진 선택·분류 UI (점검 생성 화면 + 점검 이력 '열화상 추가'에서 공용)
+//  · 부위 목록은 계정별 설정(/thermal-parts)을 따른다.
+//  · 반영 후 learn()으로 확정 분류(특히 사용자가 고친 사진)를 계정별 예시로 저장 → 다음 AI 분류에 참고.
 import { useEffect, useRef, useState } from 'react';
-import { loadShots, smoothByTriplets, downscaleToBase64, buildB7Payload, PARTS, type Part, type ThermalShot, type B7PanelData } from '@/lib/thermal/gtc400c';
+import { loadShots, smoothByTriplets, downscaleToBase64, buildB7Payload, type Part, type ThermalShot, type B7PanelData } from '@/lib/thermal/gtc400c';
+import { DEFAULT_PARTS, type ThermalPart } from '@/lib/thermal/parts';
 
 export type UIShot = ThermalShot & { url: string };
 export type PanelThermal = { shots: UIShot[]; skipped: string[]; status: string; busy: boolean };
 const EMPTY: PanelThermal = { shots: [], skipped: [], status: '', busy: false };
-const PART_LABEL: Record<Part, string> = { PF: 'PF (전력퓨즈)', PT: 'PT (계기용변압기)', CH: 'CH (케이블헤드)' };
 const verdictOf = (temps: number[]) => {
   if (temps.length < 2) return '5℃ 이하';
   const d = Math.max(...temps) - Math.min(...temps);
@@ -17,22 +19,38 @@ const revoke = (t?: PanelThermal) => t?.shots.forEach(s => URL.revokeObjectURL(s
 // 수배전반 인덱스별 사진·온도·부위 분류 상태
 export function useThermalPanels() {
   const [thermal, setThermal] = useState<PanelThermal[]>([]);
+  const [parts, setParts] = useState<ThermalPart[]>(DEFAULT_PARTS);
   const ref = useRef(thermal);
   ref.current = thermal;
+  const partsRef = useRef(parts);
+  partsRef.current = parts;
   useEffect(() => () => ref.current.forEach(revoke), []);
+
+  // 계정별 부위 목록
+  useEffect(() => {
+    fetch('/api/thermal/profile', { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (Array.isArray(j?.parts) && j.parts.length) setParts(j.parts); })
+      .catch(() => {});
+  }, []);
 
   const patch = (idx: number, p: Partial<PanelThermal>) =>
     setThermal(prev => { const next = [...prev]; next[idx] = { ...(next[idx] || EMPTY), ...p }; return next; });
 
   const classify = async (idx: number, shots: UIShot[]) => {
-    patch(idx, { busy: true, status: 'AI가 부위(PF/PT/CH)를 분류하는 중...' });
+    patch(idx, { busy: true, status: 'AI가 부위를 분류하는 중...' });
     try {
       const images = await Promise.all(shots.map(s => downscaleToBase64(s.y)));
       const res = await fetch('/api/thermal/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images }) });
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-      const parts = smoothByTriplets(j.parts as (Part | null)[]);
-      patch(idx, { shots: shots.map((s, i) => ({ ...s, part: parts[i] ?? null })), busy: false, status: '✅ AI 분류 완료 — 틀린 부위는 아래에서 바로 고칠 수 있습니다.' });
+      const valid = new Set(partsRef.current.map(p => p.name));
+      const labels = smoothByTriplets((j.parts as (Part | null)[]).map(p => (p && valid.has(p) ? p : null)));
+      patch(idx, {
+        shots: shots.map((s, i) => ({ ...s, part: labels[i] ?? null, ai: labels[i] ?? null })),
+        busy: false,
+        status: `✅ AI 분류 완료${j.examples_used ? ` (내 예시 ${j.examples_used}장 참고)` : ''} — 틀린 부위는 아래에서 고치면 다음 분류부터 반영됩니다.`,
+      });
     } catch (e: any) {
       patch(idx, { shots, busy: false, status: `⚠️ AI 분류를 사용할 수 없어 직접 지정이 필요합니다 (${e.message})` });
     }
@@ -66,11 +84,30 @@ export function useThermalPanels() {
   const removeAt = (idx: number) => { revoke(ref.current[idx]); setThermal(prev => prev.filter((_, i) => i !== idx)); };
 
   // 전송용: 수배전반 수만큼 부위 온도 + 최고온도 대표 사진 (사진 없는 수배전반은 null)
-  const buildPanels = (count: number): Promise<(B7PanelData | null)[]> =>
-    Promise.all(Array.from({ length: count }, (_, i) => (thermal[i]?.shots.length ? buildB7Payload(thermal[i].shots) : Promise.resolve(null))));
+  const buildPanels = (count: number): Promise<(B7PanelData | null)[]> => {
+    const names = parts.map(p => p.name);
+    return Promise.all(Array.from({ length: count }, (_, i) => (thermal[i]?.shots.length ? buildB7Payload(thermal[i].shots, names) : Promise.resolve(null))));
+  };
+
+  // 계정별 학습: 부위마다 고친 사진 우선 최대 2장을 축소해 예시로 저장 (실패해도 무시)
+  const learn = () => {
+    const all = ref.current.flatMap(t => t?.shots || []).filter(s => s.part);
+    const picks: UIShot[] = [];
+    for (const p of partsRef.current) {
+      const list = all.filter(s => s.part === p.name);
+      picks.push(...[...list.filter(s => s.ai !== s.part), ...list.filter(s => s.ai === s.part)].slice(0, 2));
+    }
+    if (!picks.length) return;
+    void (async () => {
+      try {
+        const examples = await Promise.all(picks.map(async s => ({ part: s.part, image: await downscaleToBase64(s.y, 256, 0.7) })));
+        await fetch('/api/thermal/examples', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examples }) });
+      } catch { /* 학습 저장 실패는 점검표 생성에 영향 없음 */ }
+    })();
+  };
 
   return {
-    thermal, addFiles, classify, setPart, clear, reset, removeAt, buildPanels,
+    thermal, parts, addFiles, classify, setPart, clear, reset, removeAt, buildPanels, learn,
     hasAny: thermal.some(t => t?.shots.length),
     busy: thermal.some(t => t?.busy),
     unassigned: thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0),
@@ -80,7 +117,8 @@ export function useThermalPanels() {
 export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnType<typeof useThermalPanels>; hint?: string }) {
   const th = api.thermal[idx];
   const shots = th?.shots || [];
-  const repIds = new Set(PARTS.map(p => {
+  const names = api.parts.map(p => p.name);
+  const repIds = new Set(names.map(p => {
     const list = shots.filter(s => s.part === p);
     return list.length ? list.reduce((a, b) => (b.center > a.center ? b : a)).id : '';
   }));
@@ -104,6 +142,7 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
         RB…X/Y.JPG를 모두 고르면 사진 속 온도(중심점)를 읽어 부위별 Point 1~3에 넣고, 부위마다 온도가 가장 높은 사진(실화상+열화상)만 엑셀에 넣습니다.
+        {' '}내 촬영 부위: <b>{names.join(' / ')}</b> (<a href="/thermal-parts" style={{ color: 'var(--accent)' }}>변경</a>)
         {hint && <><br />{hint}</>}
       </div>
       {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}</div>}
@@ -116,19 +155,20 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
                 <div style={{ position: 'relative' }}>
                   <img src={s.url} alt={s.id} style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }} />
                   {repIds.has(s.id) && <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: 'var(--accent)', color: '#fff' }}>★ 엑셀 삽입</span>}
+                  {s.ai !== undefined && s.part !== s.ai && <span style={{ position: 'absolute', top: 4, right: 4, fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: '#f59e0b', color: '#fff' }}>수정됨</span>}
                 </div>
                 <div style={{ padding: '6px 8px' }}>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.id} · 중심 <b style={{ color: 'var(--text-primary)' }}>{s.center.toFixed(1)}℃</b></div>
-                  <select value={s.part || ''} onChange={e => api.setPart(idx, si, (e.target.value || null) as Part | null)} style={{ width: '100%', marginTop: 4, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }}>
+                  <select value={s.part || ''} onChange={e => api.setPart(idx, si, e.target.value || null)} style={{ width: '100%', marginTop: 4, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }}>
                     <option value="">— 제외/미지정 —</option>
-                    {PARTS.map(p => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                    {names.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 10, display: 'grid', gap: 4, fontSize: 12.5 }}>
-            {PARTS.map(p => {
+            {names.map(p => {
               const temps = shots.filter(s => s.part === p).map(s => s.center);
               return (
                 <div key={p} style={{ color: temps.length === 3 ? 'var(--text-secondary)' : '#d97706' }}>

@@ -496,6 +496,7 @@ export function InspectionForm() {
       setSavedFile(r.fileName);
       setDownloadUrl(r.downloadUrl);
       setResult({ ...r, station: selected, inspType, date, inspector, count, weather, measureSets, remarks });
+      if (useThermal) thermalApi.learn();   // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고)
       setDoneTodayNames(prev => new Set(prev).add(selected.name));  // 작성 완료 → 목록 맨 아래로 즉시 반영
       setDone(true);
     } catch (e: any) {

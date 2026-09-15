@@ -7,8 +7,8 @@
 //  · °C = raw/100 − 100,  중심점 = 배열 [59:61, 79:81] 2×2 평균 (카메라 화면 십자선 값과 일치)
 // ============================================================
 
-export type Part = 'PF' | 'PT' | 'CH';
-export const PARTS: Part[] = ['PF', 'PT', 'CH'];
+// 부위 = 계정별 부위 목록의 이름 (기본 PF/PT/CH — lib/thermal/parts.ts)
+export type Part = string;
 
 export interface ThermalShot {
   id: string;          // 'RB01715'
@@ -17,7 +17,8 @@ export interface ThermalShot {
   center: number;
   min: number;
   max: number;
-  part: Part | null;   // AI 분류 또는 사용자 수정
+  part: Part | null;   // 확정 부위 (AI 분류 또는 사용자 수정)
+  ai?: Part | null;    // AI가 제안한 부위 (수정 여부 판단 → 계정별 학습 예시)
 }
 
 const W = 160, H = 120;
@@ -103,12 +104,13 @@ export async function fileToBase64(file: File): Promise<string> {
 }
 
 // 별지7 기입 데이터: 부위별 Point1~3 온도(촬영순) + 최고 중심온도 사진(실화상/열화상)
+//  키 순서 = 계정 부위 목록 순서 (엑셀 행 라벨과 이름이 안 맞을 때의 기본 행 순서)
 export interface B7PartData { temps: number[]; photo_y?: string; photo_x?: string }
-export type B7PanelData = Partial<Record<Part, B7PartData>>;
+export type B7PanelData = Record<string, B7PartData>;
 
-export async function buildB7Payload(shots: ThermalShot[]): Promise<B7PanelData> {
+export async function buildB7Payload(shots: ThermalShot[], partNames: string[]): Promise<B7PanelData> {
   const out: B7PanelData = {};
-  for (const part of PARTS) {
+  for (const part of partNames) {
     const list = shots.filter((s) => s.part === part);
     if (!list.length) continue;
     const rep = list.reduce((a, b) => (b.center > a.center ? b : a));

@@ -382,6 +382,7 @@ export default function HistoryPage() {
         if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''}`);
         const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
         setItems(prev => prev.map(it => it.id === item.id ? updated : it));
+        thermalApi.learn();   // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고)
         thermalApi.reset(); setThermalItem(null);
         if (isDesktop) {
           alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n이어서 PC 폴더의 엑셀 파일도 새 파일로 저장합니다.`);

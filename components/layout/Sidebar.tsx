@@ -71,6 +71,7 @@ export function Sidebar() {
     { href: '/stations/upload',  label: '관리구역 등록', icon: '📂' },
     { href: '/admin/templates',  label: '양식 등록',     icon: '📑' },
     { href: '/signature',        label: '서명 등록',     icon: '✍️' },
+    { href: '/thermal-parts',    label: '열화상 부위',   icon: '🌡️' },
   ];
 
   const adminMenus = [
