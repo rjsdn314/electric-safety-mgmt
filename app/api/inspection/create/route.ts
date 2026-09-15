@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const {
       station_id, inspection_type, date,
       inspector_name, count, remarks,
-      measure_sets, ground_resistance, is_mobile, weather,
+      measure_sets, ground_resistance, is_mobile, weather, b7_panels,
     } = body;
 
     const sb = createClient(
@@ -189,6 +189,7 @@ export async function POST(req: NextRequest) {
         signature_b64,
         weather: await weatherPromise,
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
+        b7_panels: Array.isArray(b7_panels) ? b7_panels : undefined,   // 별지7 열화상 온도·사진
       });
     } else {
       // 공용 폴백: 기존 ExcelJS 경로
@@ -228,7 +229,13 @@ export async function POST(req: NextRequest) {
       inspection_type,
       inspection_date: date,
       inspector_name,
-      measure_values: { sets, ground_resistance: ground, device: is_mobile ? 'mobile' : 'pc', used_registered_template: usedRegistered },
+      measure_values: {
+        sets, ground_resistance: ground, device: is_mobile ? 'mobile' : 'pc', used_registered_template: usedRegistered,
+        // 별지7 열화상 온도 기록(사진 제외)
+        thermal: Array.isArray(b7_panels)
+          ? b7_panels.map((p: any) => p && Object.fromEntries(Object.entries(p).map(([k, v]: [string, any]) => [k, v?.temps || []])))
+          : undefined,
+      },
       remarks: remarks || '특이사항없음',
       file_name: displayFileName,
       file_path: urlData.publicUrl,

@@ -25,6 +25,9 @@ export interface FillData {
   signature_b64?: string;       // 점검자 서명 이미지(data:image/png;base64,...) — 별지1·별지14 서명칸에 삽입
   weather?: string;             // 날씨/일기: 맑음·흐림·우천 — 별지14 D4 "(일기:OO)"
   remarks: string;
+  // 별지7 열화상: 수배전반 순서(= 별지7 시트 순서)별 부위 데이터.
+  //  temps = Point1~3 중심온도(촬영순), photo_y/photo_x = 최고온도 사진(실화상/열화상, base64 JPEG)
+  b7_panels?: Array<Partial<Record<'PF' | 'PT' | 'CH', { temps: number[]; photo_y?: string; photo_x?: string }>> | null>;
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -209,19 +212,169 @@ function fillByeolji14(xml: string, shared: string[], d: FillData): string {
   return xml;
 }
 
-function fillByeolji7(xml: string, shared: string[], d: FillData): string {
+// 셀의 표시 문자열(공유문자열/인라인) — 라벨 판독용
+function cellText(xml: string, shared: string[], ref: string): string {
+  const m = xml.match(new RegExp(`<c r="${ref}"([^>]*?)(?:/>|>([\\s\\S]*?)</c>)`));
+  if (!m) return '';
+  const inner = m[2] || '';
+  const v = inner.match(/<v>([\s\S]*?)<\/v>/);
+  if (/t="s"/.test(m[1]) && v) return shared[+v[1]] || '';
+  const t = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+  return t ? t[1] : v ? v[1] : '';
+}
+
+type B7Part = 'PF' | 'PT' | 'CH';
+// 라벨 셀(A12/A14/A16 = 측정 행 라벨, A28/A38/A48 = 사진 라벨)에서 부위 순서를 읽는다. 판독 실패 시 PF/PT/CH.
+function b7PartOrder(xml: string, shared: string[], refs: string[]): B7Part[] {
+  const def: B7Part[] = ['PF', 'PT', 'CH'];
+  const got = refs.map((r) => (cellText(xml, shared, r).toUpperCase().match(/PF|PT|CH/) || [])[0] as B7Part | undefined);
+  return got.every(Boolean) && new Set(got).size === 3 ? (got as B7Part[]) : def;
+}
+
+// 3점 온도차(최고−최저) 판정
+function b7Verdict(temps: number[]): string {
+  if (temps.length < 2) return '5℃ 이하';
+  const diff = Math.max(...temps) - Math.min(...temps);
+  return diff <= 5 ? '5℃ 이하' : diff < 10 ? '5℃ 초과 ~ 10℃' : '10℃ 이상';
+}
+
+function fillByeolji7(xml: string, shared: string[], d: FillData, panelIdx: number): string {
   const t = ymd(d.date);
   xml = setCell(xml, 'AC3', `${t.yy}년`, false);
   xml = setCell(xml, 'AE3', +t.m, true);
   xml = setCell(xml, 'AI3', +t.d, true);
   xml = replaceDates(xml, shared, d.date, 5);
-  // 기본값 비우기: 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거.
-  // 사용자가 직접 입력하기 전까지 공란으로 생성한다. (H=8 ~ AE=31, Point 1/2/3 온도값)
-  for (const row of [13, 15, 17]) {
+  // 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거 후,
+  // 열화상 사진에서 추출한 온도가 있으면 Point 1/2/3(H/P/X 병합 앵커)에 기입 + AF 판정.
+  const panel = d.b7_panels?.[panelIdx] || null;
+  const order = b7PartOrder(xml, shared, ['A12', 'A14', 'A16']);
+  [13, 15, 17].forEach((row, k) => {
     for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
-    xml = setCell(xml, `AF${row}`, '5℃ 이하', false);   // 온도차 기본값
-  }
+    const temps = (panel?.[order[k]]?.temps || []).filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 3);
+    temps.forEach((v, i) => { xml = setCell(xml, `${['H', 'P', 'X'][i]}${row}`, v, true); });
+    xml = setCell(xml, `AF${row}`, b7Verdict(temps), false);
+  });
   return xml;
+}
+
+// ── 별지7 사진 삽입 ──
+// 병합 사진칸(실화상 A19:S27 / 열화상 T19:AL27, 10행 간격)에 비율 유지·가운데 정렬로 떠있는 그림을 넣는다.
+// (엑셀 365 셀-안-그림 대신 드로잉 앵커 → 구버전 엑셀·PDF 변환에서도 표시)
+const EMU_PX = 9525, EMU_PT = 12700;
+
+function jpegSize(buf: Buffer): { w: number; h: number } | null {
+  let i = 2;
+  while (i + 9 < buf.length && buf[i] === 0xff) {
+    const m = buf[i + 1];
+    const len = buf.readUInt16BE(i + 2);
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    i += 2 + len;
+  }
+  return null;
+}
+
+// 시트의 열 너비(EMU)·행 높이(EMU) 조회기
+function sheetMetrics(sx: string) {
+  const fmt = sx.match(/<sheetFormatPr\b[^>]*>/)?.[0] || '';
+  const defW = +(fmt.match(/defaultColWidth="([\d.]+)"/)?.[1] || 0) || (+(fmt.match(/baseColWidth="([\d.]+)"/)?.[1] || 8) + 0.71);
+  const defH = +(fmt.match(/defaultRowHeight="([\d.]+)"/)?.[1] || 15);
+  const cols: Array<{ min: number; max: number; w: number; hidden: boolean }> = [];
+  for (const m of sx.matchAll(/<col\b[^>]*\/>/g)) {
+    const a = m[0];
+    cols.push({ min: +(a.match(/min="(\d+)"/)?.[1] || 0), max: +(a.match(/max="(\d+)"/)?.[1] || 0), w: +(a.match(/width="([\d.]+)"/)?.[1] || defW), hidden: /hidden="(1|true)"/.test(a) });
+  }
+  const rows = new Map<number, number>();
+  for (const m of sx.matchAll(/<row\b[^>]*>/g)) {
+    const r = +(m[0].match(/\br="(\d+)"/)?.[1] || 0);
+    const ht = m[0].match(/\bht="([\d.]+)"/)?.[1];
+    if (r) rows.set(r, /hidden="(1|true)"/.test(m[0]) ? 0 : ht ? +ht : defH);
+  }
+  const charsToPx = (w: number) => Math.trunc(((256 * w + Math.trunc(128 / 7)) / 256) * 7);
+  // 0기반 열/행 인덱스
+  const colW = (c: number) => { const e = cols.find((x) => c + 1 >= x.min && c + 1 <= x.max); return e?.hidden ? 0 : charsToPx(e ? e.w : defW) * EMU_PX; };
+  const rowH = (r: number) => (rows.has(r + 1) ? rows.get(r + 1)! : defH) * EMU_PT;
+  return { colW, rowH };
+}
+
+// 0기반 시작 인덱스에서 거리(EMU)만큼 떨어진 셀+오프셋
+function walk(start: number, dist: number, size: (i: number) => number): { idx: number; off: number } {
+  let i = start, rest = dist;
+  while (rest >= size(i) && size(i) >= 0 && i < start + 500) { rest -= size(i); i++; }
+  return { idx: i, off: Math.max(0, Math.round(rest)) };
+}
+
+interface SheetPic { buf: Buffer; c1: number; r1: number; c2: number; r2: number } // 0기반, c2/r2 = 병합 끝 다음 칸
+
+async function addSheetPictures(zip: JSZip, sheetPath: string, pics: SheetPic[], tag: string) {
+  if (!pics.length) return;
+  let sx = await zip.file(sheetPath)!.async('string');
+  const relsPath = sheetPath.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
+  let srels = (await zip.file(relsPath)?.async('string')) ||
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  let ct = (await zip.file('[Content_Types].xml')!.async('string'));
+
+  // 드로잉 파트 찾기(없으면 생성)
+  let drawPath: string | null = null;
+  const dm = sx.match(/<drawing r:id="([^"]+)"/);
+  if (dm) {
+    const tm = srels.match(new RegExp(`Id="${dm[1]}"[^>]*Target="([^"]+)"`)) || srels.match(new RegExp(`Target="([^"]+)"[^>]*Id="${dm[1]}"`));
+    if (tm) drawPath = 'xl/' + tm[1].replace(/^\.\.\//, '').replace(/^\/?xl\//, '');
+  }
+  if (!drawPath || !zip.file(drawPath)) {
+    let n = 1; while (zip.file(`xl/drawings/drawing${n}.xml`)) n++;
+    drawPath = `xl/drawings/drawing${n}.xml`;
+    zip.file(drawPath, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"></xdr:wsDr>');
+    ct = ct.replace(/<\/Types>/, `<Override PartName="/${drawPath}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+    const rid = `rIdB7d${n}`;
+    srels = srels.replace(/<\/Relationships>/, `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${n}.xml"/></Relationships>`);
+    if (!/xmlns:r=/.test(sx.match(/<worksheet\b[^>]*>/)?.[0] || '')) sx = sx.replace(/<worksheet\b/, '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"');
+    // 스키마 순서: drawing 은 legacyDrawing/picture/oleObjects/controls/tableParts/extLst 앞
+    const before = sx.match(/<(legacyDrawing|legacyDrawingHF|drawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)\b/);
+    sx = before ? sx.replace(before[0], `<drawing r:id="${rid}"/>${before[0]}`) : sx.replace(/<\/worksheet>/, `<drawing r:id="${rid}"/></worksheet>`);
+    zip.file(sheetPath, sx);
+  }
+  zip.file(relsPath, srels);
+
+  const drelsPath = drawPath.replace(/drawings\/(drawing\d+)\.xml$/, 'drawings/_rels/$1.xml.rels');
+  let drels = (await zip.file(drelsPath)?.async('string')) ||
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>';
+  let dx = await zip.file(drawPath)!.async('string');
+  const wsDrOpen = dx.match(/<xdr:wsDr\b[^>]*>/)?.[0] || '';
+  let open2 = wsDrOpen;
+  if (!/xmlns:a=/.test(open2)) open2 = open2.replace('<xdr:wsDr', '<xdr:wsDr xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"');
+  if (!/xmlns:r=/.test(open2)) open2 = open2.replace('<xdr:wsDr', '<xdr:wsDr xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"');
+  if (open2 !== wsDrOpen) dx = dx.replace(wsDrOpen, open2);
+  if (/<xdr:wsDr\b[^>]*\/>/.test(dx)) dx = dx.replace(/<xdr:wsDr\b([^>]*)\/>/, '<xdr:wsDr$1></xdr:wsDr>');
+
+  if (!/<Default\s+Extension\s*=\s*"jpeg"/i.test(ct)) ct = ct.replace(/(<Types\b[^>]*>)/, '$1<Default Extension="jpeg" ContentType="image/jpeg"/>');
+  zip.file('[Content_Types].xml', ct);
+
+  const { colW, rowH } = sheetMetrics(sx);
+  let nextId = Math.max(0, ...[...dx.matchAll(/<xdr:cNvPr\b[^>]*\bid="(\d+)"/g)].map((m) => +m[1])) + 1;
+  let anchors = '';
+  pics.forEach((p, k) => {
+    const size = jpegSize(p.buf) || { w: 4, h: 3 };
+    let boxW = 0, boxH = 0;
+    for (let c = p.c1; c < p.c2; c++) boxW += colW(c);
+    for (let r = p.r1; r < p.r2; r++) boxH += rowH(r);
+    const pad = 0.04;
+    const scale = Math.min((boxW * (1 - 2 * pad)) / size.w, (boxH * (1 - 2 * pad)) / size.h);
+    const cx = Math.round(size.w * scale), cy = Math.round(size.h * scale);
+    const from = { c: walk(p.c1, (boxW - cx) / 2, colW), r: walk(p.r1, (boxH - cy) / 2, rowH) };
+    let media = 1; while (zip.file(`xl/media/${tag}_${media}.jpeg`)) media++;
+    const mediaName = `${tag}_${media}.jpeg`;
+    zip.file(`xl/media/${mediaName}`, p.buf);
+    const rid = `rIdB7p${nextId}`;
+    drels = drels.replace(/<\/Relationships>/, `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`);
+    anchors += `<xdr:oneCellAnchor><xdr:from><xdr:col>${from.c.idx}</xdr:col><xdr:colOff>${from.c.off}</xdr:colOff><xdr:row>${from.r.idx}</xdr:row><xdr:rowOff>${from.r.off}</xdr:rowOff></xdr:from>` +
+      `<xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${nextId}" name="열화상사진 ${k + 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+      `<xdr:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+      `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+    nextId++;
+  });
+  dx = dx.replace(/<\/xdr:wsDr>/, `${anchors}</xdr:wsDr>`);
+  zip.file(drawPath, dx);
+  zip.file(drelsPath, drels);
 }
 
 function fillByeolji2Ground(xml: string, shared: string[], d: FillData): string {
@@ -350,6 +503,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   const toRemove: Array<{ rid: string; target: string }> = [];
   // 드로잉 후처리 대상: 별지7(사진 제거 + 반기 타원이동), 별지2-절연(반기 타원이동)
   const drawingTargets: Array<{ path: string; kind: 'b7' | 'b2' }> = [];
+  const b7Sheets: string[] = [];   // 별지7 시트 경로(워크북 순서) → 수배전반 #1, #2 ... 순으로 대응
 
   for (const [name, rid] of nameToRid) {
     const target = ridToTarget.get(rid); if (!target) continue;
@@ -377,7 +531,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
 
     if (isB1) xml = fillByeolji1(xml, d);
     else if (isB14) xml = fillByeolji14(xml, shared, d);
-    else if (isB7) xml = fillByeolji7(xml, shared, d);
+    else if (isB7) { xml = fillByeolji7(xml, shared, d, b7Sheets.length); b7Sheets.push(path); }
     else if (isGround) xml = fillByeolji2Ground(xml, shared, d);
     else if (isB2) xml = fillByeolji2(xml, shared, d);
     else {
@@ -472,6 +626,26 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     }
     for (const name of Object.keys(zip.files)) {
       if (/^xl\/media\//.test(name) && !usedMedia.has(name)) zip.remove(name);
+    }
+  }
+
+  // ── 별지7 열화상 사진 삽입 (미디어 GC 이후라 새 이미지가 정리 대상이 되지 않음) ──
+  if (d.b7_panels?.length) {
+    const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
+    for (let i = 0; i < b7Sheets.length; i++) {
+      const panel = d.b7_panels[i];
+      if (!panel) continue;
+      const sx = await zip.file(b7Sheets[i])?.async('string'); if (!sx) continue;
+      const order = b7PartOrder(sx, shared, ['A28', 'A38', 'A48']);
+      const pics: SheetPic[] = [];
+      order.forEach((part, k) => {
+        const top = 18 + k * 10;   // 0기반 행: 19행 / 29행 / 39행 (9행 높이)
+        const y = toBuf(panel[part]?.photo_y), x = toBuf(panel[part]?.photo_x);
+        if (y) pics.push({ buf: y, c1: 0, r1: top, c2: 19, r2: top + 9 });    // 실화상 A:S
+        if (x) pics.push({ buf: x, c1: 19, r1: top, c2: 38, r2: top + 9 });   // 열화상 T:AL
+      });
+      try { await addSheetPictures(zip, b7Sheets[i], pics, `b7s${i + 1}`); }
+      catch (e) { console.error('별지7 사진 삽입 실패:', e); }
     }
   }
 

@@ -1,6 +1,17 @@
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { loadShots, smoothByTriplets, downscaleToBase64, buildB7Payload, PARTS, type Part, type ThermalShot } from '@/lib/thermal/gtc400c';
+
+// 수배전반별 열화상 사진 상태 (별지7 자동 기입용)
+type UIShot = ThermalShot & { url: string };
+type PanelThermal = { shots: UIShot[]; skipped: string[]; status: string; busy: boolean };
+const PART_LABEL: Record<Part, string> = { PF: 'PF (전력퓨즈)', PT: 'PT (계기용변압기)', CH: 'CH (케이블헤드)' };
+const verdictOf = (temps: number[]) => {
+  if (temps.length < 2) return '5℃ 이하';
+  const d = Math.max(...temps) - Math.min(...temps);
+  return d <= 5 ? '5℃ 이하' : d < 10 ? '5℃ 초과 ~ 10℃' : '10℃ 이상';
+};
 
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,10,12월' },
@@ -66,6 +77,50 @@ export function InspectionForm() {
   // 캘린더 오늘 일정 매칭용 전체 현장(관리자 전용) — "내 관리구역" 보기 중이어도
   // 다른 회원 소유 현장이 오늘 일정이면 놓치지 않도록 소유자 필터와 무관하게 별도 로드.
   const [allStationsForCalendar, setAllStationsForCalendar] = useState<any[]>([]);
+  // 별지7 열화상: 수배전반 인덱스별 사진·온도·부위 분류
+  const [thermal, setThermal] = useState<PanelThermal[]>([]);
+  const patchThermal = (idx: number, patch: Partial<PanelThermal>) =>
+    setThermal(prev => { const next = [...prev]; next[idx] = { ...(next[idx] || { shots: [], skipped: [], status: '', busy: false }), ...patch }; return next; });
+
+  // 사진 선택 → X/Y 짝짓기 + 온도 추출(브라우저) → AI 부위 분류
+  const handleThermalFiles = async (idx: number, fileList: FileList | null) => {
+    if (!fileList || !fileList.length) return;
+    thermal[idx]?.shots.forEach(s => URL.revokeObjectURL(s.url));
+    patchThermal(idx, { busy: true, status: '사진에서 온도 읽는 중...' });
+    try {
+      const { shots, skipped } = await loadShots(Array.from(fileList));
+      const ui: UIShot[] = shots.map(s => ({ ...s, url: URL.createObjectURL(s.y) }));
+      if (!ui.length) { patchThermal(idx, { shots: [], skipped, busy: false, status: '⚠️ 온도 데이터가 있는 열화상 사진(RB…Y.JPG)을 찾지 못했습니다.' }); return; }
+      patchThermal(idx, { shots: ui, skipped, status: 'AI가 부위(PF/PT/CH)를 분류하는 중...' });
+      await classifyThermal(idx, ui);
+    } catch (e: any) {
+      patchThermal(idx, { busy: false, status: '❌ 사진 처리 실패: ' + e.message });
+    }
+  };
+
+  const classifyThermal = async (idx: number, shots: UIShot[]) => {
+    patchThermal(idx, { busy: true, status: 'AI가 부위(PF/PT/CH)를 분류하는 중...' });
+    try {
+      const images = await Promise.all(shots.map(s => downscaleToBase64(s.y)));
+      const res = await fetch('/api/thermal/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
+      const parts = smoothByTriplets(j.parts as (Part | null)[]);
+      patchThermal(idx, { shots: shots.map((s, i) => ({ ...s, part: parts[i] ?? null })), busy: false, status: '✅ AI 분류 완료 — 틀린 부위는 아래에서 바로 고칠 수 있습니다.' });
+    } catch (e: any) {
+      patchThermal(idx, { shots, busy: false, status: `⚠️ AI 분류를 사용할 수 없어 직접 지정이 필요합니다 (${e.message})` });
+    }
+  };
+
+  const setShotPart = (idx: number, shotIdx: number, part: Part | null) => {
+    const cur = thermal[idx]; if (!cur) return;
+    patchThermal(idx, { shots: cur.shots.map((s, i) => (i === shotIdx ? { ...s, part } : s)) });
+  };
+
+  const clearThermal = (idx: number) => {
+    thermal[idx]?.shots.forEach(s => URL.revokeObjectURL(s.url));
+    patchThermal(idx, { shots: [], skipped: [], status: '', busy: false });
+  };
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
   useEffect(() => {
@@ -184,6 +239,8 @@ export function InspectionForm() {
     setOpen(false);
     const panelCount = station.panel_count && station.panel_count > 0 ? station.panel_count : 1;
     setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
+    thermal.forEach(t => t?.shots.forEach(s => URL.revokeObjectURL(s.url)));
+    setThermal([]);
     loadStationFolder(station);
   };
 
@@ -402,6 +459,8 @@ export function InspectionForm() {
   const removeMeasureSet = (index: number) => {
     if (measureSets.length <= 1) return;
     setMeasureSets(prev => prev.filter((_, i) => i !== index));
+    thermal[index]?.shots.forEach(s => URL.revokeObjectURL(s.url));
+    setThermal(prev => prev.filter((_, i) => i !== index));
   };
 
   const selectFolder = async () => {
@@ -451,8 +510,18 @@ export function InspectionForm() {
       const proceed = confirm('⚠️ 저장 폴더가 지정되지 않았습니다.\n\n폴더를 지정하지 않으면 파일이 로컬 폴더에 자동 저장되지 않고, 생성 후 직접 다운로드만 가능합니다.\n\n그래도 계속 진행하시겠습니까?');
       if (!proceed) return;
     }
+    const useThermal = inspType !== '월차' && thermal.some(t => t?.shots.length);
+    if (useThermal) {
+      const unassigned = thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0);
+      if (unassigned && !confirm(`⚠️ 부위가 지정되지 않은 열화상 사진이 ${unassigned}장 있습니다.\n해당 사진은 제외하고 생성할까요?`)) return;
+      if (thermal.some(t => t?.busy)) return alert('열화상 사진 처리 중입니다. 잠시 후 다시 시도해주세요.');
+    }
     setLoading(true);
     try {
+      // 별지7: 수배전반별 부위 온도(Point1~3) + 최고온도 대표 사진만 전송
+      const b7_panels = useThermal
+        ? await Promise.all(measureSets.map((_, i) => (thermal[i]?.shots.length ? buildB7Payload(thermal[i].shots) : Promise.resolve(null))))
+        : undefined;
       const res = await fetch('/api/inspection/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -466,11 +535,12 @@ export function InspectionForm() {
           measure_sets: measureSets,
           ground_resistance: (inspType === '반기' || inspType === '연차') ? measureSets.map(s => s.ground) : [],
           remarks: remarks,
+          b7_panels,
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
       });
       const r = await res.json();
-      if (!res.ok) throw new Error(r.error);
+      if (!res.ok) throw new Error(r.error || `생성 실패 (HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''})`);
       if (folderHandle && r.fileBase64) {
         const dateNum = date.replace(/-/g, '');
         const subFolderName = `${dateNum}_${selected.name}_${inspType}`;
@@ -552,7 +622,7 @@ export function InspectionForm() {
               </div>
             )}
           </div>
-          <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); }} style={{ width: '100%', maxWidth: 400, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginTop: 8 }}>새 점검 생성</button>
+          <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); thermal.forEach(t => t?.shots.forEach(s => URL.revokeObjectURL(s.url))); setThermal([]); }} style={{ width: '100%', maxWidth: 400, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginTop: 8 }}>새 점검 생성</button>
         </div>
       </div>
       {result && <PrintableSheet data={result} />}
@@ -704,6 +774,71 @@ export function InspectionForm() {
               <label style={labelStyle}>특이사항 (수배전반 #{idx + 1})</label>
               <input className="toss-input" placeholder="특이사항이 없으면 비워두세요" value={set.remarks ?? ''} onChange={e => updateMeasureSet(idx, 'remarks', e.target.value)} />
             </div>
+            {inspType !== '월차' && (() => {
+              const th = thermal[idx];
+              const shots = th?.shots || [];
+              const repIds = new Set(PARTS.map(p => {
+                const list = shots.filter(s => s.part === p);
+                return list.length ? list.reduce((a, b) => (b.center > a.center ? b : a)).id : '';
+              }));
+              return (
+                <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: 'var(--bg-elevated)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <label style={{ ...labelStyle, marginBottom: 0 }}>🌡️ 열화상 사진 (별지7) — 찍은 사진 전부 선택</label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {shots.length > 0 && !th?.busy && (
+                        <>
+                          <button onClick={() => classifyThermal(idx, shots)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>🤖 다시 분류</button>
+                          <button onClick={() => clearThermal(idx)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✕ 비우기</button>
+                        </>
+                      )}
+                      <label style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: th?.busy ? 'wait' : 'pointer', opacity: th?.busy ? 0.6 : 1 }}>
+                        📷 사진 선택
+                        <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { handleThermalFiles(idx, e.target.files); e.target.value = ''; }} />
+                      </label>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+                    RB…X/Y.JPG를 모두 고르면 사진 속 온도(중심점)를 읽어 부위별 Point 1~3에 넣고, 부위마다 온도가 가장 높은 사진(실화상+열화상)만 엑셀에 넣습니다.
+                  </div>
+                  {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}</div>}
+                  {th?.skipped?.length ? <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text-tertiary)' }}>제외된 파일 {th.skipped.length}개 (온도 데이터 없음/짝 없음)</div> : null}
+                  {shots.length > 0 && (
+                    <>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginTop: 10 }}>
+                        {shots.map((s, si) => (
+                          <div key={s.id} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${repIds.has(s.id) ? 'var(--accent)' : s.part ? 'var(--border)' : '#f59e0b'}`, background: 'var(--bg-card)' }}>
+                            <div style={{ position: 'relative' }}>
+                              <img src={s.url} alt={s.id} style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }} />
+                              {repIds.has(s.id) && <span style={{ position: 'absolute', top: 4, left: 4, fontSize: 10, fontWeight: 800, padding: '2px 6px', borderRadius: 6, background: 'var(--accent)', color: '#fff' }}>★ 엑셀 삽입</span>}
+                            </div>
+                            <div style={{ padding: '6px 8px' }}>
+                              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.id} · 중심 <b style={{ color: 'var(--text-primary)' }}>{s.center.toFixed(1)}℃</b></div>
+                              <select value={s.part || ''} onChange={e => setShotPart(idx, si, (e.target.value || null) as Part | null)} style={{ width: '100%', marginTop: 4, padding: '4px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12, fontFamily: 'inherit' }}>
+                                <option value="">— 제외/미지정 —</option>
+                                {PARTS.map(p => <option key={p} value={p}>{PART_LABEL[p]}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: 10, display: 'grid', gap: 4, fontSize: 12.5 }}>
+                        {PARTS.map(p => {
+                          const temps = shots.filter(s => s.part === p).map(s => s.center);
+                          return (
+                            <div key={p} style={{ color: temps.length === 3 ? 'var(--text-secondary)' : '#d97706' }}>
+                              <b style={{ color: 'var(--text-primary)' }}>{p}</b> · Point {temps.slice(0, 3).map(t => t.toFixed(1) + '℃').join(' / ') || '없음'}
+                              {temps.length > 0 && ` · ${verdictOf(temps.slice(0, 3))}`}
+                              {temps.length !== 3 && ` (⚠️ ${temps.length}장 — 3장이어야 합니다${temps.length > 3 ? ', 앞 3장만 기입' : ''})`}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {idx < measureSets.length - 1 && (<div style={{ borderTop: '1px solid var(--border)', marginTop: 20 }} />)}
           </div>
         ))}
