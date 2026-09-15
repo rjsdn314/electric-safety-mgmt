@@ -246,7 +246,13 @@ function fillByeolji7(xml: string, shared: string[], d: FillData, panelIdx: numb
   xml = replaceDates(xml, shared, d.date, 5);
   // 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거 후,
   // 열화상 사진에서 추출한 온도가 있으면 Point 1/2/3(H/P/X 병합 앵커)에 기입 + AF 판정.
-  const panel = d.b7_panels?.[panelIdx] || null;
+  return writeB7Temps(xml, shared, d.b7_panels?.[panelIdx] || null);
+}
+
+type B7Panel = NonNullable<NonNullable<FillData['b7_panels']>[number]>;
+
+// 별지7 측정 행 기입: 부위별 Point1~3 온도 + AF 판정 (데이터 없는 부위는 공란 + '5℃ 이하')
+function writeB7Temps(xml: string, shared: string[], panel: B7Panel | null): string {
   const order = b7PartOrder(xml, shared, ['A12', 'A14', 'A16']);
   [13, 15, 17].forEach((row, k) => {
     for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
@@ -364,7 +370,8 @@ async function addSheetPictures(zip: JSZip, sheetPath: string, pics: SheetPic[],
     let media = 1; while (zip.file(`xl/media/${tag}_${media}.jpeg`)) media++;
     const mediaName = `${tag}_${media}.jpeg`;
     zip.file(`xl/media/${mediaName}`, p.buf);
-    const rid = `rIdB7p${nextId}`;
+    let rn = nextId; while (new RegExp(`Id="rIdB7p${rn}"`).test(drels)) rn++;   // 기존 관계 ID와 충돌 방지(재반영 시)
+    const rid = `rIdB7p${rn}`;
     drels = drels.replace(/<\/Relationships>/, `<Relationship Id="${rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/></Relationships>`);
     anchors += `<xdr:oneCellAnchor><xdr:from><xdr:col>${from.c.idx}</xdr:col><xdr:colOff>${from.c.off}</xdr:colOff><xdr:row>${from.r.idx}</xdr:row><xdr:rowOff>${from.r.off}</xdr:rowOff></xdr:from>` +
       `<xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${nextId}" name="열화상사진 ${k + 1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
@@ -470,6 +477,99 @@ function moveTitleEllipse(dx: string, from: { col: number; colOff: number }, to:
     b = b.replace(/(<xdr:to>\s*<xdr:col>)\d+(<\/xdr:col>\s*<xdr:colOff>)\d+(<\/xdr:colOff>)/, `$1${to.col}$2${to.colOff}$3`);
     return b;
   });
+}
+
+// 별지7 부위별 최고온도 사진(실화상 A:S / 열화상 T:AL)을 시트에 삽입
+async function insertB7Photos(zip: JSZip, sheetPath: string, shared: string[], panel: B7Panel, i: number) {
+  const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
+  const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return;
+  const order = b7PartOrder(sx, shared, ['A28', 'A38', 'A48']);
+  const pics: SheetPic[] = [];
+  order.forEach((part, k) => {
+    const top = 18 + k * 10;   // 0기반 행: 19행 / 29행 / 39행 (9행 높이)
+    const y = toBuf(panel[part]?.photo_y), x = toBuf(panel[part]?.photo_x);
+    if (y) pics.push({ buf: y, c1: 0, r1: top, c2: 19, r2: top + 9 });    // 실화상 A:S
+    if (x) pics.push({ buf: x, c1: 19, r1: top, c2: 38, r2: top + 9 });   // 열화상 T:AL
+  });
+  try { await addSheetPictures(zip, sheetPath, pics, `b7s${i + 1}_${Date.now().toString(36)}`); }
+  catch (e) { console.error('별지7 사진 삽입 실패:', e); }
+}
+
+// 시트에 연결된 드로잉 파트 경로
+async function sheetDrawingPath(zip: JSZip, sheetPath: string): Promise<string | null> {
+  const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return null;
+  const dm = sx.match(/<drawing r:id="([^"]+)"/); if (!dm) return null;
+  const relsPath = sheetPath.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
+  const dr = await zip.file(relsPath)?.async('string'); if (!dr) return null;
+  const tm = dr.match(new RegExp(`Id="${dm[1]}"[^>]*Target="([^"]+)"`)) || dr.match(new RegExp(`Target="([^"]+)"[^>]*Id="${dm[1]}"`));
+  return tm ? 'xl/' + tm[1].replace(/^\.\.\//, '').replace(/^\/?xl\//, '') : null;
+}
+
+// ── 미디어 정리(GC) ──
+// 사진 앵커 제거 후, 어떤 드로잉에서도 더 이상 참조되지 않는 이미지 관계·파일을 삭제한다.
+// → 사진이 화면에서 사라질 뿐 아니라 파일 안에서도 완전히 제거되어 용량이 줄어든다.
+//   (다른 별지의 실제 사용 중인 이미지는 참조가 남아 있으므로 보존된다.)
+async function gcMedia(zip: JSZip) {
+  const usedMedia = new Set<string>();
+  const drawingRelsPaths = Object.keys(zip.files).filter((n) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(n));
+  for (const relsP of drawingRelsPaths) {
+    const drawXmlP = relsP.replace(/_rels\/(drawing\d+)\.xml\.rels$/, '$1.xml');
+    const drawXml = await zip.file(drawXmlP)?.async('string');
+    const relsXml = await zip.file(relsP)?.async('string');
+    if (!relsXml) continue;
+    const usedRids = new Set([...(drawXml || '').matchAll(/r:embed="([^"]+)"/g)].map((m) => m[1]));
+    let newRels = relsXml;
+    for (const rm of relsXml.matchAll(/<Relationship\b[^>]*\/>/g)) {
+      const tag = rm[0];
+      if (!/Type="[^"]*\/image"/.test(tag)) continue;
+      const rid = (tag.match(/Id="([^"]+)"/) || [])[1];
+      const tgt = (tag.match(/Target="([^"]+)"/) || [])[1];
+      const mediaPath = 'xl/' + (tgt || '').replace(/^\.\.\//, '').replace(/^\//, '');
+      if (rid && usedRids.has(rid)) usedMedia.add(mediaPath);
+      else newRels = newRels.replace(tag, ''); // 미참조 이미지 관계 제거
+    }
+    if (newRels !== relsXml) zip.file(relsP, newRels);
+  }
+  for (const name of Object.keys(zip.files)) {
+    if (/^xl\/media\/./.test(name) && !usedMedia.has(name)) zip.remove(name);
+  }
+}
+
+// ── 이미 생성된 점검표에 별지7 열화상(온도·판정·사진)만 나중에 반영 ──
+// 현장에서는 사진 없이 생성 → 노트북에 사진 옮긴 뒤 점검 이력에서 추가하는 흐름용.
+// 기존 별지7 사진은 교체되고, 다른 시트는 건드리지 않는다.
+export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
+  const zip = await JSZip.loadAsync(xlsxBuf);
+  const wbx = await zip.file('xl/workbook.xml')!.async('string');
+  const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
+  const ssRaw = (await zip.file('xl/sharedStrings.xml')?.async('string')) || '';
+  const shared = ssRaw ? parseShared(ssRaw) : [];
+
+  const b7Sheets: string[] = [];
+  for (const m of wbx.matchAll(/<sheet\b[^>]*\/>/g)) {
+    const name = (m[0].match(/name="([^"]+)"/) || [])[1] || '';
+    const rid = (m[0].match(/r:id="([^"]+)"/) || [])[1];
+    if (!name.includes('별지7') || !rid) continue;
+    const tm = rels.match(new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`)) || rels.match(new RegExp(`Target="([^"]+)"[^>]*Id="${rid}"`));
+    if (tm) b7Sheets.push('xl/' + tm[1].replace(/^\//, '').replace(/^xl\//, ''));
+  }
+  if (!b7Sheets.length) throw new Error('이 점검표에는 별지7(적외선 열화상) 시트가 없습니다');
+
+  // ① 온도 기입 + 이전 사진 제거 → ② 미참조 이미지 정리 → ③ 새 사진 삽입 (순서 중요: 옛 관계가 남아 새 사진과 충돌하지 않게)
+  const targets: number[] = [];
+  for (let i = 0; i < b7Sheets.length; i++) {
+    const panel = panels[i];
+    if (!panel || !zip.file(b7Sheets[i])) continue;
+    const xml = await zip.file(b7Sheets[i])!.async('string');
+    zip.file(b7Sheets[i], writeB7Temps(xml, shared, panel));
+    const dp = await sheetDrawingPath(zip, b7Sheets[i]);
+    if (dp && zip.file(dp)) zip.file(dp, removeDrawingPics(await zip.file(dp)!.async('string')));
+    targets.push(i);
+  }
+  await gcMedia(zip);
+  for (const i of targets) await insertB7Photos(zip, b7Sheets[i], shared, panels[i]!, i);
+  const applied = targets.length;
+  return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), sheets: b7Sheets.length, applied };
 }
 
 // ── 메인 ──
@@ -599,53 +699,14 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     if (dx !== before) zip.file(dp, dx);
   }
 
-  // ── 미디어 정리(GC) ──
-  // 별지7 사진 앵커 제거 후, 어떤 드로잉에서도 더 이상 참조되지 않는 이미지 관계·파일을 삭제한다.
-  // → 사진이 화면에서 사라질 뿐 아니라 파일 안에서도 완전히 제거되어 용량이 줄어든다.
-  //   (다른 별지의 실제 사용 중인 이미지는 참조가 남아 있으므로 보존된다.)
-  {
-    const usedMedia = new Set<string>();
-    const drawingRelsPaths = Object.keys(zip.files).filter((n) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(n));
-    for (const relsP of drawingRelsPaths) {
-      const drawXmlP = relsP.replace(/_rels\/(drawing\d+)\.xml\.rels$/, '$1.xml');
-      const drawXml = await zip.file(drawXmlP)?.async('string');
-      const relsXml = await zip.file(relsP)?.async('string');
-      if (!relsXml) continue;
-      const usedRids = new Set([...(drawXml || '').matchAll(/r:embed="([^"]+)"/g)].map((m) => m[1]));
-      let newRels = relsXml;
-      for (const rm of relsXml.matchAll(/<Relationship\b[^>]*\/>/g)) {
-        const tag = rm[0];
-        if (!/Type="[^"]*\/image"/.test(tag)) continue;
-        const rid = (tag.match(/Id="([^"]+)"/) || [])[1];
-        const tgt = (tag.match(/Target="([^"]+)"/) || [])[1];
-        const mediaPath = 'xl/' + (tgt || '').replace(/^\.\.\//, '').replace(/^\//, '');
-        if (rid && usedRids.has(rid)) usedMedia.add(mediaPath);
-        else newRels = newRels.replace(tag, ''); // 미참조 이미지 관계 제거
-      }
-      if (newRels !== relsXml) zip.file(relsP, newRels);
-    }
-    for (const name of Object.keys(zip.files)) {
-      if (/^xl\/media\//.test(name) && !usedMedia.has(name)) zip.remove(name);
-    }
-  }
+  // 별지7 사진 앵커 제거 후 미참조 이미지 정리
+  await gcMedia(zip);
 
   // ── 별지7 열화상 사진 삽입 (미디어 GC 이후라 새 이미지가 정리 대상이 되지 않음) ──
   if (d.b7_panels?.length) {
-    const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
     for (let i = 0; i < b7Sheets.length; i++) {
       const panel = d.b7_panels[i];
-      if (!panel) continue;
-      const sx = await zip.file(b7Sheets[i])?.async('string'); if (!sx) continue;
-      const order = b7PartOrder(sx, shared, ['A28', 'A38', 'A48']);
-      const pics: SheetPic[] = [];
-      order.forEach((part, k) => {
-        const top = 18 + k * 10;   // 0기반 행: 19행 / 29행 / 39행 (9행 높이)
-        const y = toBuf(panel[part]?.photo_y), x = toBuf(panel[part]?.photo_x);
-        if (y) pics.push({ buf: y, c1: 0, r1: top, c2: 19, r2: top + 9 });    // 실화상 A:S
-        if (x) pics.push({ buf: x, c1: 19, r1: top, c2: 38, r2: top + 9 });   // 열화상 T:AL
-      });
-      try { await addSheetPictures(zip, b7Sheets[i], pics, `b7s${i + 1}`); }
-      catch (e) { console.error('별지7 사진 삽입 실패:', e); }
+      if (panel) await insertB7Photos(zip, b7Sheets[i], shared, panel, i);
     }
   }
 

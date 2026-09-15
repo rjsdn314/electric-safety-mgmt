@@ -1,6 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { useThermalPanels, ThermalPhotoBox } from '@/components/inspection/ThermalPhotos';
+
+// 열화상 기능 도입일 — 이전에 생성된 점검은 '열화상 대기' 표시를 하지 않음
+const THERMAL_SINCE = '2026-09-15';
 
 const TYPES = ['전체', '월차', '분기', '반기', '연차'];
 
@@ -24,6 +28,10 @@ export default function HistoryPage() {
     const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
     const [viewOwner, setViewOwner] = useState<string>('mine'); // 'mine' | 회원id | 'all'
     const PAGE_SIZE = 50;
+    // 별지7 열화상 나중에 추가 (현장에선 사진 없이 생성 → 노트북에서 반영)
+    const [thermalItem, setThermalItem] = useState<any>(null);
+    const [thermalSaving, setThermalSaving] = useState(false);
+    const thermalApi = useThermalPanels();
     useEffect(() => { setIsDesktop('showDirectoryPicker' in window); }, []);
 
   // 권한·회원 목록 (관리자: 사이트 보유 다른 회원)
@@ -103,7 +111,7 @@ export default function HistoryPage() {
                 const stationIds = [...new Set(insps.map(i => i.station_id))];
                 const { data: stations } = await sb
                   .from('stations')
-                  .select('id, base_name, name, voltage, capacity')
+                  .select('id, base_name, name, voltage, capacity, panel_count')
                   .in('id', stationIds);
                 const stationMap = new Map(stations?.map(s => [s.id, s]) || []);
                 merged = insps.map(i => ({ ...i, station: stationMap.get(i.station_id) }));
@@ -355,6 +363,37 @@ export default function HistoryPage() {
         } finally { setSavingId(null); }
   };
 
+    // ── 열화상 추가 ──
+    const thermalPanelCount = (item: any) =>
+      Math.max(1, item?.measure_values?.sets?.length || 0, item?.station?.panel_count || 0);
+    const openThermal = (item: any) => { thermalApi.reset(); setThermalItem(item); };
+    const closeThermal = () => { if (thermalSaving) return; thermalApi.reset(); setThermalItem(null); };
+    const submitThermal = async () => {
+      const item = thermalItem; if (!item) return;
+      if (!thermalApi.hasAny) { alert('열화상 사진을 먼저 선택해주세요.'); return; }
+      if (thermalApi.busy) { alert('열화상 사진 처리 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+      if (thermalApi.unassigned && !confirm(`⚠️ 부위가 지정되지 않은 사진이 ${thermalApi.unassigned}장 있습니다.\n해당 사진은 제외하고 반영할까요?`)) return;
+      if (item.measure_values?.thermal && !confirm('이미 열화상이 반영된 점검표입니다.\n기존 별지7 온도·사진을 새 사진으로 교체할까요?')) return;
+      setThermalSaving(true);
+      try {
+        const b7_panels = await thermalApi.buildPanels(thermalPanelCount(item));
+        const res = await fetch('/api/inspection/thermal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inspection_id: item.id, b7_panels }) });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''}`);
+        const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
+        setItems(prev => prev.map(it => it.id === item.id ? updated : it));
+        thermalApi.reset(); setThermalItem(null);
+        if (isDesktop) {
+          alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n이어서 PC 폴더의 엑셀 파일도 새 파일로 저장합니다.`);
+          await saveOneToPc(updated);
+        } else {
+          alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n목록의 다운로드 버튼으로 새 파일을 받을 수 있습니다.`);
+        }
+      } catch (e: any) {
+        alert('열화상 반영 실패: ' + e.message);
+      } finally { setThermalSaving(false); }
+    };
+
     // 검색·필터는 서버에서 처리하므로 items가 곧 표시 목록
     const visibleItems = items;
     const visibleIds = visibleItems.map(i => i.id);
@@ -362,6 +401,32 @@ export default function HistoryPage() {
 
   return (
         <div style={{padding: '32px 36px 60px'}}>
+          {thermalItem && (
+            <div onClick={closeThermal} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
+              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 900, background: 'var(--bg-card)', borderRadius: 16, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.35)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 800 }}>🌡️ 열화상 추가</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{thermalItem.station?.name} · {thermalItem.inspection_type}점검 · {thermalItem.inspection_date}</div>
+                  </div>
+                  <button onClick={closeThermal} disabled={thermalSaving} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 15 }}>✕</button>
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.6 }}>
+                  노트북에 옮긴 열화상 사진을 수배전반별로 선택하면, 이미 만든 점검표의 별지7에 온도·판정·대표사진만 채워 넣습니다. (다른 시트는 그대로 유지)
+                </div>
+                {Array.from({ length: thermalPanelCount(thermalItem) }, (_, idx) => (
+                  <div key={idx} style={{ marginTop: 16 }}>
+                    <div style={{ display: 'inline-block', fontSize: 13, fontWeight: 700, color: 'var(--accent)', padding: '4px 12px', borderRadius: 8, background: 'var(--accent-soft)' }}>수배전반 #{idx + 1}</div>
+                    <ThermalPhotoBox idx={idx} api={thermalApi} />
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                  <button onClick={closeThermal} disabled={thermalSaving} style={{ flex: 1, padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
+                  <button onClick={submitThermal} disabled={thermalSaving || thermalApi.busy || !thermalApi.hasAny} style={{ flex: 2, padding: 14, borderRadius: 12, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: thermalSaving ? 'wait' : 'pointer', opacity: (thermalSaving || thermalApi.busy || !thermalApi.hasAny) ? 0.6 : 1, fontFamily: 'inherit' }}>{thermalSaving ? '⏳ 점검표에 반영 중...' : '⚡ 점검표에 반영'}</button>
+                </div>
+              </div>
+            </div>
+          )}
                 <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
                           <div>
                                     <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
@@ -405,7 +470,7 @@ export default function HistoryPage() {
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
-                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 110px', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', alignItems: 'center'}}>
+                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', alignItems: 'center'}}>
                                 <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                 <div>충전소</div><div>점검유형</div><div>점검일자</div><div>점검자</div><div>파일명</div><div style={{textAlign: 'center'}}>액션</div>
                       </div>
@@ -416,7 +481,7 @@ export default function HistoryPage() {
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
                   ) : (
                     visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>)}
-                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 110px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'rgba(239,68,68,0.04)' : 'transparent'}}>
+                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'rgba(239,68,68,0.04)' : 'transparent'}}>
                                               <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
@@ -432,6 +497,9 @@ export default function HistoryPage() {
                                               <div>{item.inspector_name}</div>
                                               <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>
                                                 {item.file_name}
+                                                {item.inspection_type !== '월차' && !item.measure_values?.thermal && (item.created_at || '') >= THERMAL_SINCE && (
+                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>🌡️ 열화상 대기</span>
+                                                              )}
                                                 {item.measure_values?.local_deleted && (
                                         <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>
                                                               )}
@@ -439,6 +507,9 @@ export default function HistoryPage() {
                                               <div style={{display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center'}}>
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
                                         <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>
+                                                              )}
+                                                {item.inspection_type !== '월차' && item.file_path && (
+                                        <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: item.measure_values?.thermal ? 'var(--bg-elevated)' : 'rgba(245,158,11,0.14)', border: `1px solid ${item.measure_values?.thermal ? 'var(--border)' : 'rgba(245,158,11,0.45)'}`, cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>🌡️</button>
                                                               )}
                                                 {item.file_path && (
                                         <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
