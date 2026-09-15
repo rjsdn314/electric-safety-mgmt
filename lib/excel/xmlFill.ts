@@ -29,6 +29,7 @@ export interface FillData {
   //  temps = Point1~3 중심온도(촬영순), photo_y/photo_x = 최고온도 사진(실화상/열화상, base64 JPEG)
   //  키 = 계정별 부위 이름(기본 PF/PT/CH), 키 순서 = 양식 라벨과 안 맞을 때의 행 순서
   b7_panels?: Array<Record<string, { temps: number[]; photo_y?: string; photo_x?: string }> | null>;
+  b7_mode?: 'high' | 'low';     // 별지7 기입 방식 — 고압: 시트=수배전반·행=부위 / 저압: 온도 행 하나=저압반 하나 (미지정 시 is_high_voltage)
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -224,15 +225,59 @@ function cellText(xml: string, shared: string[], ref: string): string {
   return t ? t[1] : v ? v[1] : '';
 }
 
+// ── 별지7 양식 구조 자동 탐지 ──
+// 양식마다 온도 행·사진 칸 위치가 다르다(로컬 양식 전수 조사):
+//  · 고압: 온도 13·15·17행(라벨 PF/PT/CH 등) + 사진 A19:S27·A29:S37·A39:S47
+//  · 저압: 온도 13행 1개 / 13·14행 / 13·15행 (라벨 '측정부위') + 사진 A16:S24, A17:S25 등 1~2칸
+// → A열 '온도측정' 행 = 온도 행(라벨 = 위쪽 첫 텍스트 행), 'A{r1}:S{r2}'(6행 이상) 병합 = 사진 칸(라벨 = 바로 아래 행).
+//   첫 페이지('종합의견' 행 이전)만 사용. 못 찾으면 고압 기본 구조.
+interface B7Layout {
+  rows: { row: number; labelRef: string | null }[];
+  photos: { r1: number; r2: number; labelRef: string }[];
+}
+const B7_DEFAULT_LAYOUT: B7Layout = {
+  rows: [{ row: 13, labelRef: 'A12' }, { row: 15, labelRef: 'A14' }, { row: 17, labelRef: 'A16' }],
+  photos: [{ r1: 19, r2: 27, labelRef: 'A28' }, { r1: 29, r2: 37, labelRef: 'A38' }, { r1: 39, r2: 47, labelRef: 'A48' }],
+};
+
+function detectB7Layout(xml: string, shared: string[]): B7Layout {
+  const aText = new Map<number, string>();
+  for (const m of xml.matchAll(/<c r="A(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    const inner = m[3] || '';
+    const v = inner.match(/<v>([\s\S]*?)<\/v>/);
+    const t = inner.match(/<t[^>]*>([\s\S]*?)<\/t>/);
+    const s = (/t="s"/.test(m[2]) && v) ? (shared[+v[1]] || '') : t ? t[1] : v ? v[1] : '';
+    if (s.trim()) aText.set(+m[1], s.trim());
+  }
+  const endRows = [...aText].filter(([, s]) => s.includes('종합의견')).map(([r]) => r);
+  const end = endRows.length ? Math.min(...endRows) : 60;
+  const compact = (s: string) => s.replace(/\s+/g, '');
+  const rows = [...aText]
+    .filter(([r, s]) => r < end && compact(s) === '온도측정')
+    .map(([r]) => r).sort((a, b) => a - b)
+    .map((r) => {
+      let lr: number | null = null;
+      for (let k = r - 1; k > 0; k--) { const s = aText.get(k); if (s && compact(s) !== '온도측정') { lr = k; break; } }
+      return { row: r, labelRef: lr ? `A${lr}` : null };
+    });
+  const photos = [...xml.matchAll(/<mergeCell ref="A(\d+):S(\d+)"/g)]
+    .map((m) => ({ r1: +m[1], r2: +m[2] }))
+    .filter((p) => p.r2 - p.r1 >= 5 && p.r1 < end)
+    .sort((a, b) => a.r1 - b.r1)
+    .map((p) => ({ ...p, labelRef: `A${p.r2 + 1}` }));
+  if (!rows.length && !photos.length) return B7_DEFAULT_LAYOUT;
+  return { rows, photos };
+}
+
 // 라벨 셀(A12/A14/A16 = 측정 행 라벨, A28/A38/A48 = 사진 라벨) → 각 행에 들어갈 부위 이름.
 //  · 라벨과 부위 이름이 같으면(공백·대소문자 무시, 포함관계 허용) 그 행에 배치
 //  · 못 맞춘 행(예: 라벨이 '측정부위'뿐인 양식)은 남은 부위를 계정 목록 순서대로 채움
-function b7RowParts(xml: string, shared: string[], refs: string[], panel: Record<string, unknown> | null): (string | null)[] {
+function b7RowParts(xml: string, shared: string[], refs: (string | null)[], panel: Record<string, unknown> | null): (string | null)[] {
   const norm = (s: string) => s.replace(/\s+/g, '').toUpperCase();
   const keys = Object.keys(panel || {});
   const used = new Set<string>();
   const rows = refs.map((r) => {
-    const label = norm(cellText(xml, shared, r));
+    const label = norm(r ? cellText(xml, shared, r) : '');
     if (!label) return null;
     const k = keys.find((k) => !used.has(k) && (norm(k) === label || (norm(k).length >= 2 && label.length <= 12 && (label.includes(norm(k)) || norm(k).includes(label)))));
     if (k) used.add(k);
@@ -249,30 +294,85 @@ function b7Verdict(temps: number[]): string {
   return diff <= 5 ? '5℃ 이하' : diff < 10 ? '5℃ 초과 ~ 10℃' : '10℃ 이상';
 }
 
-function fillByeolji7(xml: string, shared: string[], d: FillData, panelIdx: number): string {
+function fillByeolji7(xml: string, shared: string[], d: FillData): string {
   const t = ymd(d.date);
   xml = setCell(xml, 'AC3', `${t.yy}년`, false);
   xml = setCell(xml, 'AE3', +t.m, true);
   xml = setCell(xml, 'AI3', +t.d, true);
   xml = replaceDates(xml, shared, d.date, 5);
-  // 측정치 행(H13:AE13, H15:AE15, H17:AE17)의 잔존 내용 제거 후,
-  // 열화상 사진에서 추출한 온도가 있으면 Point 1/2/3(H/P/X 병합 앵커)에 기입 + AF 판정.
-  return writeB7Temps(xml, shared, d.b7_panels?.[panelIdx] || null);
+  // 양식에서 찾은 온도 행(고압 13·15·17 / 저압 13, 13·14, 13·15 등)의 잔존 값 비우기 + 판정 기본값.
+  // (예전엔 13·15·17 고정이라 저압 양식의 15행(제목)·17행(사진칸)에 판정이 잘못 들어갔다)
+  // 사진에서 뽑은 온도·사진은 미디어 정리 후 planB7/executeB7Plan 에서 기입한다.
+  for (const { row } of detectB7Layout(xml, shared).rows) xml = writeB7Row(xml, row, []);
+  return xml;
 }
 
 type B7Panel = NonNullable<NonNullable<FillData['b7_panels']>[number]>;
+type B7Data = B7Panel[string];
 
-// 별지7 측정 행 기입: 부위별 Point1~3 온도 + AF 판정 (데이터 없는 부위는 공란 + '5℃ 이하')
-function writeB7Temps(xml: string, shared: string[], panel: B7Panel | null): string {
-  const order = b7RowParts(xml, shared, ['A12', 'A14', 'A16'], panel);
-  [13, 15, 17].forEach((row, k) => {
-    for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
-    const part = order[k];
-    const temps = ((part && panel?.[part]?.temps) || []).filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 3);
-    temps.forEach((v, i) => { xml = setCell(xml, `${['H', 'P', 'X'][i]}${row}`, v, true); });
-    xml = setCell(xml, `AF${row}`, b7Verdict(temps), false);
-  });
-  return xml;
+// 온도 행 하나 기입: Point1~3(H/P/X 병합 앵커) + AF 판정. 온도가 없으면 비우고 '5℃ 이하'
+function writeB7Row(xml: string, row: number, temps: number[]): string {
+  for (let c = 8; c <= 31; c++) xml = clearCell(xml, `${numToCol(c)}${row}`);
+  const t = temps.filter((v) => typeof v === 'number' && isFinite(v)).slice(0, 3);
+  t.forEach((v, i) => { xml = setCell(xml, `${['H', 'P', 'X'][i]}${row}`, v, true); });
+  return setCell(xml, `AF${row}`, b7Verdict(t), false);
+}
+
+interface B7SheetPlan {
+  path: string;
+  rows: { row: number; data: B7Data | null }[];
+  photos: { r1: number; r2: number; data: B7Data | null }[];
+}
+
+// 수배전반 데이터 → 시트별 기입 계획
+//  · 고압(high): 별지7 시트 i = 수배전반 i. 시트 안 온도 행·사진 칸은 부위 이름↔라벨 매칭(못 맞추면 계정 부위 순서)
+//  · 저압(low): 온도 행 하나 = 저압반 하나. 시트 순서 × 행 순서로 수배전반 순서대로 채움
+//               (KINTEX 저압처럼 한 시트 13·14행에 저압반 2개). 사진 칸은 같은 시트의 같은 순번 저압반 사진
+async function planB7(zip: JSZip, sheets: string[], shared: string[], panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low'): Promise<B7SheetPlan[]> {
+  const plans: B7SheetPlan[] = [];
+  let slot = 0;
+  for (let s = 0; s < sheets.length; s++) {
+    const xml = await zip.file(sheets[s])?.async('string'); if (!xml) continue;
+    const lay = detectB7Layout(xml, shared);
+    if (mode === 'low') {
+      const rows = lay.rows.map((r) => { const p = panels[slot++]; return { row: r.row, data: p ? (Object.values(p)[0] ?? null) : null }; });
+      plans.push({ path: sheets[s], rows, photos: lay.photos.map((ph, k) => ({ r1: ph.r1, r2: ph.r2, data: rows[k]?.data ?? null })) });
+    } else {
+      const panel = panels[s] || null;
+      const rowParts = b7RowParts(xml, shared, lay.rows.map((r) => r.labelRef), panel);
+      const photoParts = b7RowParts(xml, shared, lay.photos.map((p) => p.labelRef), panel);
+      const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
+      plans.push({
+        path: sheets[s],
+        rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(rowParts[k]) })),
+        photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(photoParts[k]) })),
+      });
+    }
+  }
+  return plans;
+}
+
+const planHasData = (p: B7SheetPlan) => p.rows.some((r) => r.data) || p.photos.some((ph) => ph.data);
+
+// 계획 실행: 온도 행 기입 + 사진 칸에 실화상(A:S)/열화상(T:AL) 삽입
+//  clearEmptyRows=true 면 데이터가 들어가는 시트의 나머지 온도 행은 비운다(고압 재반영 시 옛 값 제거)
+async function executeB7Plan(zip: JSZip, plans: B7SheetPlan[], clearEmptyRows: boolean) {
+  const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
+  for (let i = 0; i < plans.length; i++) {
+    const plan = plans[i];
+    if (!planHasData(plan)) continue;
+    let xml = await zip.file(plan.path)!.async('string');
+    for (const r of plan.rows) if (r.data || clearEmptyRows) xml = writeB7Row(xml, r.row, r.data?.temps || []);
+    zip.file(plan.path, xml);
+    const pics: SheetPic[] = [];
+    for (const ph of plan.photos) {
+      const y = toBuf(ph.data?.photo_y), x = toBuf(ph.data?.photo_x);
+      if (y) pics.push({ buf: y, c1: 0, r1: ph.r1 - 1, c2: 19, r2: ph.r2 });    // 실화상 A:S (0기반 시작 행, 끝 다음 행)
+      if (x) pics.push({ buf: x, c1: 19, r1: ph.r1 - 1, c2: 38, r2: ph.r2 });   // 열화상 T:AL
+    }
+    try { await addSheetPictures(zip, plan.path, pics, `b7s${i + 1}_${Date.now().toString(36)}`); }
+    catch (e) { console.error('별지7 사진 삽입 실패:', e); }
+  }
 }
 
 // ── 별지7 사진 삽입 ──
@@ -491,23 +591,6 @@ function moveTitleEllipse(dx: string, from: { col: number; colOff: number }, to:
   });
 }
 
-// 별지7 부위별 최고온도 사진(실화상 A:S / 열화상 T:AL)을 시트에 삽입
-async function insertB7Photos(zip: JSZip, sheetPath: string, shared: string[], panel: B7Panel, i: number) {
-  const toBuf = (b64?: string) => (b64 ? Buffer.from(b64.replace(/^data:image\/[a-zA-Z+]+;base64,/, ''), 'base64') : null);
-  const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return;
-  const order = b7RowParts(sx, shared, ['A28', 'A38', 'A48'], panel);
-  const pics: SheetPic[] = [];
-  order.forEach((part, k) => {
-    const top = 18 + k * 10;   // 0기반 행: 19행 / 29행 / 39행 (9행 높이)
-    const data = part ? panel[part] : undefined;
-    const y = toBuf(data?.photo_y), x = toBuf(data?.photo_x);
-    if (y) pics.push({ buf: y, c1: 0, r1: top, c2: 19, r2: top + 9 });    // 실화상 A:S
-    if (x) pics.push({ buf: x, c1: 19, r1: top, c2: 38, r2: top + 9 });   // 열화상 T:AL
-  });
-  try { await addSheetPictures(zip, sheetPath, pics, `b7s${i + 1}_${Date.now().toString(36)}`); }
-  catch (e) { console.error('별지7 사진 삽입 실패:', e); }
-}
-
 // 시트에 연결된 드로잉 파트 경로
 async function sheetDrawingPath(zip: JSZip, sheetPath: string): Promise<string | null> {
   const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return null;
@@ -551,7 +634,7 @@ async function gcMedia(zip: JSZip) {
 // ── 이미 생성된 점검표에 별지7 열화상(온도·판정·사진)만 나중에 반영 ──
 // 현장에서는 사진 없이 생성 → 노트북에 사진 옮긴 뒤 점검 이력에서 추가하는 흐름용.
 // 기존 별지7 사진은 교체되고, 다른 시트는 건드리지 않는다.
-export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
+export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low' = 'high'): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
   const zip = await JSZip.loadAsync(xlsxBuf);
   const wbx = await zip.file('xl/workbook.xml')!.async('string');
   const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
@@ -568,21 +651,17 @@ export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNu
   }
   if (!b7Sheets.length) throw new Error('이 점검표에는 별지7(적외선 열화상) 시트가 없습니다');
 
-  // ① 온도 기입 + 이전 사진 제거 → ② 미참조 이미지 정리 → ③ 새 사진 삽입 (순서 중요: 옛 관계가 남아 새 사진과 충돌하지 않게)
-  const targets: number[] = [];
-  for (let i = 0; i < b7Sheets.length; i++) {
-    const panel = panels[i];
-    if (!panel || !zip.file(b7Sheets[i])) continue;
-    const xml = await zip.file(b7Sheets[i])!.async('string');
-    zip.file(b7Sheets[i], writeB7Temps(xml, shared, panel));
-    const dp = await sheetDrawingPath(zip, b7Sheets[i]);
+  // ① 기입 계획 → ② 대상 시트의 이전 사진 제거 → ③ 미참조 이미지 정리 → ④ 온도 기입 + 새 사진 삽입
+  //   (순서 중요: 옛 이미지 관계가 남아 새 사진과 충돌하지 않게)
+  const plans = await planB7(zip, b7Sheets, shared, panels, mode);
+  const targets = plans.filter(planHasData);
+  for (const p of targets) {
+    const dp = await sheetDrawingPath(zip, p.path);
     if (dp && zip.file(dp)) zip.file(dp, removeDrawingPics(await zip.file(dp)!.async('string')));
-    targets.push(i);
   }
   await gcMedia(zip);
-  for (const i of targets) await insertB7Photos(zip, b7Sheets[i], shared, panels[i]!, i);
-  const applied = targets.length;
-  return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), sheets: b7Sheets.length, applied };
+  await executeB7Plan(zip, plans, mode === 'high');
+  return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), sheets: b7Sheets.length, applied: targets.length };
 }
 
 // ── 메인 ──
@@ -644,7 +723,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
 
     if (isB1) xml = fillByeolji1(xml, d);
     else if (isB14) xml = fillByeolji14(xml, shared, d);
-    else if (isB7) { xml = fillByeolji7(xml, shared, d, b7Sheets.length); b7Sheets.push(path); }
+    else if (isB7) { xml = fillByeolji7(xml, shared, d); b7Sheets.push(path); }
     else if (isGround) xml = fillByeolji2Ground(xml, shared, d);
     else if (isB2) xml = fillByeolji2(xml, shared, d);
     else {
@@ -715,12 +794,10 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   // 별지7 사진 앵커 제거 후 미참조 이미지 정리
   await gcMedia(zip);
 
-  // ── 별지7 열화상 사진 삽입 (미디어 GC 이후라 새 이미지가 정리 대상이 되지 않음) ──
+  // ── 별지7 열화상 온도·사진 기입 (미디어 GC 이후라 새 이미지가 정리 대상이 되지 않음) ──
   if (d.b7_panels?.length) {
-    for (let i = 0; i < b7Sheets.length; i++) {
-      const panel = d.b7_panels[i];
-      if (panel) await insertB7Photos(zip, b7Sheets[i], shared, panel, i);
-    }
+    const plans = await planB7(zip, b7Sheets, shared, d.b7_panels, d.b7_mode || (d.is_high_voltage ? 'high' : 'low'));
+    await executeB7Plan(zip, plans, true);
   }
 
   // ── 점검자 서명 삽입 ──

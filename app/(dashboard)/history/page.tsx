@@ -366,7 +366,10 @@ export default function HistoryPage() {
     // ── 열화상 추가 ──
     const thermalPanelCount = (item: any) =>
       Math.max(1, item?.measure_values?.sets?.length || 0, item?.station?.panel_count || 0);
-    const openThermal = (item: any) => { thermalApi.reset(); setThermalItem(item); };
+    const openThermal = (item: any) => {
+      thermalApi.setLowVoltage(item?.station?.voltage != null && Number(item.station.voltage) < 3000);   // 저압: 촬영 순서 규칙
+      thermalApi.reset(); setThermalItem(item);
+    };
     const closeThermal = () => { if (thermalSaving) return; thermalApi.reset(); setThermalItem(null); };
     const submitThermal = async () => {
       const item = thermalItem; if (!item) return;

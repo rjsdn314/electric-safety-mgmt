@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const sb = createClient();
     const [{ data: prof }, { data: exRows }] = await Promise.all([
       sb.from('thermal_part_profiles').select('parts').eq('user_id', user.id).maybeSingle(),
-      sb.from('thermal_examples').select('part, image').eq('user_id', user.id).order('created_at', { ascending: false }).limit(80),
+      sb.from('thermal_examples').select('part, image').eq('user_id', user.id).order('created_at', { ascending: false }).limit(150),
     ]);
     const saved = sanitizeParts(prof?.parts);
     const parts = saved.length ? saved : DEFAULT_PARTS;

@@ -99,7 +99,7 @@ export default function ThermalPartsPage() {
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>AI가 참고하는 내 예시</div>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.6 }}>
-          점검표에 열화상을 반영할 때 자동으로 쌓입니다(부위별 최근 6장, 분류 때 3장 참고). 잘못 들어간 예시는 지워주세요.
+          점검표에 열화상을 반영할 때 자동으로 쌓입니다(부위별 최근 20장). AI 분류는 최근 3장, 무료 분류(AI 키 없을 때)는 전부와 비교합니다. 잘못 들어간 예시는 분류를 틀리게 만드니 지워주세요.
         </div>
         {!loading && !examples.length && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>아직 예시가 없습니다. 열화상을 한 번 반영하면 생깁니다.</div>}
         {groups.filter(g => examples.some(e => e.part === g)).map(g => {

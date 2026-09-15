@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
     const { data: dl, error: dlErr } = await sb.storage.from('inspections').download(storagePath);
     if (dlErr || !dl) throw new Error(`점검표 다운로드 실패: ${dlErr?.message || ''}`);
 
-    const { buffer, sheets, applied } = await applyByeolji7(await dl.arrayBuffer(), b7_panels);
+    // 고압: 부위별 3행 / 저압: 온도 행 하나당 저압반 하나(한 시트에 여러 저압반 가능)
+    const { data: st } = await sb.from('stations').select('voltage').eq('id', insp.station_id).maybeSingle();
+    const mode: 'high' | 'low' = st?.voltage != null && Number(st.voltage) < 3000 ? 'low' : 'high';
+    const { buffer, sheets, applied } = await applyByeolji7(await dl.arrayBuffer(), b7_panels, mode);
     if (b7_panels.filter(Boolean).length > sheets) {
       console.warn(`별지7 시트 ${sheets}개 < 사진 입력 수배전반 ${b7_panels.filter(Boolean).length}개`);
     }

@@ -11,8 +11,8 @@ import { getRouteUser } from '@/lib/supabase/route-user';
 
 export const runtime = 'nodejs';
 
-const PER_PART = 6;          // 부위별 보관 장수
-const MAX_POST = 12;         // 한 번에 저장 가능한 장수
+const PER_PART = 20;         // 부위별 보관 장수 (무료 분류는 전부, AI 분류는 최근 3장 참고)
+const MAX_POST = 18;         // 한 번에 저장 가능한 장수 (부위 6개 × 3장)
 const MAX_IMAGE_CHARS = 150_000;
 
 export async function GET() {
@@ -21,7 +21,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
     const { data, error } = await createClient().from('thermal_examples')
       .select('id, part, image, created_at').eq('user_id', user.id)
-      .order('created_at', { ascending: false }).limit(120);
+      .order('created_at', { ascending: false }).limit(150);
     if (error) throw new Error(error.message);
     return NextResponse.json({ examples: data || [] });
   } catch (e: any) {

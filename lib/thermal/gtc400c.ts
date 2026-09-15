@@ -108,6 +108,33 @@ export async function fileToBase64(file: File): Promise<string> {
 export interface B7PartData { temps: number[]; photo_y?: string; photo_x?: string }
 export type B7PanelData = Record<string, B7PartData>;
 
+// ── 저압반 ──
+// PF/PT/CH가 없고, 촬영 순서로 '전경 1장 + 상별(R/S/T) 접속부 3장'을 한 세트로 찍는다.
+// (원주공항 26.03·26.06, KINTEX 저압 26.03 과거 기입 대조: Point 1~3 = 전경 다음 3장의 중심온도)
+export const LOW_MEASURE = '측정';
+export const LOW_OVERVIEW = '전경';
+
+// 촬영 순서로 부위 자동 지정: 4의 배수면 4장마다 첫 장이 전경, 3장 이하면 전부 측정, 그 외엔 첫 장만 전경
+export function assignLowParts(n: number): Part[] {
+  if (n > 0 && n % 4 === 0) return Array.from({ length: n }, (_, i) => (i % 4 === 0 ? LOW_OVERVIEW : LOW_MEASURE));
+  if (n <= 3) return Array.from({ length: n }, () => LOW_MEASURE);
+  return Array.from({ length: n }, (_, i) => (i === 0 ? LOW_OVERVIEW : LOW_MEASURE));
+}
+
+// 저압 전송 데이터: 측정 사진 앞 3장 = Point 1~3, 사진 = 측정 사진 중 최고 중심온도(실화상+열화상)
+export async function buildLowPayload(shots: ThermalShot[]): Promise<B7PanelData> {
+  const measure = shots.filter((s) => s.part === LOW_MEASURE);
+  if (!measure.length) return {};
+  const rep = measure.reduce((a, b) => (b.center > a.center ? b : a));
+  return {
+    [LOW_MEASURE]: {
+      temps: measure.slice(0, 3).map((s) => s.center),
+      photo_y: await fileToBase64(rep.y),
+      photo_x: rep.x ? await fileToBase64(rep.x) : undefined,
+    },
+  };
+}
+
 export async function buildB7Payload(shots: ThermalShot[], partNames: string[]): Promise<B7PanelData> {
   const out: B7PanelData = {};
   for (const part of partNames) {

@@ -70,6 +70,8 @@ export function InspectionForm() {
   // 별지7 열화상: 수배전반 인덱스별 사진·온도·부위 분류 (사진이 없으면 나중에 점검 이력에서 추가)
   const thermalApi = useThermalPanels();
   const thermal = thermalApi.thermal;
+  // 저압 현장은 PF/PT/CH 대신 촬영 순서(전경 1장 + 상별 3장) 규칙 사용
+  useEffect(() => { thermalApi.setLowVoltage(!!selected && Number(selected.voltage) < 3000); }, [selected]);
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
   useEffect(() => {
