@@ -367,7 +367,8 @@ export default function HistoryPage() {
     const thermalPanelCount = (item: any) =>
       Math.max(1, item?.measure_values?.sets?.length || 0, item?.station?.panel_count || 0);
     const openThermal = (item: any) => {
-      thermalApi.setLowVoltage(item?.station?.voltage != null && Number(item.station.voltage) < 3000);   // 저압: 촬영 순서 규칙
+      // 저압: 촬영 순서 규칙 + 현장별 부위 설정 불러오기
+      thermalApi.setStationContext({ stationId: item?.station_id || null, lowVoltage: item?.station?.voltage != null && Number(item.station.voltage) < 3000 });
       thermalApi.reset(); setThermalItem(item);
     };
     const closeThermal = () => { if (thermalSaving) return; thermalApi.reset(); setThermalItem(null); };
@@ -380,7 +381,7 @@ export default function HistoryPage() {
       setThermalSaving(true);
       try {
         const b7_panels = await thermalApi.buildPanels(thermalPanelCount(item));
-        const res = await fetch('/api/inspection/thermal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inspection_id: item.id, b7_panels }) });
+        const res = await fetch('/api/inspection/thermal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inspection_id: item.id, b7_panels, b7_labels: thermalApi.b7Labels }) });
         const r = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''}`);
         const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };

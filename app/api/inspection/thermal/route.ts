@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await authClient.auth.getUser();
     if (!user) return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 });
 
-    const { inspection_id, b7_panels } = await req.json();
+    const { inspection_id, b7_panels, b7_labels } = await req.json();
+    const labels: string[] | null = Array.isArray(b7_labels) && b7_labels.length ? b7_labels.map(String) : null;
     if (!inspection_id) return NextResponse.json({ error: '점검 ID가 없습니다' }, { status: 400 });
     if (!Array.isArray(b7_panels) || !b7_panels.some(Boolean)) return NextResponse.json({ error: '반영할 열화상 사진이 없습니다' }, { status: 400 });
 
@@ -42,8 +43,9 @@ export async function POST(req: NextRequest) {
 
     // 고압: 부위별 3행 / 저압: 온도 행 하나당 저압반 하나(한 시트에 여러 저압반 가능)
     const { data: st } = await sb.from('stations').select('voltage').eq('id', insp.station_id).maybeSingle();
-    const mode: 'high' | 'low' = st?.voltage != null && Number(st.voltage) < 3000 ? 'low' : 'high';
-    const { buffer, sheets, applied } = await applyByeolji7(await dl.arrayBuffer(), b7_panels, mode);
+    // 현장별 부위 설정이 있으면 저압이어도 부위 방식(행 순서 = 설정 순서, 라벨 교체)
+    const mode: 'high' | 'low' = !labels && st?.voltage != null && Number(st.voltage) < 3000 ? 'low' : 'high';
+    const { buffer, sheets, applied } = await applyByeolji7(await dl.arrayBuffer(), b7_panels, mode, labels);
     if (b7_panels.filter(Boolean).length > sheets) {
       console.warn(`별지7 시트 ${sheets}개 < 사진 입력 수배전반 ${b7_panels.filter(Boolean).length}개`);
     }

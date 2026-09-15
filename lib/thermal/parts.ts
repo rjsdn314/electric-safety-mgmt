@@ -18,6 +18,29 @@ export const DEFAULT_PARTS: ThermalPart[] = [
 
 export const MAX_PARTS = 6;
 
+// 흔한 수배전반 부위의 기본 특징 — 현장별 부위에 새 이름(VCB 등)을 넣었을 때 AI 설명으로 사용
+export const KNOWN_PART_DESC: Record<string, string> = {
+  PF: DEFAULT_PARTS[0].desc,
+  PT: DEFAULT_PARTS[1].desc,
+  CH: DEFAULT_PARTS[2].desc,
+  VCB: '진공차단기: 빨간색/적갈색 주름 애자(부싱)가 위아래로 달린 인출형 차단기 몸체, 금속 프레임 안에 3상 나란히',
+  LBS: '부하개폐기: 3상 나란히 선 애자와 개폐 칼날·조작 링크, 전력퓨즈가 함께 달린 경우가 많음',
+  MOF: '계기용변성기(MOF): 네모난 금속 탱크 또는 몰드형 몸체에 고압 단자와 명판',
+  TR: '변압기: 큰 몰드/유입 변압기 몸체, 방열판과 고압·저압 단자',
+  LA: '피뢰기: 검정/회색 주름 원통형 애자, 윗단자에 전선, 아래쪽 접지선',
+  COS: '컷아웃스위치: 비스듬히 달린 퓨즈 홀더와 애자',
+  ACB: '기중차단기: 전면 조작부가 있는 큰 사각 차단기와 뒤쪽 부스바',
+  MCCB: '배선용차단기: 사각 몰드 차단기 몸체, 전면 레버와 단자 볼트',
+};
+
+const partKey = (s: string) => s.replace(/\s+/g, '').toUpperCase();
+
+// 부위 설명: 계정 부위 목록에 같은 이름이 있으면 그 설명, 없으면 기본 특징
+export function describePart(name: string, accountParts: ThermalPart[] = DEFAULT_PARTS): string {
+  const key = partKey(name);
+  return accountParts.find((p) => partKey(p.name) === key)?.desc || KNOWN_PART_DESC[key] || '';
+}
+
 // 입력 정리: 이름 앞뒤 공백 제거, 빈 이름·중복 제거, 길이 제한, 최대 개수 제한
 export function sanitizeParts(input: unknown): ThermalPart[] {
   if (!Array.isArray(input)) return [];

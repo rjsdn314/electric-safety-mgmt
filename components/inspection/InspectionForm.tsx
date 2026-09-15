@@ -71,7 +71,10 @@ export function InspectionForm() {
   const thermalApi = useThermalPanels();
   const thermal = thermalApi.thermal;
   // 저압 현장은 PF/PT/CH 대신 촬영 순서(전경 1장 + 상별 3장) 규칙 사용
-  useEffect(() => { thermalApi.setLowVoltage(!!selected && Number(selected.voltage) < 3000); }, [selected]);
+  //  + 현장별 부위 설정(양식·설비가 다른 현장) 불러오기
+  useEffect(() => {
+    thermalApi.setStationContext({ stationId: selected?.id || null, lowVoltage: !!selected && Number(selected.voltage) < 3000 });
+  }, [selected]);
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
   useEffect(() => {
@@ -485,6 +488,7 @@ export function InspectionForm() {
           ground_resistance: (inspType === '반기' || inspType === '연차') ? measureSets.map(s => s.ground) : [],
           remarks: remarks,
           b7_panels,
+          b7_labels: useThermal ? thermalApi.b7Labels : undefined,   // 현장별 부위 → 엑셀 라벨 교체
           is_mobile: /Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
         }),
       });

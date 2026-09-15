@@ -1,8 +1,9 @@
 'use client';
 // 별지7 열화상 사진 선택·분류 UI (점검 생성 화면 + 점검 이력 '열화상 추가'에서 공용)
-//  · 고압: 부위 목록은 계정별 설정(/thermal-parts), AI 분류 → 실패 시 무료 분류(내 예시 비교)
-//  · 저압: PF/PT/CH 없음 → 촬영 순서(전경 1장 + 상별 3장)로 자동 지정, 분류 없음
-//  · 반영 후 learn()으로 확정 분류(특히 사용자가 고친 사진)를 계정별 예시로 저장 → 다음 분류에 참고(고압만)
+//  · 부위 목록 우선순위: 현장별 설정(양식·설비가 다른 현장) → 계정 설정(/thermal-parts) → 기본 PF/PT/CH
+//  · 고압: AI 분류 → 실패 시 무료 분류(내 예시 비교)
+//  · 저압(현장별 설정 없을 때): 촬영 순서(전경 1장 + 상별 3장)로 자동 지정, 분류 없음
+//  · 반영 후 learn()으로 확정 분류(특히 사용자가 고친 사진)를 계정별 예시로 저장 → 다음 분류에 참고
 import { useEffect, useRef, useState } from 'react';
 import {
   loadShots, smoothByTriplets, downscaleToBase64, buildB7Payload, buildLowPayload, assignLowParts,
@@ -28,40 +29,80 @@ const LOW_OPTIONS = [
 // 수배전반 인덱스별 사진·온도·부위 분류 상태
 export function useThermalPanels() {
   const [thermal, setThermal] = useState<PanelThermal[]>([]);
-  const [parts, setParts] = useState<ThermalPart[]>(DEFAULT_PARTS);
-  const [lowVoltage, setLowVoltageState] = useState(false);
-  const ref = useRef(thermal);
-  ref.current = thermal;
-  const partsRef = useRef(parts);
-  partsRef.current = parts;
-  const lowRef = useRef(lowVoltage);
-  lowRef.current = lowVoltage;
+  const [accountParts, setAccountParts] = useState<ThermalPart[]>(DEFAULT_PARTS);
+  const [stationParts, setStationPartsState] = useState<ThermalPart[] | null>(null);
+  const [stationId, setStationId] = useState<string | null>(null);
+  const [lowStation, setLowStation] = useState(false);
+
+  const parts = stationParts || accountParts;          // 실제로 쓰는 부위 목록
+  const low = lowStation && !stationParts;             // 저압 순서 규칙 사용 여부
+
+  const ref = useRef(thermal); ref.current = thermal;
+  const partsRef = useRef(parts); partsRef.current = parts;
+  const lowRef = useRef(low); lowRef.current = low;
+  const stationRef = useRef(stationId); stationRef.current = stationId;
   useEffect(() => () => ref.current.forEach(revoke), []);
 
   // 계정별 부위 목록
   useEffect(() => {
     fetch('/api/thermal/profile', { cache: 'no-store' })
       .then(r => (r.ok ? r.json() : null))
-      .then(j => { if (Array.isArray(j?.parts) && j.parts.length) setParts(j.parts); })
+      .then(j => { if (Array.isArray(j?.parts) && j.parts.length) setAccountParts(j.parts); })
       .catch(() => {});
   }, []);
 
   const patch = (idx: number, p: Partial<PanelThermal>) =>
     setThermal(prev => { const next = [...prev]; next[idx] = { ...(next[idx] || EMPTY), ...p }; return next; });
 
-  const setLowVoltage = (v: boolean) => {
-    if (v === lowRef.current) return;
-    lowRef.current = v;
-    setLowVoltageState(v);
+  // 현장 선택 시: 고압/저압 + 현장별 부위 목록 불러오기 (현장이 바뀌면 선택한 사진은 비움)
+  const setStationContext = ({ stationId: id, lowVoltage }: { stationId: string | null; lowVoltage: boolean }) => {
+    const changed = id !== stationRef.current || lowVoltage !== lowStation;
+    stationRef.current = id;
+    setStationId(id);
+    setLowStation(lowVoltage);
+    if (!changed) return;
     ref.current.forEach(revoke);
-    setThermal([]);   // 고압↔저압 규칙이 달라 선택한 사진은 비움
+    setThermal([]);
+    setStationPartsState(null);
+    if (!id) return;
+    fetch(`/api/thermal/station-parts?station_id=${encodeURIComponent(id)}`, { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (stationRef.current === id && Array.isArray(j?.parts) && j.parts.length) setStationPartsState(j.parts); })
+      .catch(() => {});
+  };
+
+  // 이미 고른 사진 중 새 부위 목록에 없는 부위는 미지정으로
+  const dropUnknownParts = (names: string[]) =>
+    setThermal(prev => prev.map(t => t && ({ ...t, shots: t.shots.map(s => (s.part && !names.includes(s.part) ? { ...s, part: null } : s)) })));
+
+  // 이 현장만 부위 바꾸기 (순서 = 별지7 온도 행 순서, 엑셀 라벨도 이 이름으로)
+  const saveStationParts = async (names: string[]) => {
+    const id = stationRef.current;
+    if (!id) throw new Error('현장을 먼저 선택해주세요');
+    const r = await fetch('/api/thermal/station-parts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ station_id: id, parts: names.map(name => ({ name, desc: '' })) }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || '저장 실패');
+    setStationPartsState(j.parts);
+    dropUnknownParts(j.parts.map((p: ThermalPart) => p.name));
+  };
+
+  const clearStationParts = async () => {
+    const id = stationRef.current; if (!id) return;
+    const r = await fetch(`/api/thermal/station-parts?station_id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || '해제 실패'); }
+    setStationPartsState(null);
+    ref.current.forEach(revoke);
+    setThermal([]);   // 규칙(계정 부위/저압 순서)이 바뀌므로 사진은 다시 선택
   };
 
   const classify = async (idx: number, shots: UIShot[]) => {
     patch(idx, { busy: true, status: 'AI가 부위를 분류하는 중...' });
     try {
       const images = await Promise.all(shots.map(s => downscaleToBase64(s.y)));
-      const res = await fetch('/api/thermal/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images }) });
+      const res = await fetch('/api/thermal/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images, station_id: stationRef.current }) });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
       const valid = new Set(partsRef.current.map(p => p.name));
@@ -89,7 +130,7 @@ export function useThermalPanels() {
     }
   };
 
-  // 사진 선택 → X/Y 짝짓기 + 온도 추출(브라우저) → 고압: 분류 / 저압: 촬영 순서로 지정
+  // 사진 선택 → X/Y 짝짓기 + 온도 추출(브라우저) → 저압 규칙: 촬영 순서로 지정 / 그 외: 분류
   const addFiles = async (idx: number, fileList: FileList | null) => {
     if (!fileList || !fileList.length) return;
     revoke(ref.current[idx]);
@@ -130,11 +171,11 @@ export function useThermalPanels() {
     return Promise.all(Array.from({ length: count }, (_, i) => {
       const shots = thermal[i]?.shots;
       if (!shots?.length) return Promise.resolve(null);
-      return lowVoltage ? buildLowPayload(shots) : buildB7Payload(shots, names);
+      return low ? buildLowPayload(shots) : buildB7Payload(shots, names);
     }));
   };
 
-  // 계정별 학습(고압만): 부위마다 고친 사진 우선 최대 3장을 축소해 예시로 저장 (실패해도 무시)
+  // 계정별 학습: 부위마다 고친 사진 우선 최대 3장을 축소해 예시로 저장 (저압 순서 규칙일 땐 저장 안 함, 실패해도 무시)
   const learn = () => {
     if (lowRef.current) return;
     const all = ref.current.flatMap(t => t?.shots || []).filter(s => s.part);
@@ -154,11 +195,66 @@ export function useThermalPanels() {
   };
 
   return {
-    thermal, parts, lowVoltage, setLowVoltage, addFiles, classify, setPart, clear, reset, removeAt, buildPanels, learn,
+    thermal, parts, accountParts, stationParts, stationId, lowVoltage: low,
+    // 현장별 설정이 있으면 그 이름(행 순서)으로 엑셀 라벨을 바꿔 적도록 전송
+    b7Labels: stationParts ? stationParts.map(p => p.name) : null,
+    setStationContext, saveStationParts, clearStationParts,
+    addFiles, classify, setPart, clear, reset, removeAt, buildPanels, learn,
     hasAny: thermal.some(t => t?.shots.length),
     busy: thermal.some(t => t?.busy),
     unassigned: thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0),
   };
+}
+
+// 현장별 부위 편집 (한 번 저장하면 그 현장은 계속 이 목록 사용)
+function StationPartsEditor({ api }: { api: ReturnType<typeof useThermalPanels> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
+  if (!api.stationId) return null;
+  const btn: React.CSSProperties = { padding: '3px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
+
+  const start = () => { setDraft((api.stationParts || api.accountParts).map(p => p.name).join(', ')); setMsg(''); setEditing(true); };
+  const save = async () => {
+    const names = draft.split(/[,，/\n]+/).map(s => s.trim()).filter(Boolean);
+    if (!names.length) { setMsg('부위 이름을 하나 이상 입력해주세요'); return; }
+    setSaving(true); setMsg('');
+    try { await api.saveStationParts(names); setEditing(false); }
+    catch (e: any) { setMsg('❌ ' + e.message); } finally { setSaving(false); }
+  };
+  const reset = async () => {
+    if (!confirm('이 현장 전용 부위 설정을 해제할까요?\n계정 기본 부위(저압은 촬영 순서 규칙)로 돌아가고, 선택한 사진은 비워집니다.')) return;
+    try { await api.clearStationParts(); } catch (e: any) { setMsg('❌ ' + e.message); }
+  };
+
+  return (
+    <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: `1px dashed ${api.stationParts ? 'var(--accent)' : 'var(--border)'}`, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+      {!editing ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {api.stationParts ? (
+            <span>📍 <b style={{ color: 'var(--accent)' }}>이 현장 전용 부위: {api.stationParts.map(p => p.name).join(' / ')}</b> — 위(13행)부터 이 순서로 넣고 엑셀 라벨도 이 이름으로 바꿉니다.</span>
+          ) : api.lowVoltage ? (
+            <span>저압반 촬영 순서 규칙 사용 중. 양식·설비가 다르면 이 현장만 부위를 지정할 수 있습니다.</span>
+          ) : (
+            <span>계정 기본 부위 사용 중. 이 현장 양식·설비가 다르면(예: PF 대신 VCB) 이 현장만 바꿀 수 있습니다.</span>
+          )}
+          <button style={btn} onClick={start}>{api.stationParts ? '변경' : '이 현장만 부위 바꾸기'}</button>
+          {api.stationParts && <button style={btn} onClick={reset}>해제</button>}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <div>위(13행)부터 순서대로 쉼표로 적어주세요. 예: <b>VCB, PT, CH</b> — VCB·LBS·MOF·LA(피뢰기)·TR 등은 AI가 기본 특징을 알고 있습니다.</div>
+          <input className="toss-input" value={draft} onChange={e => setDraft(e.target.value)} placeholder="VCB, PT, CH" style={{ fontSize: 13 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button style={{ ...btn, background: 'var(--accent)', color: '#fff', border: 'none' }} onClick={save} disabled={saving}>{saving ? '저장 중...' : '이 현장에 저장'}</button>
+            <button style={btn} onClick={() => setEditing(false)} disabled={saving}>취소</button>
+          </div>
+        </div>
+      )}
+      {msg && <div style={{ marginTop: 4 }}>{msg}</div>}
+    </div>
+  );
 }
 
 export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnType<typeof useThermalPanels>; hint?: string }) {
@@ -194,10 +290,11 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
           <>저압반: 촬영 순서대로 <b>전경 1장 + 상별 접속부 3장</b>을 한 세트로 봅니다. 측정 3장의 중심온도가 Point 1~3에 들어가고, 그중 온도가 가장 높은 사진(실화상+열화상)이 엑셀에 들어갑니다.</>
         ) : (
           <>RB…X/Y.JPG를 모두 고르면 사진 속 온도(중심점)를 읽어 부위별 Point 1~3에 넣고, 부위마다 온도가 가장 높은 사진(실화상+열화상)만 엑셀에 넣습니다.
-            {' '}내 촬영 부위: <b>{api.parts.map(p => p.name).join(' / ')}</b> (<a href="/thermal-parts" style={{ color: 'var(--accent)' }}>변경</a>)</>
+            {' '}부위: <b>{api.parts.map(p => p.name).join(' / ')}</b>{!api.stationParts && <> (계정 기본 · <a href="/thermal-parts" style={{ color: 'var(--accent)' }}>변경</a>)</>}</>
         )}
         {hint && <><br />{hint}</>}
       </div>
+      {idx === 0 && <StationPartsEditor api={api} />}
       {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}</div>}
       {th?.skipped?.length ? <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text-tertiary)' }}>제외된 파일 {th.skipped.length}개 (온도 데이터 없음/짝 없음)</div> : null}
       {shots.length > 0 && (

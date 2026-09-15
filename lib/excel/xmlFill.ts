@@ -30,6 +30,7 @@ export interface FillData {
   //  키 = 계정별 부위 이름(기본 PF/PT/CH), 키 순서 = 양식 라벨과 안 맞을 때의 행 순서
   b7_panels?: Array<Record<string, { temps: number[]; photo_y?: string; photo_x?: string }> | null>;
   b7_mode?: 'high' | 'low';     // 별지7 기입 방식 — 고압: 시트=수배전반·행=부위 / 저압: 온도 행 하나=저압반 하나 (미지정 시 is_high_voltage)
+  b7_labels?: string[] | null;  // 현장별 부위 이름(행 순서) — 있으면 라벨 매칭 대신 이 순서로 넣고, 행·사진 라벨 셀도 이 이름으로 교체
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -320,21 +321,33 @@ function writeB7Row(xml: string, row: number, temps: number[]): string {
 
 interface B7SheetPlan {
   path: string;
-  rows: { row: number; data: B7Data | null }[];
-  photos: { r1: number; r2: number; data: B7Data | null }[];
+  rows: { row: number; data: B7Data | null; labelRef?: string | null; name?: string | null }[];
+  photos: { r1: number; r2: number; data: B7Data | null; labelRef?: string | null; name?: string | null }[];
 }
 
 // 수배전반 데이터 → 시트별 기입 계획
 //  · 고압(high): 별지7 시트 i = 수배전반 i. 시트 안 온도 행·사진 칸은 부위 이름↔라벨 매칭(못 맞추면 계정 부위 순서)
 //  · 저압(low): 온도 행 하나 = 저압반 하나. 시트 순서 × 행 순서로 수배전반 순서대로 채움
 //               (KINTEX 저압처럼 한 시트 13·14행에 저압반 2개). 사진 칸은 같은 시트의 같은 순번 저압반 사진
-async function planB7(zip: JSZip, sheets: string[], shared: string[], panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low'): Promise<B7SheetPlan[]> {
+//  · 현장별 부위(labels): 라벨 매칭 없이 labels 순서대로 행·사진 칸에 넣고, 라벨 셀을 그 이름으로 교체
+//    (행 라벨이 행마다 따로 있을 때만 교체 — 저압처럼 '측정부위' 머리글 하나를 공유하면 행 라벨은 그대로)
+async function planB7(zip: JSZip, sheets: string[], shared: string[], panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low', labels?: string[] | null): Promise<B7SheetPlan[]> {
   const plans: B7SheetPlan[] = [];
   let slot = 0;
   for (let s = 0; s < sheets.length; s++) {
     const xml = await zip.file(sheets[s])?.async('string'); if (!xml) continue;
     const lay = detectB7Layout(xml, shared);
-    if (mode === 'low') {
+    if (labels?.length) {
+      const panel = panels[s] || null;
+      const nameAt = (k: number) => (k < labels.length ? labels[k] : null);
+      const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
+      const rowLabelsDistinct = new Set(lay.rows.map((r) => r.labelRef)).size === lay.rows.length;
+      plans.push({
+        path: sheets[s],
+        rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(nameAt(k)), labelRef: rowLabelsDistinct ? r.labelRef : null, name: nameAt(k) })),
+        photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(nameAt(k)), labelRef: p.labelRef, name: nameAt(k) })),
+      });
+    } else if (mode === 'low') {
       const rows = lay.rows.map((r) => { const p = panels[slot++]; return { row: r.row, data: p ? (Object.values(p)[0] ?? null) : null }; });
       plans.push({ path: sheets[s], rows, photos: lay.photos.map((ph, k) => ({ r1: ph.r1, r2: ph.r2, data: rows[k]?.data ?? null })) });
     } else {
@@ -363,6 +376,8 @@ async function executeB7Plan(zip: JSZip, plans: B7SheetPlan[], clearEmptyRows: b
     if (!planHasData(plan)) continue;
     let xml = await zip.file(plan.path)!.async('string');
     for (const r of plan.rows) if (r.data || clearEmptyRows) xml = writeB7Row(xml, r.row, r.data?.temps || []);
+    // 현장별 부위: 행·사진 라벨 셀을 부위 이름으로 교체
+    for (const it of [...plan.rows, ...plan.photos]) if (it.name && it.labelRef) xml = setCell(xml, it.labelRef, it.name, false);
     zip.file(plan.path, xml);
     const pics: SheetPic[] = [];
     for (const ph of plan.photos) {
@@ -634,7 +649,7 @@ async function gcMedia(zip: JSZip) {
 // ── 이미 생성된 점검표에 별지7 열화상(온도·판정·사진)만 나중에 반영 ──
 // 현장에서는 사진 없이 생성 → 노트북에 사진 옮긴 뒤 점검 이력에서 추가하는 흐름용.
 // 기존 별지7 사진은 교체되고, 다른 시트는 건드리지 않는다.
-export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low' = 'high'): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
+export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low' = 'high', labels?: string[] | null): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
   const zip = await JSZip.loadAsync(xlsxBuf);
   const wbx = await zip.file('xl/workbook.xml')!.async('string');
   const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
@@ -653,14 +668,14 @@ export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNu
 
   // ① 기입 계획 → ② 대상 시트의 이전 사진 제거 → ③ 미참조 이미지 정리 → ④ 온도 기입 + 새 사진 삽입
   //   (순서 중요: 옛 이미지 관계가 남아 새 사진과 충돌하지 않게)
-  const plans = await planB7(zip, b7Sheets, shared, panels, mode);
+  const plans = await planB7(zip, b7Sheets, shared, panels, mode, labels);
   const targets = plans.filter(planHasData);
   for (const p of targets) {
     const dp = await sheetDrawingPath(zip, p.path);
     if (dp && zip.file(dp)) zip.file(dp, removeDrawingPics(await zip.file(dp)!.async('string')));
   }
   await gcMedia(zip);
-  await executeB7Plan(zip, plans, mode === 'high');
+  await executeB7Plan(zip, plans, mode === 'high' || !!labels?.length);
   return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), sheets: b7Sheets.length, applied: targets.length };
 }
 
@@ -796,7 +811,7 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
 
   // ── 별지7 열화상 온도·사진 기입 (미디어 GC 이후라 새 이미지가 정리 대상이 되지 않음) ──
   if (d.b7_panels?.length) {
-    const plans = await planB7(zip, b7Sheets, shared, d.b7_panels, d.b7_mode || (d.is_high_voltage ? 'high' : 'low'));
+    const plans = await planB7(zip, b7Sheets, shared, d.b7_panels, d.b7_mode || (d.is_high_voltage ? 'high' : 'low'), d.b7_labels);
     await executeB7Plan(zip, plans, true);
   }
 

@@ -30,18 +30,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI 키(ANTHROPIC_API_KEY)가 서버에 설정되지 않았습니다' }, { status: 503 });
     }
 
-    const { images } = await req.json();
+    const { images, station_id } = await req.json();
     if (!Array.isArray(images) || !images.length) return NextResponse.json({ error: '사진이 없습니다' }, { status: 400 });
     if (images.length > MAX_IMAGES) return NextResponse.json({ error: `사진은 최대 ${MAX_IMAGES}장까지 분류할 수 있습니다` }, { status: 400 });
 
     // 계정별 부위 목록 + 과거 확정 예시
     const sb = createClient();
-    const [{ data: prof }, { data: exRows }] = await Promise.all([
+    const [{ data: prof }, { data: exRows }, { data: stationRow }] = await Promise.all([
       sb.from('thermal_part_profiles').select('parts').eq('user_id', user.id).maybeSingle(),
       sb.from('thermal_examples').select('part, image').eq('user_id', user.id).order('created_at', { ascending: false }).limit(150),
+      station_id
+        ? sb.from('thermal_station_parts').select('parts').eq('station_id', station_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+    // 부위 목록 우선순위: 현장별 설정 → 계정 설정 → 기본 PF/PT/CH
+    const stationParts = sanitizeParts((stationRow as any)?.parts);
     const saved = sanitizeParts(prof?.parts);
-    const parts = saved.length ? saved : DEFAULT_PARTS;
+    const parts = stationParts.length ? stationParts : saved.length ? saved : DEFAULT_PARTS;
     const names = parts.map((p) => p.name);
     const examples = names.flatMap((n) => (exRows || []).filter((e) => e.part === n).slice(0, EXAMPLES_PER_PART));
 

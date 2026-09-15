@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const {
       station_id, inspection_type, date,
       inspector_name, count, remarks,
-      measure_sets, ground_resistance, is_mobile, weather, b7_panels,
+      measure_sets, ground_resistance, is_mobile, weather, b7_panels, b7_labels,
     } = body;
 
     const sb = createClient(
@@ -190,6 +190,7 @@ export async function POST(req: NextRequest) {
         weather: await weatherPromise,
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
         b7_panels: Array.isArray(b7_panels) ? b7_panels : undefined,   // 별지7 열화상 온도·사진
+        b7_labels: Array.isArray(b7_labels) && b7_labels.length ? b7_labels.map(String) : undefined,   // 현장별 부위 → 행 순서·라벨 교체
       });
     } else {
       // 공용 폴백: 기존 ExcelJS 경로
