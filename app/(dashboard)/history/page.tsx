@@ -386,13 +386,24 @@ export default function HistoryPage() {
         if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''}`);
         const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
         setItems(prev => prev.map(it => it.id === item.id ? updated : it));
-        thermalApi.learn();   // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고)
-        thermalApi.reset(); setThermalItem(null);
+        await thermalApi.learn();   // 확정 분류를 계정별 예시로 저장 — 사진을 옮기기 전에 먼저 읽어둠
         if (isDesktop) {
           alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n이어서 PC 폴더의 엑셀 파일도 새 파일로 저장합니다.`);
           await saveOneToPc(updated);
+          // 열화상 사진 전부를 같은 점검 폴더(약칭\수배전반번호)에 저장 — '폴더 선택'으로 고른 사진은 이동
+          const handle = await getStationFolder(updated);
+          if (handle && thermalApi.hasAny) {
+            const dateNum = (updated.inspection_date || '').replace(/-/g, '');
+            const stName = updated.station?.name || updated.station?.base_name || 'unknown';
+            try {
+              const a = await thermalApi.archivePhotos(handle, `${dateNum}_${stName}_${updated.inspection_type}`, thermalPanelCount(updated));
+              if (a) alert(`📷 열화상 사진 ${a.copied}장을 ${a.folder} 에 저장했습니다${a.moved ? `\n(원본 ${a.moved}장은 옮겨짐)` : ''}${a.failed ? `\n⚠️ 실패 ${a.failed}장` : ''}`);
+            } catch (e: any) { alert('⚠️ 열화상 사진 폴더 저장 실패: ' + e.message); }
+          }
+          thermalApi.reset(); setThermalItem(null);
         } else {
           alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n목록의 다운로드 버튼으로 새 파일을 받을 수 있습니다.`);
+          thermalApi.reset(); setThermalItem(null);
         }
       } catch (e: any) {
         alert('열화상 반영 실패: ' + e.message);

@@ -494,15 +494,23 @@ export function InspectionForm() {
       });
       const r = await res.json();
       if (!res.ok) throw new Error(r.error || `생성 실패 (HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''})`);
+      // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고) — 사진을 옮기기 전에 먼저 읽어둠
+      if (useThermal) await thermalApi.learn();
       if (folderHandle && r.fileBase64) {
         const dateNum = date.replace(/-/g, '');
         const subFolderName = `${dateNum}_${selected.name}_${inspType}`;
         await saveToLocal(r.fileBase64, r.fileName, subFolderName);
+        // 열화상 사진 전부를 같은 점검 폴더(약칭\수배전반번호)에 저장 — '폴더 선택'으로 고른 사진은 이동
+        if (useThermal) {
+          try {
+            const a = await thermalApi.archivePhotos(folderHandle, subFolderName, measureSets.length);
+            if (a) setSaveMsg(`📷 열화상 사진 ${a.copied}장을 ${a.folder} 에 저장했습니다${a.moved ? ` (원본 ${a.moved}장은 옮겨짐)` : ''}${a.failed ? ` · ⚠️ 실패 ${a.failed}장` : ''}`);
+          } catch (e: any) { setSaveMsg('⚠️ 열화상 사진 폴더 저장 실패: ' + e.message); }
+        }
       }
       setSavedFile(r.fileName);
       setDownloadUrl(r.downloadUrl);
       setResult({ ...r, station: selected, inspType, date, inspector, count, weather, measureSets, remarks });
-      if (useThermal) thermalApi.learn();   // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고)
       setDoneTodayNames(prev => new Set(prev).add(selected.name));  // 작성 완료 → 목록 맨 아래로 즉시 반영
       setDone(true);
     } catch (e: any) {

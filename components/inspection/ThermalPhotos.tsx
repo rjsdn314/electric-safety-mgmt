@@ -4,6 +4,8 @@
 //  · 고압: AI 분류 → 실패 시 무료 분류(내 예시 비교)
 //  · 저압(현장별 설정 없을 때): 촬영 순서(전경 1장 + 상별 3장)로 자동 지정, 분류 없음
 //  · 반영 후 learn()으로 확정 분류(특히 사용자가 고친 사진)를 계정별 예시로 저장 → 다음 분류에 참고
+//  · 저장 후 archivePhotos()로 선택한 사진 전부를 점검 폴더(YYYYMMDD_현장_종류\약칭\[수배전반번호])에 저장.
+//    '폴더 선택'으로 고른 사진은 복사 확인 후 원본을 삭제(이동), '사진 선택'으로 고른 사진은 복사만.
 import { useEffect, useRef, useState } from 'react';
 import {
   loadShots, smoothByTriplets, downscaleToBase64, buildB7Payload, buildLowPayload, assignLowParts,
@@ -11,10 +13,15 @@ import {
 } from '@/lib/thermal/gtc400c';
 import { DEFAULT_PARTS, type ThermalPart } from '@/lib/thermal/parts';
 import { classifyLocally, invalidateExamples } from '@/lib/thermal/localClassify';
+import { archivePanelPhotos } from '@/lib/thermal/archive';
 
 export type UIShot = ThermalShot & { url: string };
-export type PanelThermal = { shots: UIShot[]; skipped: string[]; status: string; busy: boolean };
-const EMPTY: PanelThermal = { shots: [], skipped: [], status: '', busy: false };
+// files = 사용자가 고른 사진 전부(점검 폴더 저장용), source = '폴더 선택'으로 고른 경우 원본 위치(이동 시 삭제용)
+export type PanelThermal = {
+  shots: UIShot[]; skipped: string[]; status: string; busy: boolean;
+  files?: File[]; source?: { name: string; dir: any }[] | null;
+};
+const EMPTY: PanelThermal = { shots: [], skipped: [], status: '', busy: false, files: [], source: null };
 const verdictOf = (temps: number[]) => {
   if (temps.length < 2) return '5℃ 이하';
   const d = Math.max(...temps) - Math.min(...temps);
@@ -25,7 +32,6 @@ const LOW_OPTIONS = [
   { value: LOW_MEASURE, label: '측정 (Point)' },
   { value: LOW_OVERVIEW, label: '전경 (기입 제외)' },
 ];
-
 // 수배전반 인덱스별 사진·온도·부위 분류 상태
 export function useThermalPanels() {
   const [thermal, setThermal] = useState<PanelThermal[]>([]);
@@ -33,6 +39,7 @@ export function useThermalPanels() {
   const [stationParts, setStationPartsState] = useState<ThermalPart[] | null>(null);
   const [stationId, setStationId] = useState<string | null>(null);
   const [lowStation, setLowStation] = useState(false);
+  const [canPickFolder, setCanPickFolder] = useState(false);
 
   const parts = stationParts || accountParts;          // 실제로 쓰는 부위 목록
   const low = lowStation && !stationParts;             // 저압 순서 규칙 사용 여부
@@ -42,6 +49,7 @@ export function useThermalPanels() {
   const lowRef = useRef(low); lowRef.current = low;
   const stationRef = useRef(stationId); stationRef.current = stationId;
   useEffect(() => () => ref.current.forEach(revoke), []);
+  useEffect(() => { setCanPickFolder('showDirectoryPicker' in window); }, []);
 
   // 계정별 부위 목록
   useEffect(() => {
@@ -131,12 +139,13 @@ export function useThermalPanels() {
   };
 
   // 사진 선택 → X/Y 짝짓기 + 온도 추출(브라우저) → 저압 규칙: 촬영 순서로 지정 / 그 외: 분류
-  const addFiles = async (idx: number, fileList: FileList | null) => {
+  const addFiles = async (idx: number, fileList: FileList | File[] | null, source: PanelThermal['source'] = null) => {
     if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
     revoke(ref.current[idx]);
-    patch(idx, { shots: [], busy: true, status: '사진에서 온도 읽는 중...' });
+    patch(idx, { shots: [], busy: true, status: '사진에서 온도 읽는 중...', files: files.filter(f => /\.jpe?g$/i.test(f.name)), source });
     try {
-      const { shots, skipped } = await loadShots(Array.from(fileList));
+      const { shots, skipped } = await loadShots(files);
       const ui: UIShot[] = shots.map(s => ({ ...s, url: URL.createObjectURL(s.y) }));
       if (!ui.length) { patch(idx, { skipped, busy: false, status: '⚠️ 온도 데이터가 있는 열화상 사진(RB…Y.JPG)을 찾지 못했습니다.' }); return; }
       if (lowRef.current) {
@@ -152,6 +161,20 @@ export function useThermalPanels() {
     } catch (e: any) {
       patch(idx, { busy: false, status: '❌ 사진 처리 실패: ' + e.message });
     }
+  };
+
+  // 폴더 선택: 그 폴더 바로 안의 JPG 전부 (저장 후 점검 폴더로 이동 = 원본 삭제)
+  const addFolder = async (idx: number) => {
+    let dir: any;
+    try { dir = await (window as any).showDirectoryPicker({ mode: 'readwrite' }); }
+    catch (e: any) { if (e?.name !== 'AbortError') patch(idx, { status: '❌ 폴더 선택 실패: ' + e.message }); return; }
+    const files: File[] = [];
+    const source: { name: string; dir: any }[] = [];
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind === 'file' && /\.jpe?g$/i.test(name)) { files.push(await h.getFile()); source.push({ name, dir }); }
+    }
+    if (!files.length) { patch(idx, { status: `⚠️ '${dir.name}' 폴더에 JPG 사진이 없습니다.` }); return; }
+    await addFiles(idx, files, source);
   };
 
   const setPart = (idx: number, shotIdx: number, part: Part | null) =>
@@ -176,7 +199,8 @@ export function useThermalPanels() {
   };
 
   // 계정별 학습: 부위마다 고친 사진 우선 최대 3장을 축소해 예시로 저장 (저압 순서 규칙일 땐 저장 안 함, 실패해도 무시)
-  const learn = () => {
+  //  사진을 옮기기(원본 삭제) 전에 읽어야 하므로, 축소까지 끝난 뒤 반환하고 서버 저장은 뒤에서 계속한다.
+  const learn = async () => {
     if (lowRef.current) return;
     const all = ref.current.flatMap(t => t?.shots || []).filter(s => s.part);
     const picks: UIShot[] = [];
@@ -185,21 +209,25 @@ export function useThermalPanels() {
       picks.push(...[...list.filter(s => s.ai !== s.part), ...list.filter(s => s.ai === s.part)].slice(0, 3));
     }
     if (!picks.length) return;
-    void (async () => {
-      try {
-        const examples = await Promise.all(picks.map(async s => ({ part: s.part, image: await downscaleToBase64(s.y, 256, 0.7) })));
-        await fetch('/api/thermal/examples', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examples }) });
-        invalidateExamples();
-      } catch { /* 학습 저장 실패는 점검표 생성에 영향 없음 */ }
-    })();
+    try {
+      const examples = await Promise.all(picks.map(async s => ({ part: s.part, image: await downscaleToBase64(s.y, 256, 0.7) })));
+      void fetch('/api/thermal/examples', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ examples }) })
+        .then(() => invalidateExamples()).catch(() => {});
+    } catch { /* 학습 저장 실패는 점검표 생성에 영향 없음 */ }
   };
 
+  // 선택한 사진 전부를 점검 폴더에 저장: root(현장 폴더)\subFolderName\약칭\[수배전반번호]
+  //  · 같은 이름·크기 파일이 이미 있으면 건너뜀(재반영·같은 폴더에서 고른 경우 안전)
+  //  · '폴더 선택'으로 고른 사진은 복사 크기 확인 후 원본 삭제(이동). 원본 폴더가 곧 저장 위치면 삭제 안 함
+  const archivePhotos = (root: any, subFolderName: string, panelCount: number) =>
+    archivePanelPhotos(root, subFolderName, ref.current.map((t, i) => ({ index: i, files: t?.files || [], source: t?.source })), panelCount);
+
   return {
-    thermal, parts, accountParts, stationParts, stationId, lowVoltage: low,
+    thermal, parts, accountParts, stationParts, stationId, lowVoltage: low, canPickFolder,
     // 현장별 설정이 있으면 그 이름(행 순서)으로 엑셀 라벨을 바꿔 적도록 전송
     b7Labels: stationParts ? stationParts.map(p => p.name) : null,
     setStationContext, saveStationParts, clearStationParts,
-    addFiles, classify, setPart, clear, reset, removeAt, buildPanels, learn,
+    addFiles, addFolder, classify, setPart, clear, reset, removeAt, buildPanels, learn, archivePhotos,
     hasAny: thermal.some(t => t?.shots.length),
     busy: thermal.some(t => t?.busy),
     unassigned: thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0),
@@ -268,18 +296,22 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
     return list.length ? list.reduce((a, b) => (b.center > a.center ? b : a)).id : '';
   }));
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' };
+  const pickBtn: React.CSSProperties = { padding: '6px 12px', borderRadius: 8, background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: th?.busy ? 'wait' : 'pointer', opacity: th?.busy ? 0.6 : 1, border: 'none', fontFamily: 'inherit' };
   return (
     <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: 'var(--bg-elevated)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
         <label style={labelStyle}>🌡️ 열화상 사진 (별지7{low ? ' · 저압' : ''}) — 찍은 사진 전부 선택</label>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {shots.length > 0 && !th?.busy && (
             <>
               {!low && <button onClick={() => api.classify(idx, shots)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>🤖 다시 분류</button>}
               <button onClick={() => api.clear(idx)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✕ 비우기</button>
             </>
           )}
-          <label style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: th?.busy ? 'wait' : 'pointer', opacity: th?.busy ? 0.6 : 1 }}>
+          {api.canPickFolder && (
+            <button onClick={() => api.addFolder(idx)} disabled={th?.busy} style={pickBtn} title="사진이 들어있는 폴더를 고르면, 저장 후 사진이 점검 폴더로 옮겨집니다(원본 삭제)">📁 폴더 선택</button>
+          )}
+          <label style={{ ...pickBtn, background: api.canPickFolder ? 'var(--bg-card)' : 'var(--accent)', color: api.canPickFolder ? 'var(--accent)' : '#fff', border: api.canPickFolder ? '1px solid var(--accent)' : 'none' }} title="파일로 고르면 점검 폴더에 복사만 됩니다(원본 유지)">
             📷 사진 선택
             <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { api.addFiles(idx, e.target.files); e.target.value = ''; }} />
           </label>
@@ -292,10 +324,11 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
           <>RB…X/Y.JPG를 모두 고르면 사진 속 온도(중심점)를 읽어 부위별 Point 1~3에 넣고, 부위마다 온도가 가장 높은 사진(실화상+열화상)만 엑셀에 넣습니다.
             {' '}부위: <b>{api.parts.map(p => p.name).join(' / ')}</b>{!api.stationParts && <> (계정 기본 · <a href="/thermal-parts" style={{ color: 'var(--accent)' }}>변경</a>)</>}</>
         )}
+        {api.canPickFolder && <><br />저장하면 고른 사진 전부가 점검 폴더에 들어갑니다 — <b>📁 폴더 선택</b>은 옮기기(원본 삭제), <b>📷 사진 선택</b>은 복사.</>}
         {hint && <><br />{hint}</>}
       </div>
       {idx === 0 && <StationPartsEditor api={api} />}
-      {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}</div>}
+      {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}{th.source?.length ? ` · 📁 폴더에서 ${th.source.length}장 (저장 시 이동)` : ''}</div>}
       {th?.skipped?.length ? <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text-tertiary)' }}>제외된 파일 {th.skipped.length}개 (온도 데이터 없음/짝 없음)</div> : null}
       {shots.length > 0 && (
         <>
