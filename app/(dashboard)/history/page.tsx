@@ -427,8 +427,8 @@ export default function HistoryPage() {
                   </div>
                   <button onClick={closeThermal} disabled={thermalSaving} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 15 }}>✕</button>
                 </div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10, lineHeight: 1.6 }}>
-                  노트북에 옮긴 열화상 사진을 수배전반별로 선택하면, 이미 만든 점검표의 별지7에 온도·판정·대표사진만 채워 넣습니다. (다른 시트는 그대로 유지)
+                <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10 }}>
+                  수배전반별로 사진을 고르면 별지7에 온도·판정·사진을 채웁니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용설명서</a>
                 </div>
                 {Array.from({ length: thermalPanelCount(thermalItem) }, (_, idx) => (
                   <div key={idx} style={{ marginTop: 16 }}>

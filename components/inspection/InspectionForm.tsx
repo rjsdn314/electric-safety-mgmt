@@ -737,7 +737,7 @@ export function InspectionForm() {
               <input className="toss-input" placeholder="특이사항이 없으면 비워두세요" value={set.remarks ?? ''} onChange={e => updateMeasureSet(idx, 'remarks', e.target.value)} />
             </div>
             {inspType !== '월차' && (
-              <ThermalPhotoBox idx={idx} api={thermalApi} hint="현장에서 사진이 아직 노트북에 없으면 비워두고 생성하세요 — 나중에 [점검 이력]의 🌡️ 버튼으로 추가하면 같은 엑셀에 반영됩니다." />
+              <ThermalPhotoBox idx={idx} api={thermalApi} />
             )}
             {idx < measureSets.length - 1 && (<div style={{ borderTop: '1px solid var(--border)', marginTop: 20 }} />)}
           </div>

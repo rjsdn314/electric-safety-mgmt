@@ -260,19 +260,15 @@ function StationPartsEditor({ api }: { api: ReturnType<typeof useThermalPanels> 
     <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 10, border: `1px dashed ${api.stationParts ? 'var(--accent)' : 'var(--border)'}`, fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
       {!editing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {api.stationParts ? (
-            <span>📍 <b style={{ color: 'var(--accent)' }}>이 현장 전용 부위: {api.stationParts.map(p => p.name).join(' / ')}</b> — 위(13행)부터 이 순서로 넣고 엑셀 라벨도 이 이름으로 바꿉니다.</span>
-          ) : api.lowVoltage ? (
-            <span>저압반 촬영 순서 규칙 사용 중. 양식·설비가 다르면 이 현장만 부위를 지정할 수 있습니다.</span>
-          ) : (
-            <span>계정 기본 부위 사용 중. 이 현장 양식·설비가 다르면(예: PF 대신 VCB) 이 현장만 바꿀 수 있습니다.</span>
-          )}
+          {api.stationParts
+            ? <span>📍 <b style={{ color: 'var(--accent)' }}>이 현장 전용: {api.stationParts.map(p => p.name).join(' / ')}</b></span>
+            : <span>{api.lowVoltage ? '저압 순서 규칙 사용 중' : '계정 기본 부위 사용 중'}</span>}
           <button style={btn} onClick={start}>{api.stationParts ? '변경' : '이 현장만 부위 바꾸기'}</button>
           {api.stationParts && <button style={btn} onClick={reset}>해제</button>}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 6 }}>
-          <div>위(13행)부터 순서대로 쉼표로 적어주세요. 예: <b>VCB, PT, CH</b> — VCB·LBS·MOF·LA(피뢰기)·TR 등은 AI가 기본 특징을 알고 있습니다.</div>
+          <div>위(13행)부터 순서대로, 쉼표로 구분. 예: <b>VCB, PT, CH</b></div>
           <input className="toss-input" value={draft} onChange={e => setDraft(e.target.value)} placeholder="VCB, PT, CH" style={{ fontSize: 13 }} />
           <div style={{ display: 'flex', gap: 6 }}>
             <button style={{ ...btn, background: 'var(--accent)', color: '#fff', border: 'none' }} onClick={save} disabled={saving}>{saving ? '저장 중...' : '이 현장에 저장'}</button>
@@ -285,7 +281,7 @@ function StationPartsEditor({ api }: { api: ReturnType<typeof useThermalPanels> 
   );
 }
 
-export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnType<typeof useThermalPanels>; hint?: string }) {
+export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typeof useThermalPanels> }) {
   const th = api.thermal[idx];
   const shots = th?.shots || [];
   const low = api.lowVoltage;
@@ -317,15 +313,9 @@ export function ThermalPhotoBox({ idx, api, hint }: { idx: number; api: ReturnTy
           </label>
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-        {low ? (
-          <>저압반: 촬영 순서대로 <b>전경 1장 + 상별 접속부 3장</b>을 한 세트로 봅니다. 측정 3장의 중심온도가 Point 1~3에 들어가고, 그중 온도가 가장 높은 사진(실화상+열화상)이 엑셀에 들어갑니다.</>
-        ) : (
-          <>RB…X/Y.JPG를 모두 고르면 사진 속 온도(중심점)를 읽어 부위별 Point 1~3에 넣고, 부위마다 온도가 가장 높은 사진(실화상+열화상)만 엑셀에 넣습니다.
-            {' '}부위: <b>{api.parts.map(p => p.name).join(' / ')}</b>{!api.stationParts && <> (계정 기본 · <a href="/thermal-parts" style={{ color: 'var(--accent)' }}>변경</a>)</>}</>
-        )}
-        {api.canPickFolder && <><br />저장하면 고른 사진 전부가 점검 폴더에 들어갑니다 — <b>📁 폴더 선택</b>은 옮기기(원본 삭제), <b>📷 사진 선택</b>은 복사.</>}
-        {hint && <><br />{hint}</>}
+      <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
+        {low ? '저압: 전경 1장 + 측정 3장 순서' : `부위: ${api.parts.map(p => p.name).join(' / ')}`}
+        {' · '}<a href="/guide" style={{ color: 'var(--accent)' }}>사용설명서</a>
       </div>
       {idx === 0 && <StationPartsEditor api={api} />}
       {th?.status && <div style={{ fontSize: 12.5, marginTop: 8, color: 'var(--text-secondary)' }}>{th.status}{th.source?.length ? ` · 📁 폴더에서 ${th.source.length}장 (저장 시 이동)` : ''}</div>}

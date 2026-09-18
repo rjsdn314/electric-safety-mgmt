@@ -62,9 +62,8 @@ export default function ThermalPartsPage() {
   return (
     <div style={{ padding: '32px 36px 60px', maxWidth: 820 }}>
       <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>🌡️ 열화상 촬영 부위</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.7 }}>
-        사람마다 찍는 부위가 달라 <b>계정별로</b> 설정합니다. AI는 여기 적은 부위 이름·특징으로 사진을 분류하고,
-        점검표에 반영할 때 확정한 분류(특히 직접 고친 사진)를 <b>내 예시</b>로 저장해 다음 분류부터 참고합니다.
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+        내가 찍는 부위를 순서대로 적어두면 사진 분류와 엑셀 기입에 사용됩니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용설명서</a>
       </p>
 
       <div style={card}>
@@ -72,9 +71,8 @@ export default function ThermalPartsPage() {
           <div style={{ fontSize: 15, fontWeight: 800 }}>내 촬영 부위 {isDefault && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', marginLeft: 6 }}>(기본값 사용 중)</span>}</div>
           <button onClick={() => setParts(DEFAULT_PARTS)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>기본값(PF/PT/CH)으로</button>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.6 }}>
-          · 이름은 엑셀 별지7 라벨(PF, PT, CH, 인입 등)과 같게 적으면 그 행에 들어갑니다. 라벨이 없거나 다르면 <b>위에서부터 순서대로</b> 13·15·17행(사진 19·29·39행)에 들어갑니다.<br />
-          · 특징은 AI가 사진을 구분하는 설명입니다. 색·모양·위치처럼 사진에서 보이는 것을 적어주세요.
+        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
+          위에 적은 부위부터 13·15·17행 순서로 들어갑니다. 특징은 AI가 사진을 구분할 때 씁니다.
         </div>
         {loading ? <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>불러오는 중...</div> : parts.map((p, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '28px 120px 1fr auto', gap: 8, alignItems: 'start', marginBottom: 10 }}>
@@ -99,7 +97,7 @@ export default function ThermalPartsPage() {
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>AI가 참고하는 내 예시</div>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.6 }}>
-          점검표에 열화상을 반영할 때 자동으로 쌓입니다(부위별 최근 20장). AI 분류는 최근 3장, 무료 분류(AI 키 없을 때)는 전부와 비교합니다. 잘못 들어간 예시는 분류를 틀리게 만드니 지워주세요.
+          반영할 때 자동으로 쌓여 다음 분류에 쓰입니다(부위별 최근 20장). 잘못 들어간 예시는 지워주세요.
         </div>
         {!loading && !examples.length && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>아직 예시가 없습니다. 열화상을 한 번 반영하면 생깁니다.</div>}
         {groups.filter(g => examples.some(e => e.part === g)).map(g => {

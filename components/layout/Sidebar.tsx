@@ -72,6 +72,7 @@ export function Sidebar() {
     { href: '/admin/templates',  label: '양식 등록',     icon: '📑' },
     { href: '/signature',        label: '서명 등록',     icon: '✍️' },
     { href: '/thermal-parts',    label: '열화상 부위',   icon: '🌡️' },
+    { href: '/guide',            label: '사용설명서',    icon: '📖' },
   ];
 
   const adminMenus = [
