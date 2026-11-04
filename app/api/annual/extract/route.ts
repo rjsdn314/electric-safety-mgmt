@@ -190,6 +190,9 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     if (e instanceof Anthropic.AuthenticationError) return NextResponse.json({ error: 'AI 키가 올바르지 않습니다' }, { status: 503 });
     if (e instanceof Anthropic.RateLimitError) return NextResponse.json({ error: 'AI 사용량 한도 초과 — 잠시 후 다시 시도하세요' }, { status: 429 });
+    if (/credit balance/i.test(String(e?.message))) {
+      return NextResponse.json({ error: 'Anthropic 계정 크레딧이 부족합니다 — console.anthropic.com → Billing에서 충전하세요' }, { status: 402 });
+    }
     console.error('도면 분석 오류:', e);
     return NextResponse.json({ error: e?.message || '도면 분석 실패' }, { status: 500 });
   }
