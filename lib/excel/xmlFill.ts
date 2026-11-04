@@ -534,7 +534,7 @@ function fillPowerQuality(xml: string, shared: string[], d: FillData): string {
   // 공유문자열(t="s")·인라인문자열(도면→연차양식 생성기가 쓴 셀) 모두 인식
   for (const m of xml.matchAll(/<c r="A(\d+)"[^>]*?t="(?:s|inlineStr)"/g)) {
     const txt = cellText(xml, shared, `A${m[1]}`);
-    if (/KVA|KVＡ|TR/i.test(txt) && !trRows.includes(+m[1])) trRows.push(+m[1]);
+    if ((/KVA|KVＡ|TR/i.test(txt) || /^저압/.test(txt.trim())) && !trRows.includes(+m[1])) trRows.push(+m[1]);
   }
   trRows.sort((a, b) => a - b);
   (d.measure_sets || []).forEach((set, k) => {

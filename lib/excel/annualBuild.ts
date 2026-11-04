@@ -21,7 +21,7 @@ import {
   setCell, clearCell, parseShared, xmlEsc, colToNum, numToCol,
   removeDrawingPics, sheetDrawingPath, gcMedia,
 } from './xmlFill';
-import { AnnualSpec, LOW_ITEMS, HIGH_ITEMS, LIMITS, Panel } from '@/lib/annual/spec';
+import { AnnualSpec, LOW_ITEMS, HIGH_ITEMS, LIMITS, Panel, isLowVoltage } from '@/lib/annual/spec';
 
 // ── 셀 쓰기 도우미 ──
 function isNumStr(v: unknown): boolean {
@@ -196,10 +196,11 @@ function fillB1(xml: string, sp: AnnualSpec): string {
   xml = put(xml, 'B5', `${sp.supply_voltage}V`);
   xml = put(xml, 'D5', `${sp.capacity_kw}KW`);
   for (const it of LOW_ITEMS) xml = put(xml, `C${it.row}`, sp.marks_low[it.key] || '/');
-  for (const it of HIGH_ITEMS) xml = put(xml, `J${it.row}`, sp.marks_high[it.key] || '/');
+  const low = isLowVoltage(sp);
+  for (const it of HIGH_ITEMS) xml = put(xml, `J${it.row}`, low ? '/' : (sp.marks_high[it.key] || '/'));   // 저압 수전: 특고압 설비 없음
   PANEL_LABEL_ROWS.forEach((r, k) => {
     const tr = sp.transformers[k];
-    xml = put(xml, `P${r}`, tr ? `측정개소 ${tr.kva}` : '측정개소');
+    xml = put(xml, `P${r}`, tr ? `측정개소 ${tr.kva}${low ? 'KW' : ''}` : '측정개소');
   });
   for (const ref of PANEL_MEAS) xml = clearCell(xml, ref);   // 측정값은 점검 생성 때 입력
   xml = clearCell(xml, 'A50');                                // 종합의견(현장 특이사항) 초기화
@@ -309,7 +310,8 @@ function fillPowerQualityBase(xml: string, sp: AnnualSpec): string {
     if (tr && k === 2) xml = cloneRowBlock(xml, 9, 11, 12);
     xml = clearRange(xml, 'A', 'AL', r, r + 2);
     if (!tr) return;
-    xml = put(xml, `A${r}`, `TR${tr.kva}KVA`);
+    // 점검 생성(xmlFill.fillPowerQuality)이 이 라벨(TR…/저압…)로 측정값 넣을 행을 찾는다
+    xml = put(xml, `A${r}`, isLowVoltage(sp) ? `저압 ${tr.kva}KW` : `TR${tr.kva}KVA`);
     xml = put(xml, `E${r}`, tr.max_kw);
     xml = put(xml, `I${r}`, tr.pf);
     xml = putFormula(xml, `AA${r}`, `(MAX(V${r},V${r + 1},V${r + 2})-MIN(V${r},V${r + 1},V${r + 2}))/((V${r}+V${r + 1}+V${r + 2})/3)`);

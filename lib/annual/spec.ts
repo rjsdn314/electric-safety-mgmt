@@ -112,8 +112,14 @@ export function defaultHvCircuits(): HvCircuit[] {
 
 // 차단기 종류 → 기본 사용전압/측정치
 export function breakerDefaults(spec: string): { voltage: string; value: string } {
-  return /ELB/i.test(spec) ? { voltage: '220', value: '11' } : { voltage: '380/220', value: '999' };
+  if (!/ELB/i.test(spec)) return { voltage: '380/220', value: '999' };
+  // 3·4극 누전차단기(저압 수전 현장의 디스펜서·파워뱅크 간선)는 3상 380/220
+  return { voltage: /ELB\D*[34]P/i.test(spec) ? '380/220' : '220', value: '11' };
 }
+
+// 저압 수전(380V) 현장: 변압기가 없고 한전 공급 계통(수전 분전함)별로 측정한다.
+//  transformers[].kva 에 계통별 수전용량(kW)을 넣어 쓴다 (별지7·전원품질·측정개소가 계통 수만큼 생김)
+export const isLowVoltage = (sp: Pick<AnnualSpec, 'supply_voltage'>) => sp.supply_voltage > 0 && sp.supply_voltage < 1000;
 
 export function emptySpec(): AnnualSpec {
   return {

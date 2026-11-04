@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getRouteUser } from '@/lib/supabase/route-user';
 import { buildAnnualXlsx } from '@/lib/excel/annualBuild';
 import { normalizeXlsx, detectSheetMeta } from '@/lib/excel/normalize';
-import type { AnnualSpec } from '@/lib/annual/spec';
+import { isLowVoltage, type AnnualSpec } from '@/lib/annual/spec';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -50,9 +50,10 @@ export async function POST(req: NextRequest) {
     if ('error' in a) return a.error;
     const { sb, user, station } = a;
 
-    // 고압 연차 기본틀 (public/templates — 내린천휴게소 연차 양식 기반)
+    // 연차 기본틀 (public/templates) — 고압: 내린천휴게소 연차 양식 / 저압(380V 수전): 선산휴게소 연차 양식 기반
     const origin = req.nextUrl.origin || process.env.NEXT_PUBLIC_APP_URL;
-    const baseRes = await fetch(`${origin}/templates/annual_base_high.xlsx`);
+    const baseName = isLowVoltage(spec) ? 'annual_base_low.xlsx' : 'annual_base_high.xlsx';
+    const baseRes = await fetch(`${origin}/templates/${baseName}`);
     if (!baseRes.ok) throw new Error('연차 기본 양식을 불러오지 못했습니다');
     const base = await baseRes.arrayBuffer();
 
