@@ -1,8 +1,8 @@
 // ============================================================
 // app/api/annual/extract/route.ts
 // 도면(PDF) → AI(Claude)가 현장 설비를 읽어 연차 양식 사양(AnnualSpec) 초안을 만든다.
-//  · 요청: { station_id, storage_path }  (브라우저가 templates 버킷에 직접 올린 PDF)
-//          또는 { station_id, pdf_base64 } (작은 파일 직접 전송)
+//  · 요청: { station_id, storage_paths[] }  (브라우저가 templates 버킷에 직접 올린 PDF, 여러 개 가능)
+//          또는 { station_id, pdf_base64s[] } (작은 파일 직접 전송)
 //  · 응답: { spec, notes }  → 화면에서 사용자가 검토·수정 후 /api/annual/build 로 생성
 // ============================================================
 import { NextRequest, NextResponse } from 'next/server';
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json({ error: 'AI 키(ANTHROPIC_API_KEY)가 서버에 설정되지 않았습니다' }, { status: 503 });
     }
-    const { station_id, storage_path, pdf_base64, breaker_prefix = '2' } = await req.json();
+    const { station_id, storage_path, storage_paths, pdf_base64, pdf_base64s, breaker_prefix = '2' } = await req.json();
     if (!station_id) return NextResponse.json({ error: '충전소를 선택하세요' }, { status: 400 });
 
     const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -91,20 +91,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '본인 관리구역의 충전소만 사용할 수 있습니다' }, { status: 403 });
     }
 
-    // PDF 확보
-    let b64: string;
-    if (storage_path) {
-      if (!String(storage_path).startsWith(`${station_id}/`)) return NextResponse.json({ error: '잘못된 파일 경로' }, { status: 400 });
-      const { data: dl, error } = await sb.storage.from('templates').download(storage_path);
+    // PDF 확보 (변압기별로 도면이 나뉜 현장이 있어 여러 개 허용)
+    const paths: string[] = Array.isArray(storage_paths) ? storage_paths : storage_path ? [storage_path] : [];
+    const inline: string[] = Array.isArray(pdf_base64s) ? pdf_base64s : pdf_base64 ? [pdf_base64] : [];
+    const docs: string[] = [];
+    let total = 0;
+    for (const p of paths) {
+      if (!String(p).startsWith(`${station_id}/`)) return NextResponse.json({ error: '잘못된 파일 경로' }, { status: 400 });
+      const { data: dl, error } = await sb.storage.from('templates').download(p);
       if (error || !dl) throw new Error(`도면 파일을 찾을 수 없습니다: ${error?.message || ''}`);
       const buf = Buffer.from(await dl.arrayBuffer());
-      if (buf.length > MAX_PDF_BYTES) return NextResponse.json({ error: '도면 PDF는 25MB 이하로 올려 주세요' }, { status: 400 });
-      b64 = buf.toString('base64');
-    } else if (pdf_base64) {
-      b64 = String(pdf_base64).replace(/^data:application\/pdf;base64,/, '');
-    } else {
-      return NextResponse.json({ error: '도면 PDF가 없습니다' }, { status: 400 });
+      total += buf.length;
+      docs.push(buf.toString('base64'));
     }
+    for (const b of inline) { const d = String(b).replace(/^data:application\/pdf;base64,/, ''); total += d.length * 0.75; docs.push(d); }
+    if (!docs.length) return NextResponse.json({ error: '도면 PDF가 없습니다' }, { status: 400 });
+    if (total > MAX_PDF_BYTES) return NextResponse.json({ error: '도면 PDF는 합쳐서 25MB 이하로 올려 주세요' }, { status: 400 });
 
     const client = new Anthropic();
     const response = await client.beta.messages.parse({
@@ -116,8 +118,14 @@ export async function POST(req: NextRequest) {
       messages: [{
         role: 'user',
         content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } },
-          { type: 'text', text: PROMPT },
+          ...docs.map((data, i) => ({
+            type: 'document' as const,
+            source: { type: 'base64' as const, media_type: 'application/pdf' as const, data },
+            title: `도면 ${i + 1}`,
+          })),
+          { type: 'text', text: (docs.length > 1 ? `도면 PDF ${docs.length}개가 한 충전소의 도면입니다(변압기·계통별로 나뉜 경우). 모두 합쳐 한 현장의 설비로 정리하세요.
+
+` : '') + PROMPT },
         ],
       }],
     });

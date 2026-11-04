@@ -43,7 +43,7 @@ export default function AnnualBuilderPage() {
   const [stationId, setStationId] = useState('');
   const [spec, setSpec] = useState<AnnualSpec | null>(null);
   const [savedSpec, setSavedSpec] = useState<AnnualSpec | null>(null);
-  const [pdf, setPdf] = useState<File | null>(null);
+  const [pdfs, setPdfs] = useState<File[]>([]);
   const [prefix, setPrefix] = useState('2');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
@@ -69,16 +69,23 @@ export default function AnnualBuilderPage() {
   const upd = (fn: (s: AnnualSpec) => void) => setSpec((prev) => { if (!prev) return prev; const n = structuredClone(prev); fn(n); return n; });
 
   const analyze = async () => {
-    if (!stationId || !pdf) return;
-    if (pdf.size > 25 * 1024 * 1024) { setMsg('❌ 도면 PDF는 25MB 이하로 올려 주세요'); return; }
+    if (!stationId || !pdfs.length) return;
+    const totalSize = pdfs.reduce((n, f) => n + f.size, 0);
+    if (totalSize > 25 * 1024 * 1024) { setMsg('❌ 도면 PDF는 합쳐서 25MB 이하로 올려 주세요'); return; }
     setBusy('도면 업로드 중…'); setMsg(''); setWarnings([]);
     try {
-      let body: Record<string, unknown> = { station_id: stationId, breaker_prefix: prefix };
-      const path = `${stationId}/drawing.pdf`;
-      const { error: upErr } = await sb.storage.from('templates').upload(path, pdf, { upsert: true, contentType: 'application/pdf' });
-      if (!upErr) body.storage_path = path;
-      else if (pdf.size <= 3 * 1024 * 1024) body.pdf_base64 = await fileToB64(pdf);
-      else throw new Error(`도면 업로드 실패: ${upErr.message}`);
+      const body: Record<string, unknown> = { station_id: stationId, breaker_prefix: prefix };
+      const paths: string[] = [];
+      let upFail = '';
+      for (let i = 0; i < pdfs.length; i++) {
+        const path = `${stationId}/drawing_${i + 1}.pdf`;
+        const { error: upErr } = await sb.storage.from('templates').upload(path, pdfs[i], { upsert: true, contentType: 'application/pdf' });
+        if (upErr) { upFail = upErr.message; break; }
+        paths.push(path);
+      }
+      if (!upFail) body.storage_paths = paths;
+      else if (totalSize <= 3 * 1024 * 1024) body.pdf_base64s = await Promise.all(pdfs.map(fileToB64));
+      else throw new Error(`도면 업로드 실패: ${upFail}`);
       setBusy('AI가 도면을 읽는 중… (1~3분 걸릴 수 있어요)');
       const r = await fetch('/api/annual/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({ error: `서버 응답 오류 (${r.status})` }));
@@ -143,15 +150,15 @@ export default function AnnualBuilderPage() {
               {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (연차양식 있음)' : ''}</option>)}
             </select>
           </label>
-          <label style={{ fontSize: 13 }}>도면 PDF
-            <input type="file" accept="application/pdf,.pdf" disabled={!!busy || !stationId} onChange={(e) => setPdf(e.target.files?.[0] || null)} style={{ ...inp, marginTop: 4 }} />
+          <label style={{ fontSize: 13 }}>도면 PDF (여러 개 선택 가능 — 변압기별 도면 등)
+            <input type="file" multiple accept="application/pdf,.pdf" disabled={!!busy || !stationId} onChange={(e) => setPdfs(Array.from(e.target.files || []))} style={{ ...inp, marginTop: 4 }} />
           </label>
           <label style={{ fontSize: 13 }}>차단기 표기 앞 번호
             <input value={prefix} onChange={(e) => setPrefix(e.target.value)} style={{ ...inp, marginTop: 4 }} placeholder="예: 2 → 2MCCB4P350A" disabled={!!busy} />
           </label>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button style={{ ...primary, opacity: !stationId || !pdf || busy ? 0.5 : 1 }} disabled={!stationId || !pdf || !!busy} onClick={analyze}>🤖 도면 분석</button>
+          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={analyze}>🤖 도면 분석{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
           <button style={btn} disabled={!stationId || !!busy} onClick={startManual}>✏️ 도면 없이 직접 입력</button>
           {savedSpec && <button style={btn} disabled={!!busy} onClick={() => { setSpec(structuredClone(savedSpec)); setMsg('이전에 등록한 설비 내용을 불러왔습니다.'); }}>📂 이전 등록 내용 불러오기</button>}
         </div>
