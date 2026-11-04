@@ -47,14 +47,14 @@ function ymd(d: string) {
   const [y, m, day] = d.split('-');
   return { yyyy: y, yy: y.slice(2), m: String(+m), mm: m, d: String(+day), dd: day, int: +d.replace(/-/g, '') };
 }
-function xmlEsc(s: string) {
+export function xmlEsc(s: string) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-function colToNum(col: string) { let n = 0; for (const ch of col) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
+export function colToNum(col: string) { let n = 0; for (const ch of col) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
 function refParts(ref: string) { const m = ref.match(/^([A-Z]+)(\d+)$/)!; return { col: m[1], colN: colToNum(m[1]), row: +m[2] }; }
 
 // ── 셀 하나의 값을 교체(없으면 삽입). 기존 s= 스타일 보존 ──
-function setCell(xml: string, ref: string, value: any, isNum: boolean): string {
+export function setCell(xml: string, ref: string, value: any, isNum: boolean): string {
   const { row } = refParts(ref);
   const cellRe = new RegExp(`<c r="${ref}"([^>]*?)(/>|>[\\s\\S]*?</c>)`);
   const inner = isNum
@@ -94,7 +94,7 @@ function setCell(xml: string, ref: string, value: any, isNum: boolean): string {
 }
 
 // ── sharedStrings 파싱 (인덱스→텍스트) ──
-function parseShared(ss: string): string[] {
+export function parseShared(ss: string): string[] {
   const out: string[] = [];
   for (const si of ss.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
     const texts = [...si[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(t => t[1]);
@@ -149,10 +149,10 @@ function fillHeaderDateNumbers(xml: string, shared: string[], date: string): str
 function num(v: any) { return v !== '' && v !== null && v !== undefined && !isNaN(Number(v)) ? Number(v) : null; }
 
 // 컬럼 번호(1-base) → 문자 (8 → "H", 31 → "AE")
-function numToCol(n: number): string { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
+export function numToCol(n: number): string { let s = ''; while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); } return s; }
 
 // 셀 내용만 비우고 스타일(s=)은 보존 (병합/테두리 유지). 없으면 그대로.
-function clearCell(xml: string, ref: string): string {
+export function clearCell(xml: string, ref: string): string {
   const cellRe = new RegExp(`<c r="${ref}"([^>]*?)(/>|>[\\s\\S]*?</c>)`);
   return xml.replace(cellRe, (_full, attrs) => {
     const s = (attrs.match(/\ss="\d+"/) || [''])[0];
@@ -216,7 +216,7 @@ function fillByeolji14(xml: string, shared: string[], d: FillData): string {
 }
 
 // 셀의 표시 문자열(공유문자열/인라인) — 라벨 판독용
-function cellText(xml: string, shared: string[], ref: string): string {
+export function cellText(xml: string, shared: string[], ref: string): string {
   const m = xml.match(new RegExp(`<c r="${ref}"([^>]*?)(?:/>|>([\\s\\S]*?)</c>)`));
   if (!m) return '';
   const inner = m[2] || '';
@@ -531,9 +531,10 @@ function fillByeolji2(xml: string, shared: string[], d: FillData): string {
 //  → "전원품질 전압/전류 = 별지1 값" 요구 반영(별지1에 입력하면 전원품질에 자동 반영).
 function fillPowerQuality(xml: string, shared: string[], d: FillData): string {
   const trRows: number[] = [];
-  for (const m of xml.matchAll(/<c r="A(\d+)"[^>]*?t="s"[^>]*?><v>(\d+)<\/v>/g)) {
-    const txt = shared[+m[2]] || '';
-    if (/KVA|KVＡ|TR/i.test(txt)) trRows.push(+m[1]);
+  // 공유문자열(t="s")·인라인문자열(도면→연차양식 생성기가 쓴 셀) 모두 인식
+  for (const m of xml.matchAll(/<c r="A(\d+)"[^>]*?t="(?:s|inlineStr)"/g)) {
+    const txt = cellText(xml, shared, `A${m[1]}`);
+    if (/KVA|KVＡ|TR/i.test(txt) && !trRows.includes(+m[1])) trRows.push(+m[1]);
   }
   trRows.sort((a, b) => a - b);
   (d.measure_sets || []).forEach((set, k) => {
@@ -588,7 +589,7 @@ function deBloatSheet(xml: string): string {
 
 // 드로잉에서 임베드 이미지(<xdr:pic>)를 포함한 앵커를 제거 → 기본 사진 공란화.
 // 도형(<xdr:sp>: 격자/타원 등)은 보존한다. (앵커는 중첩되지 않으므로 lazy 매칭 안전)
-function removeDrawingPics(dx: string): string {
+export function removeDrawingPics(dx: string): string {
   // 사진(<xdr:pic ...>) 또는 이미지 채우기(<a:blip>)를 가진 앵커를 제거.
   // 주의: 양식에 따라 <xdr:pic> 에 속성이 붙어 있어(<xdr:pic macro="">) 정확 문자열 매칭은 누락된다.
   // 종별 타원 등 이미지 없는 도형 앵커는 보존된다.
@@ -607,7 +608,7 @@ function moveTitleEllipse(dx: string, from: { col: number; colOff: number }, to:
 }
 
 // 시트에 연결된 드로잉 파트 경로
-async function sheetDrawingPath(zip: JSZip, sheetPath: string): Promise<string | null> {
+export async function sheetDrawingPath(zip: JSZip, sheetPath: string): Promise<string | null> {
   const sx = await zip.file(sheetPath)?.async('string'); if (!sx) return null;
   const dm = sx.match(/<drawing r:id="([^"]+)"/); if (!dm) return null;
   const relsPath = sheetPath.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
@@ -620,7 +621,7 @@ async function sheetDrawingPath(zip: JSZip, sheetPath: string): Promise<string |
 // 사진 앵커 제거 후, 어떤 드로잉에서도 더 이상 참조되지 않는 이미지 관계·파일을 삭제한다.
 // → 사진이 화면에서 사라질 뿐 아니라 파일 안에서도 완전히 제거되어 용량이 줄어든다.
 //   (다른 별지의 실제 사용 중인 이미지는 참조가 남아 있으므로 보존된다.)
-async function gcMedia(zip: JSZip) {
+export async function gcMedia(zip: JSZip) {
   const usedMedia = new Set<string>();
   const drawingRelsPaths = Object.keys(zip.files).filter((n) => /^xl\/drawings\/_rels\/drawing\d+\.xml\.rels$/.test(n));
   for (const relsP of drawingRelsPaths) {
