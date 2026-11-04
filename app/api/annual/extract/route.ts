@@ -109,7 +109,8 @@ export async function POST(req: NextRequest) {
     if (total > MAX_PDF_BYTES) return NextResponse.json({ error: '도면 PDF는 합쳐서 25MB 이하로 올려 주세요' }, { status: 400 });
 
     const client = new Anthropic();
-    const response = await client.beta.messages.parse({
+    // 도면은 응답이 길어 SDK가 비스트리밍 요청을 거부 → 스트리밍으로 받고 최종 메시지(파싱 결과 포함)를 사용
+    const stream = client.beta.messages.stream({
       model: 'claude-opus-5',
       max_tokens: 32000,
       betas: ['server-side-fallback-2026-07-01'],
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
         ],
       }],
     });
+    const response = await stream.finalMessage();
     const x = response.parsed_output;
     if (response.stop_reason === 'refusal' || !x) {
       return NextResponse.json({ error: 'AI가 도면 분석 결과를 반환하지 않았습니다' }, { status: 502 });
