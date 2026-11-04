@@ -223,11 +223,12 @@ function fillInsulation(xml: string, shared: string[], panels: Panel[], warnings
   const pages = insulPages();
   for (const p of pages) xml = clearRange(xml, 'A', 'L', p.r1, p.r2);
   // 데이터 칸 서식 통일: 원본 양식은 행마다 글꼴 크기가 섞여 있고(빨간 글씨 칸) 2페이지 이후엔 테두리가 없다
-  //  → 1페이지 9행(차단기 행) 서식을 모든 페이지 데이터 행에 적용
+  //  → 1페이지 9행(차단기 행) 서식을 "실제로 쓰는 페이지"의 데이터 행에 적용 (안 쓰는 페이지는 그대로 둠)
   const proto = rowCells(xml, 9).filter((c) => colToNum(c.col) <= 12);
-  if (proto.length) {
-    for (const p of pages) for (let r = p.r1; r <= p.r2; r++) for (const c of proto) xml = setStyle(xml, `${c.col}${r}`, c.s);
-  }
+  const styleUsedPages = (n: number) => {
+    if (!proto.length) return;
+    for (const p of pages.slice(0, n)) for (let r = p.r1; r <= p.r2; r++) for (const c of proto) xml = setStyle(xml, `${c.col}${r}`, c.s);
+  };
   const slots = pages.flatMap((p, pi) => [
     { page: pi, cols: ['A', 'B', 'C', 'D', 'E', 'F'], r1: p.r1, r2: p.r2 },
     { page: pi, cols: ['G', 'H', 'I', 'J', 'K', 'L'], r1: p.r1, r2: p.r2 },
@@ -243,7 +244,7 @@ function fillInsulation(xml: string, shared: string[], panels: Panel[], warnings
     const lines: unknown[][] = [[pn.name], ...pn.breakers.map((b) => [b.spec, b.voltage, 0.2, b.value, '적합', b.remark])];
     let first = true;
     while (lines.length) {
-      if (si >= slots.length) { warnings.push('절연저항 표가 8페이지를 넘어 일부 차단기가 빠졌습니다'); return xml; }
+      if (si >= slots.length) { warnings.push('절연저항 표가 8페이지를 넘어 일부 차단기가 빠졌습니다'); styleUsedPages(usedPages); return xml; }
       const s = slots[si];
       const left = s.r2 - row + 1;
       // 블록이 남은 칸에 안 들어가면 다음 칸으로(빈 칸이 아닐 때만). 칸 하나보다 크면 나눠 쓴다.
@@ -253,6 +254,7 @@ function fillInsulation(xml: string, shared: string[], panels: Panel[], warnings
       first = false;
     }
   }
+  styleUsedPages(usedPages);
   // 2페이지 이상 쓰면 제목·머리글(1페이지 2~7행, 날짜행 4 제외)을 복사
   if (usedPages > 1) {
     const hdrRefs = [...xml.matchAll(/<c r="([A-Z]+)([2-7])"[^>]*?t="s"[^>]*?><v>(\d+)<\/v>/g)];
