@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from '@/components/inspection/ThermalPhotos';
-import { Thermometer, Download, HardDriveDownload, Trash2, X, Save, Loader2, Smartphone } from 'lucide-react';
+import { Thermometer, Download, HardDriveDownload, Trash2, X, Save, Loader2, Smartphone, FileCheck2 } from 'lucide-react';
 
 // 열화상 기능 도입일 — 이전에 생성된 점검은 '열화상 대기' 표시를 하지 않음
 const THERMAL_SINCE = '2026-09-15';
@@ -31,6 +31,12 @@ export default function HistoryPage() {
     const PAGE_SIZE = 50;
     // 별지7 열화상 나중에 추가 (현장에선 사진 없이 생성 → 노트북에서 반영)
     const [thermalItem, setThermalItem] = useState<any>(null);
+    // 필증 대체(정기검사·사용전검사를 받은 개소)
+    const [certItem, setCertItem] = useState<any>(null);
+    const [certKind, setCertKind] = useState<'정기검사' | '사용전검사'>('사용전검사');
+    const [certDate, setCertDate] = useState('');
+    const [certFile, setCertFile] = useState<File | null>(null);
+    const [certBusy, setCertBusy] = useState(false);
     const [thermalSaving, setThermalSaving] = useState(false);
     const thermalApi = useThermalPanels();
     useEffect(() => { setIsDesktop('showDirectoryPicker' in window); }, []);
@@ -364,6 +370,61 @@ export default function HistoryPage() {
         } finally { setSavingId(null); }
   };
 
+    // ── 필증 대체 ──
+    const openCert = (item: any) => {
+      const c = item.measure_values?.certificate;
+      setCertKind(c?.kind || '사용전검사'); setCertDate(c?.date || ''); setCertFile(null); setCertItem(item);
+    };
+    // 사진 필증은 서버 한도(약 4.5MB) 안으로 줄여서 보냄
+    const shrinkImage = (f: File) => new Promise<File>((resolve) => {
+      if (!f.type.startsWith('image/') || f.size < 2.5 * 1024 * 1024) return resolve(f);
+      const img = new Image(); const url = URL.createObjectURL(f);
+      img.onload = () => {
+        const k = Math.min(1, 2400 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
+        c.toBlob((b) => { URL.revokeObjectURL(url); resolve(b ? new File([b], f.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' }) : f); }, 'image/jpeg', 0.85);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(f); };
+      img.src = url;
+    });
+    const submitCert = async () => {
+      const item = certItem; if (!item) return;
+      if (!certDate) { alert('검사일을 넣어 주세요.'); return; }
+      if (!certFile) { alert('필증 파일을 골라 주세요.'); return; }
+      const file = await shrinkImage(certFile);
+      if (file.size > 4.3 * 1024 * 1024) { alert('필증 파일이 너무 큽니다 (4MB 이하). PDF를 줄이거나 사진으로 올려 주세요.'); return; }
+      setCertBusy(true);
+      try {
+        const fd = new FormData();
+        fd.append('inspection_id', item.id); fd.append('kind', certKind); fd.append('date', certDate); fd.append('file', file);
+        const res = await fetch('/api/inspection/certificate', { method: 'POST', body: fd });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(r.error || `HTTP ${res.status}`);
+        const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
+        setItems(prev => prev.map(it => it.id === item.id ? updated : it));
+        if (isDesktop) {
+          await saveOneToPc(updated);   // 문구가 들어간 엑셀로 PC 파일 교체
+          // 필증 파일도 같은 점검 폴더에 저장
+          try {
+            const handle = await getStationFolder(updated);
+            if (handle && (await handle.queryPermission({ mode: 'readwrite' })) === 'granted') {
+              const dateNum = (updated.inspection_date || '').replace(/-/g, '');
+              const stName = updated.station?.name || updated.station?.base_name || 'unknown';
+              const sub = await handle.getDirectoryHandle(`${dateNum}_${stName}_${updated.inspection_type}`, { create: true });
+              const ext = (file.name.match(/\.([a-z0-9]+)$/i)?.[1] || 'pdf').toLowerCase();
+              const fh = await sub.getFileHandle(`필증_${certKind}_${certDate.replace(/-/g, '')}.${ext}`, { create: true });
+              const w = await fh.createWritable(); await w.write(file); await w.close();
+            }
+          } catch { /* 필증 PC 저장은 실패해도 서버에는 보관됨 */ }
+        } else {
+          alert('필증 대체를 반영했습니다. 목록의 내려받기 버튼으로 새 파일을 받을 수 있습니다.');
+        }
+        setCertItem(null);
+      } catch (e: any) { alert('필증 대체를 반영하지 못했습니다.\n' + e.message); }
+      finally { setCertBusy(false); }
+    };
+
     // ── 열화상 추가 ──
     const thermalPanelCount = (item: any) =>
       Math.max(1, item?.measure_values?.sets?.length || 0, item?.station?.panel_count || 0);
@@ -418,6 +479,38 @@ export default function HistoryPage() {
 
   return (
         <div className="page-pad" style={{padding: '28px 32px 60px'}}>
+          {certItem && (
+            <div onClick={() => !certBusy && setCertItem(null)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '60px 16px' }}>
+              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>필증으로 대체</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{certItem.station?.name}, {certItem.inspection_type}점검, {certItem.inspection_date}</div>
+                  </div>
+                  <button onClick={() => setCertItem(null)} disabled={certBusy} aria-label="닫기" style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '12px 0 16px', lineHeight: 1.6 }}>
+                  정기검사나 사용전검사를 받아 열화상·접지 측정을 하지 않은 점검입니다. 점검표는 그대로 두고 별지7, 접지저항, 종합의견에 "필증으로 대체" 문구를 넣고 필증 파일을 함께 보관합니다.
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                  {(['사용전검사', '정기검사'] as const).map(k => (
+                    <button key={k} type="button" onClick={() => setCertKind(k)} style={{ flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1px solid ${certKind === k ? 'var(--accent)' : 'var(--border)'}`, background: certKind === k ? 'var(--accent-soft)' : 'var(--bg-card)', color: certKind === k ? 'var(--accent)' : 'var(--text-secondary)' }}>{k}</button>
+                  ))}
+                </div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>검사일</label>
+                <input type="date" className="toss-input" value={certDate} onChange={e => setCertDate(e.target.value)} style={{ marginBottom: 14 }} />
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>필증 파일 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(PDF 또는 사진)</span></label>
+                <input type="file" accept="application/pdf,.pdf,image/*" onChange={e => setCertFile(e.target.files?.[0] || null)} style={{ marginBottom: 6, fontSize: 13 }} />
+                {certItem.measure_values?.certificate && (
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6 }}>이미 반영됨: {certItem.measure_values.certificate.kind}, {certItem.measure_values.certificate.date} (<a href={certItem.measure_values.certificate.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>필증 보기</a>). 다시 반영하면 바뀝니다.</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                  <button onClick={() => setCertItem(null)} disabled={certBusy} style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>취소</button>
+                  <button onClick={submitCert} disabled={certBusy || !certDate || !certFile} className="btn-primary" style={{ flex: 2, padding: 12, fontSize: 14 }}>{certBusy ? <><Loader2 size={16} className="spin" /> 반영하는 중</> : '점검표에 반영'}</button>
+                </div>
+              </div>
+            </div>
+          )}
           {thermalItem && (
             <div onClick={closeThermal} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
               <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 900, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
@@ -487,7 +580,7 @@ export default function HistoryPage() {
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
-                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 220px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
+                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 256px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
                                 <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                 <div>충전소</div><div>종류</div><div>점검일</div><div>점검자</div><div>파일</div><div></div>
                       </div>
@@ -498,7 +591,7 @@ export default function HistoryPage() {
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-tertiary)'}}>점검 기록이 없습니다.</div>
                   ) : (
                     visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'8px 20px',fontWeight:600,fontSize:12,color:'var(--text-tertiary)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,4)}년 {Number((item.created_at||'').slice(5,7))}월에 만듦</div>)}
-                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 220px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
+                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 256px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
                                               <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
@@ -514,7 +607,10 @@ export default function HistoryPage() {
                                               <div>{item.inspector_name}</div>
                                               <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>
                                                 {item.file_name}
-                                                {item.inspection_type !== '월차' && !item.measure_values?.thermal && (item.created_at || '') >= THERMAL_SINCE && (
+                                                {item.measure_values?.certificate && (
+                                        <a href={item.measure_values.certificate.url} target="_blank" rel="noopener noreferrer" title={`${item.measure_values.certificate.kind} ${item.measure_values.certificate.date} 필증 보기`} style={{marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--positive-soft)', color: 'var(--positive)', textDecoration: 'none'}}>{item.measure_values.certificate.kind} 필증</a>
+                                                              )}
+                                                {item.inspection_type !== '월차' && !item.measure_values?.thermal && !item.measure_values?.certificate && (item.created_at || '') >= THERMAL_SINCE && (
                                         <span style={{marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--warning-soft)', color: 'var(--warning)'}}>열화상 없음</span>
                                                               )}
                                                 {item.measure_values?.local_deleted && (
@@ -526,7 +622,10 @@ export default function HistoryPage() {
                                         <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 9px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, lineHeight: 1, whiteSpace: 'nowrap' }}>{savingId === item.id ? <Loader2 size={13} className="spin" /> : <><Save size={13} />PC 저장</>}</button>
                                                               )}
                                                 {item.inspection_type !== '월차' && item.file_path && (
-                                        <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
+                                        <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
+                                                              )}
+                                                {item.inspection_type !== '월차' && item.file_path && (
+                                        <button onClick={() => openCert(item)} title={item.measure_values?.certificate ? '필증 대체 고치기' : '정기검사·사용전검사 필증으로 대체'} style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.certificate ? 'var(--positive)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', lineHeight: 0 }}><FileCheck2 size={15} /></button>
                                                               )}
                                                 {item.file_path && (
                                         <a href={item.file_path} download={item.file_name} title="엑셀 내려받기" style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', lineHeight: 0 }}><Download size={15} /></a>
