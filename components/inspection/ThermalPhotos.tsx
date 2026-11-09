@@ -307,12 +307,15 @@ export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typ
             </>
           )}
           {api.canPickFolder && (
-            <button onClick={() => api.addFolder(idx)} disabled={th?.busy} style={pickBtn} title="폴더를 고르면 저장 후 사진이 점검 폴더로 옮겨집니다 (원본 삭제)"><FolderOpen size={14} /> 폴더 선택</button>
+            <button onClick={() => api.addFolder(idx)} disabled={th?.busy} style={pickBtn} title="사진이 든 폴더를 고르면, 반영 후 사진이 점검 폴더로 옮겨지고 원래 폴더에서는 지워집니다"><FolderOpen size={14} /> 사진 폴더 선택</button>
           )}
-          <label style={{ ...pickBtn, background: api.canPickFolder ? 'var(--bg-card)' : 'var(--accent)', color: api.canPickFolder ? 'var(--accent)' : '#fff', border: api.canPickFolder ? '1px solid var(--accent)' : 'none' }} title="파일로 고르면 점검 폴더에 복사만 됩니다 (원본 유지)">
-            <Camera size={14} /> 사진 선택
-            <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { api.addFiles(idx, e.target.files); e.target.value = ''; }} />
-          </label>
+          {/* PC: 폴더 선택만 사용(저장 후 원본 삭제 = 이동). 휴대폰 등 폴더 선택이 안 되는 환경만 사진 선택 */}
+          {!api.canPickFolder && (
+            <label style={pickBtn} title="사진을 고릅니다">
+              <Camera size={14} /> 사진 선택
+              <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { api.addFiles(idx, e.target.files); e.target.value = ''; }} />
+            </label>
+          )}
         </div>
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
@@ -320,7 +323,7 @@ export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typ
         {', '}<a href="/guide" style={{ color: 'var(--accent)' }}>사용 방법</a>
       </div>
       {idx === 0 && <StationPartsEditor api={api} />}
-      {th?.status && <Status msg={th.status + (th.source?.length ? ` 폴더에서 고른 ${th.source.length}장은 저장할 때 옮겨집니다.` : '')} style={{ fontSize: 13, marginTop: 8 }} />}
+      {th?.status && <Status msg={th.status + (th.source?.length ? ` 사진 ${th.source.length}장은 반영할 때 점검 폴더로 옮기고 원래 폴더에서는 지웁니다.` : '')} style={{ fontSize: 13, marginTop: 8 }} />}
       {th?.skipped?.length ? <div style={{ fontSize: 11.5, marginTop: 4, color: 'var(--text-tertiary)' }}>제외한 파일 {th.skipped.length}개 (온도 데이터 없음 또는 짝 없음)</div> : null}
       {shots.length > 0 && (
         <>
