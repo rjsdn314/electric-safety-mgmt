@@ -307,19 +307,17 @@ export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typ
             </>
           )}
           {api.canPickFolder && (
-            <button onClick={() => api.addFolder(idx)} disabled={th?.busy} style={pickBtn} title="사진이 든 폴더를 고르면, 반영 후 사진이 점검 폴더로 옮겨지고 원래 폴더에서는 지워집니다"><FolderOpen size={14} /> 사진 폴더 선택</button>
+            <button onClick={() => api.addFolder(idx)} disabled={th?.busy} style={pickBtn} title="폴더 창에서 사진이 든 폴더를 열고 아래 [폴더 선택]을 누르세요. 반영 후 사진이 점검 폴더로 옮겨지고 원래 폴더에서는 지워집니다"><FolderOpen size={14} /> 폴더째 옮기기</button>
           )}
-          {/* PC: 폴더 선택만 사용(저장 후 원본 삭제 = 이동). 휴대폰 등 폴더 선택이 안 되는 환경만 사진 선택 */}
-          {!api.canPickFolder && (
-            <label style={pickBtn} title="사진을 고릅니다">
-              <Camera size={14} /> 사진 선택
-              <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { api.addFiles(idx, e.target.files); e.target.value = ''; }} />
-            </label>
-          )}
+          {/* 사진 고르기: 하나씩 고름(원본은 남음, 브라우저가 원본 삭제 권한을 주지 않음) / 폴더째 옮기기: 원본 이동 */}
+          <label style={api.canPickFolder ? { ...pickBtn, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)' } : pickBtn} title="사진을 하나씩 고릅니다. 원래 사진은 그대로 남습니다">
+            <Camera size={14} /> 사진 고르기
+            <input type="file" accept="image/jpeg,.jpg,.jpeg" multiple disabled={th?.busy} style={{ display: 'none' }} onChange={e => { api.addFiles(idx, e.target.files); e.target.value = ''; }} />
+          </label>
         </div>
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-        {low ? '저압: 전경 1장, 측정 3장 순서' : `부위: ${api.parts.map(p => p.name).join(', ')}`}
+        {api.canPickFolder ? '폴더째 옮기기: 폴더 창에서는 사진이 회색으로 보입니다. 사진이 든 폴더를 열고 [폴더 선택]을 누르면 됩니다. ' : ''}{low ? '저압: 전경 1장, 측정 3장 순서' : `부위: ${api.parts.map(p => p.name).join(', ')}`}
         {', '}<a href="/guide" style={{ color: 'var(--accent)' }}>사용 방법</a>
       </div>
       {idx === 0 && <StationPartsEditor api={api} />}
