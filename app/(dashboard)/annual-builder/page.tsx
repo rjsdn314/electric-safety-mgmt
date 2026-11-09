@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HIGH_TYPES, LOW_TYPES, buildPresetSpec, estimateChargers } from '@/lib/annual/presets';
 import { readDrawingPdf, reconcile } from '@/lib/annual/drawingRead';
+import { takePendingDrawings } from '@/lib/annual/pendingDrawings';
 import { Status } from '@/components/ui/Status';
 import Link from 'next/link';
 import { ChevronLeft } from 'lucide-react';
@@ -91,8 +92,11 @@ export default function AnnualBuilderPage() {
 
   const station = useMemo(() => stations.find((s) => s.station_id === stationId), [stations, stationId]);
   // 충전소의 수전전압으로 고압/저압 기본 선택 (관리구역에 등록한 값)
+  //  + 관리구역에서 충전소를 저장하며 도면을 함께 고른 경우: 도면을 띄우고 바로 읽기 시작
   useEffect(() => {
     if (station?.voltage) setLowMode(station.voltage < 1000);
+    const handed = station ? takePendingDrawings(station.station_id) : null;
+    if (handed?.length) { pickPdfs(handed); readDrawings(handed); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [station?.station_id]);
   const upd = (fn: (s: AnnualSpec) => void) => setSpec((prev) => { if (!prev) return prev; const n = structuredClone(prev); fn(n); return n; });
@@ -115,15 +119,16 @@ export default function AnnualBuilderPage() {
   };
 
   // 도면 글자를 브라우저 안에서 OCR로 읽어 변압기 용량·간선 차단기를 채운다 (무료)
-  const readDrawings = async () => {
-    if (!pdfs.length) return;
+  const readDrawings = async (given?: File[]) => {
+    const list = given || pdfs.map((p) => p.file);
+    if (!list.length) return;
     if (spec && !confirm('지금 입력한 내용을 도면에서 읽은 내용으로 덮어쓸까요?')) return;
     setMsg(''); setWarnings([]);
     try {
       const recs = [];
-      for (let i = 0; i < pdfs.length; i++) {
-        setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}). 처음 한 번은 조금 더 걸립니다.`);
-        const r = await readDrawingPdf(pdfs[i].file, prefix, (st) => setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}): ${st}`));
+      for (let i = 0; i < list.length; i++) {
+        setBusy(`도면 읽는 중 (${i + 1}/${list.length}). 처음 한 번은 조금 더 걸립니다.`);
+        const r = await readDrawingPdf(list[i], prefix, (st) => setBusy(`도면 읽는 중 (${i + 1}/${list.length}): ${st}`));
         recs.push({ read: r, rec: reconcile(r, prefix) });
       }
       const isLow = recs.filter((x) => x.read.low).length > recs.length / 2;
@@ -256,7 +261,7 @@ export default function AnnualBuilderPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={readDrawings}><ScanSearch size={15} /> 도면 읽어서 채우기{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
+          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={() => readDrawings()}><ScanSearch size={15} /> 도면 읽어서 채우기{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
           <button style={btn} disabled={!stationId || !!busy} onClick={applyPreset}><ListChecks size={15} /> 고른 구성으로 채우기</button>
           <button style={btn} disabled={!stationId || !!busy} onClick={startManual}><FilePlus2 size={15} /> 빈 양식으로 시작</button>
           {savedSpec && <button style={btn} disabled={!!busy} onClick={() => { setSpec(structuredClone(savedSpec)); setMsg('이전에 등록한 설비 내용을 불러왔습니다.'); }}><History size={15} /> 이전 등록 내용</button>}

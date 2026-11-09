@@ -9,7 +9,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle, DraftingCompass } from 'lucide-react';
 import Link from 'next/link';
 import TemplateManager from '@/components/admin/TemplateManager';
-import { Search } from 'lucide-react';
+import { Search, FileText } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { setPendingDrawings } from '@/lib/annual/pendingDrawings';
 
 export default function StationUploadPage() {
   const { profile } = useAuth();
@@ -42,7 +44,14 @@ export default function StationUploadPage() {
   const [justAdded, setJustAdded] = useState<{ id: string; name: string } | null>(null);
   // 화면 탭: 충전소 목록 / 충전소 추가 / 양식 엑셀 올리기  (?tab=add|forms 로 바로 열기)
   const [tab, setTab] = useState<'list' | 'add' | 'forms'>('list');
+  const router = useRouter();
+  const [addPdfs, setAddPdfs] = useState<File[]>([]);   // 충전소와 함께 올릴 설계도면(선택)
+  const addPdfRef = useRef<HTMLInputElement>(null);
   const [formFilter, setFormFilter] = useState<'all' | 'full' | 'partial' | 'none'>('all');
+  // 관리자: 내 현장(내가 등록 + 소유자 미지정) / 전체 회원 현장
+  const [me, setMe] = useState('');
+  const [isAdminView, setIsAdminView] = useState(false);
+  const [onlyMine, setOnlyMine] = useState(true);
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'add' || t === 'forms') setTab(t);
@@ -92,7 +101,7 @@ export default function StationUploadPage() {
     try {
       const res = await fetch('/api/stations/list', { method: 'GET' });
       const data = await res.json();
-      if (res.ok && data.success) setStations(data.stations || []);
+      if (res.ok && data.success) { setStations(data.stations || []); setMe(data.me || ''); setIsAdminView(!!data.is_admin); }
       else setStations([]);
     } catch (e) { setStations([]); } finally { setListLoading(false); }
     try {
@@ -131,6 +140,13 @@ export default function StationUploadPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '추가 실패');
       setForm({ ...emptyForm });
+      // 도면을 같이 골랐으면 저장 직후 도면 화면으로 넘어가 바로 읽기 시작
+      if (data.station?.id && addPdfs.length) {
+        setPendingDrawings(data.station.id, addPdfs);
+        setAddPdfs([]);
+        router.push(`/annual-builder?station=${data.station.id}`);
+        return;
+      }
       if (data.station?.id) setJustAdded({ id: data.station.id, name: data.station.name });
       await loadStations();
     } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
@@ -232,13 +248,13 @@ export default function StationUploadPage() {
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ margin: '0 0 4px' }}>관리구역</h1>
         <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>
-          충전소 정보와 점검 양식을 한곳에서 관리합니다. 충전소마다 점검 양식이 있어야 분기, 반기, 연차 점검표가 맞게 만들어집니다.
+          충전소를 먼저 저장하고 설계도면을 올리면 점검 양식이 만들어집니다. 이 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.
         </p>
       </div>
 
       {/* 탭 */}
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
-        {([['list', `충전소 ${stations.length ? stations.length : ''}`], ['add', '충전소 추가'], ['forms', '양식 엑셀 올리기']] as const).map(([k, label]) => (
+        {([['list', '충전소'], ['add', '충전소 추가'], ...(tab === 'forms' ? [['forms', '양식 엑셀 올리기']] as const : [])] as const).map(([k, label]) => (
           <button key={k} onClick={() => switchTab(k)} style={{
             padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14,
             fontWeight: tab === k ? 600 : 500, color: tab === k ? 'var(--accent)' : 'var(--text-secondary)',
@@ -290,14 +306,26 @@ export default function StationUploadPage() {
           </div>
         </div>
         {addErr && (<div className="status err" style={{ marginTop: 12, fontSize: 13 }}><XCircle size={15} /> {addErr}</div>)}
+        {/* 설계도면 (선택): 있으면 저장 후 바로 도면을 읽어 점검 양식을 만든다 */}
+        <div style={{ marginTop: 14 }}>
+          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>설계도면 PDF <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(있으면 저장 후 바로 점검 양식을 만듭니다. 나중에 올려도 됩니다)</span></label>
+          <div onClick={() => addPdfRef.current?.click()} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 8, border: `1px dashed ${addPdfs.length ? 'var(--accent)' : 'var(--border-hover)'}`, background: addPdfs.length ? 'var(--accent-soft)' : 'var(--bg-elevated)', cursor: 'pointer', fontSize: 13 }}>
+            <FileText size={16} color={addPdfs.length ? 'var(--accent)' : 'var(--text-tertiary)'} />
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: addPdfs.length ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
+              {addPdfs.length ? addPdfs.map((f) => f.name).join(', ') : '눌러서 도면 PDF 고르기 (변압기마다 도면이 따로 있으면 모두)'}
+            </span>
+            {addPdfs.length > 0 && <button type="button" onClick={(e) => { e.stopPropagation(); setAddPdfs([]); }} style={{ border: 'none', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12 }}>지우기</button>}
+            <input ref={addPdfRef} type="file" multiple accept="application/pdf,.pdf" style={{ display: 'none' }} onChange={(e) => { setAddPdfs(Array.from(e.target.files || [])); e.target.value = ''; }} />
+          </div>
+        </div>
         {justAdded && (
           <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: 'var(--positive-soft)', border: '1px solid rgba(31,138,91,.25)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <CheckCircle2 size={16} color="var(--positive)" style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 200 }}><b>{justAdded.name}</b>을(를) 추가했습니다. 이어서 설계도면으로 점검 양식을 만드세요. 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.</span>
-            <Link href={`/annual-builder?station=${justAdded.id}`} className="btn-primary" style={{ textDecoration: 'none', padding: '7px 12px', fontSize: 13 }}><DraftingCompass size={15} /> 점검 양식 만들기</Link>
+            <span style={{ flex: 1, minWidth: 200 }}><b>{justAdded.name}</b>을(를) 저장했습니다. 지금은 <b>도면 대기</b> 상태입니다. 도면이 생기면 충전소 목록의 [양식 만들기]로 올리세요.</span>
+            <Link href={`/annual-builder?station=${justAdded.id}`} className="btn-primary" style={{ textDecoration: 'none', padding: '7px 12px', fontSize: 13 }}><DraftingCompass size={15} /> 지금 도면 올리기</Link>
           </div>
         )}
-        <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: adding ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{adding ? <><Loader2 size={16} className="spin" /> 추가하는 중</> : <><Plus size={16} /> 추가</>}</button>
+        <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: adding ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{adding ? <><Loader2 size={16} className="spin" /> 저장하는 중</> : addPdfs.length ? <><Plus size={16} /> 저장하고 도면 읽기</> : <><Plus size={16} /> 저장</>}</button>
       </div>
 
       <div style={{ fontSize: 15, fontWeight: 700, margin: '4px 0 10px' }}>엑셀로 한꺼번에 추가</div>
@@ -450,10 +478,21 @@ export default function StationUploadPage() {
       <div>
         {(() => {
           const stateOf = (id: string) => formIds.has(id) ? 'full' : partialIds.has(id) ? 'partial' : 'none';
-          const cnt = (k: string) => k === 'all' ? stations.length : stations.filter(st => stateOf(st.id) === k).length;
+          const base = stations.filter(st => !isAdminView || !onlyMine || !st.user_id || st.user_id === me);
+          const cnt = (k: string) => k === 'all' ? base.length : base.filter(st => stateOf(st.id) === k).length;
           return (
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-              {([['all', '전체', ''], ['none', '양식 없음', 'var(--negative)'], ['partial', '분기 양식만', 'var(--warning)'], ['full', '양식 있음', 'var(--positive)']] as const).map(([k, label, color]) => (
+              {isAdminView && (
+                <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', marginRight: 6 }}>
+                  {([[true, '내 현장'], [false, '전체 회원']] as const).map(([v, label]) => (
+                    <button key={label} type="button" onClick={() => setOnlyMine(v)} style={{
+                      padding: '6px 12px', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      background: onlyMine === v ? 'var(--accent)' : 'var(--bg-card)', color: onlyMine === v ? '#fff' : 'var(--text-secondary)',
+                    }}>{label}</button>
+                  ))}
+                </div>
+              )}
+              {([['all', '전체', ''], ['none', '도면 대기', 'var(--negative)'], ['partial', '분기 양식만', 'var(--warning)'], ['full', '양식 있음', 'var(--positive)']] as const).map(([k, label, color]) => (
                 <button key={k} type="button" onClick={() => setFormFilter(k)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
                   border: `1px solid ${formFilter === k ? 'var(--accent)' : 'var(--border)'}`, background: formFilter === k ? 'var(--accent-soft)' : 'var(--bg-card)', color: formFilter === k ? 'var(--accent)' : 'var(--text-secondary)',
@@ -476,6 +515,7 @@ export default function StationUploadPage() {
           const stateOf = (id: string) => formIds.has(id) ? 'full' : partialIds.has(id) ? 'partial' : 'none';
           const order: Record<string, number> = { none: 0, partial: 1, full: 2 };
           const filtered = stations
+            .filter(st => !isAdminView || !onlyMine || !st.user_id || st.user_id === me)
             .filter(st => !q || (st.name || '').toLowerCase().includes(q))
             .filter(st => formFilter === 'all' || stateOf(st.id) === formFilter)
             .sort((x, y) => order[stateOf(x.id)] - order[stateOf(y.id)] || (x.name || '').localeCompare(y.name || '', 'ko'));
@@ -493,7 +533,7 @@ export default function StationUploadPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {st.name}
-                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : partialIds.has(st.id) ? 'var(--warning-soft)' : 'var(--negative-soft)', color: formIds.has(st.id) ? 'var(--positive)' : partialIds.has(st.id) ? 'var(--warning)' : 'var(--negative)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '점검 양식 없음'}</span>
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : partialIds.has(st.id) ? 'var(--warning-soft)' : 'var(--negative-soft)', color: formIds.has(st.id) ? 'var(--positive)' : partialIds.has(st.id) ? 'var(--warning)' : 'var(--negative)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '도면 대기'}</span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, st.custom_values?.default_type].filter(Boolean).join(', ')}</div>
                     </div>
@@ -547,6 +587,9 @@ export default function StationUploadPage() {
             </div>
           );
         })()}
+        <div style={{ marginTop: 18, fontSize: 13, color: 'var(--text-tertiary)', textAlign: 'center' }}>
+          도면 대신 가진 엑셀 양식을 그대로 써야 하는 경우에는 <button onClick={() => switchTab('forms')} style={{ border: 'none', background: 'none', padding: 0, color: 'var(--accent)', cursor: 'pointer', fontSize: 13 }}>양식 엑셀 올리기</button>를 쓰세요.
+        </div>
       </div>
       )}
 

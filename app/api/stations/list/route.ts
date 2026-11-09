@@ -32,7 +32,7 @@ export async function GET(_req: NextRequest) {
     const { data: stations, error } = await query;
     if (error) throw new Error(error.message);
 
-    return NextResponse.json({ success: true, stations: stations || [] });
+    return NextResponse.json({ success: true, stations: stations || [], me: user.id, is_admin: profile?.role === 'admin' });
   } catch (e: any) {
     console.error('[stations/list] error:', e);
     return NextResponse.json({ error: e.message }, { status: 500 });
