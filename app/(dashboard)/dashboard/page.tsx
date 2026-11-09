@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
-import { Plus, Download, ChevronRight } from 'lucide-react';
+import { Plus, Download, ChevronRight, ChevronLeft } from 'lucide-react';
 
 // ── 통계 카드 ──────────────────────────────────────
 function StatCard({ label, value, unit, color }: { label: string; value: string | number; unit?: string; color?: string }) {
@@ -42,6 +42,11 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   // 관리자 보기 대상: 'mine'(내 관리구역=본인+미지정) | 회원 id | 'all'(전체)
   const [viewOwner, setViewOwner] = useState<string>('mine');
+  // 보는 달 (기본: 이번 달). 이전 달 점검도 넘겨 볼 수 있다
+  const today = new Date();
+  const [ym, setYm] = useState({ y: today.getFullYear(), m: today.getMonth() + 1 });
+  const isThisMonth = ym.y === today.getFullYear() && ym.m === today.getMonth() + 1;
+  const shiftMonth = (d: number) => setYm(({ y, m }) => { const t = new Date(y, m - 1 + d, 1); return { y: t.getFullYear(), m: t.getMonth() + 1 }; });
 
   // 최초: 권한 확인 + 회원 목록(사이트를 가진 다른 회원) 로드
   useEffect(() => {
@@ -79,16 +84,22 @@ export default function DashboardPage() {
       setStations(list);
       const ids = list.map((s: any) => s.id);
       if (ids.length) {
+        // 고른 달의 점검만 불러온다 (YYYY-MM-01 이상, 다음 달 1일 미만)
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const next = new Date(ym.y, ym.m, 1);
+        const from = `${ym.y}-${pad(ym.m)}-01`;
+        const to = `${next.getFullYear()}-${pad(next.getMonth() + 1)}-01`;
         const { data: insps } = await sb.from('inspections').select('*')
-          .in('station_id', ids).order('inspection_date', { ascending: false }).limit(500);
+          .in('station_id', ids).gte('inspection_date', from).lt('inspection_date', to)
+          .order('inspection_date', { ascending: false }).limit(1000);
         const stMap = new Map(list.map((s: any) => [s.id, s]));
         setInspections((insps || []).map((i: any) => ({ ...i, station: stMap.get(i.station_id) })));
       } else { setInspections([]); }
     })();
-  }, [meId, isAdmin, viewOwner]);
+  }, [meId, isAdmin, viewOwner, ym.y, ym.m]);
 
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear  = new Date().getFullYear();
+  const currentMonth = ym.m;
+  const currentYear  = ym.y;
 
   const thisMonthDone = inspections.filter(i => {
     const d = new Date(i.inspection_date);
@@ -125,7 +136,13 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: '0 0 4px' }}>대시보드</h1>
-          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{currentYear}년 {currentMonth}월, {ownerLabel}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-secondary)' }}>
+            <button onClick={() => shiftMonth(-1)} aria-label="이전 달" style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ChevronLeft size={16} /></button>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', minWidth: 92, textAlign: 'center' }}>{currentYear}년 {currentMonth}월</span>
+            <button onClick={() => shiftMonth(1)} disabled={isThisMonth} aria-label="다음 달" style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: isThisMonth ? 'default' : 'pointer', opacity: isThisMonth ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><ChevronRight size={16} /></button>
+            {!isThisMonth && <button onClick={() => setYm({ y: today.getFullYear(), m: today.getMonth() + 1 })} style={{ border: 'none', background: 'none', color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>이번 달</button>}
+            <span style={{ marginLeft: 4 }}>{ownerLabel}</span>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isAdmin && (
@@ -145,20 +162,20 @@ export default function DashboardPage() {
       {/* 통계 */}
       <div className="dash-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
         <StatCard label="관리 충전소" value={stations.length} unit="개소" />
-        <StatCard label="이번달 점검" value={thisMonthDone} unit="건" />
-        <StatCard label="이번달 미점검" value={pendingStations.length} unit="개소" color={pendingStations.length ? 'var(--warning)' : undefined} />
+        <StatCard label={`${currentMonth}월 점검`} value={thisMonthDone} unit="건" />
+        <StatCard label={`${currentMonth}월 미점검`} value={pendingStations.length} unit="개소" color={pendingStations.length ? 'var(--warning)' : undefined} />
         <StatCard label="총 수전용량" value={(stations.reduce((s, st) => s + (st.capacity ?? 0), 0) / 1000).toFixed(1)} unit="MW" />
       </div>
 
       {/* 이번달 미점검 개소 */}
       <div style={{ ...cardBox, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
-          <span style={cardTitle}>이번달 미점검</span>
+          <span style={cardTitle}>{currentMonth}월 미점검</span>
           <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{pendingStations.length}개소</span>
         </div>
         {pendingStations.length === 0 ? (
           <p style={{ padding: '20px 0', margin: 0, textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>
-            이번달 점검을 모두 마쳤습니다.</p>
+            {currentMonth}월 점검을 모두 마쳤습니다.</p>
         ) : (<>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
             {visiblePending.map(station => (
@@ -188,16 +205,16 @@ export default function DashboardPage() {
 
         <div style={cardBox}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
-            <span style={cardTitle}>최근 점검</span>
+            <span style={cardTitle}>{currentMonth}월 점검 {inspections.length ? `${inspections.length}건` : ''}</span>
             <Link href="/history" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
               전체 이력 <ChevronRight size={14} />
             </Link>
           </div>
           <div>
             {inspections.length === 0 && (
-              <p style={{ padding: '28px 0', margin: 0, textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>점검 기록이 없습니다.</p>
+              <p style={{ padding: '28px 0', margin: 0, textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>{currentMonth}월 점검 기록이 없습니다.</p>
             )}
-            {inspections.slice(0, 12).map(ins => (
+            {inspections.slice(0, 30).map(ins => (
               <div key={ins.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
