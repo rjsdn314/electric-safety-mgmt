@@ -487,7 +487,7 @@ export default function HistoryPage() {
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
-                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
+                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 220px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
                                 <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                 <div>충전소</div><div>종류</div><div>점검일</div><div>점검자</div><div>파일</div><div></div>
                       </div>
@@ -498,7 +498,7 @@ export default function HistoryPage() {
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-tertiary)'}}>점검 기록이 없습니다.</div>
                   ) : (
                     visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'8px 20px',fontWeight:600,fontSize:12,color:'var(--text-tertiary)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,4)}년 {Number((item.created_at||'').slice(5,7))}월에 만듦</div>)}
-                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
+                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 220px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
                                               <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
@@ -529,7 +529,7 @@ export default function HistoryPage() {
                                         <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
                                                               )}
                                                 {item.file_path && (
-                                        <a href={item.file_path} download={item.file_name} title="엑셀 내려받기" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', lineHeight: 0 }}><Download size={15} /></a>
+                                        <a href={item.file_path} download={item.file_name} title="엑셀 내려받기" style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', lineHeight: 0 }}><Download size={15} /></a>
                                                               )}
                                                 {/* 로컬 파일 삭제: PC의 엑셀 파일만 */}
                                                 {isDesktop && (
