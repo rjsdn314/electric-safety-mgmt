@@ -24,6 +24,18 @@ const mini: React.CSSProperties = { ...btn, padding: '4px 8px', fontSize: 12 };
 const th: React.CSSProperties = { textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', padding: '4px 4px' };
 const td: React.CSSProperties = { padding: '3px 4px', verticalAlign: 'middle' };
 const h2: React.CSSProperties = { fontSize: 16, fontWeight: 800, marginBottom: 12 };
+// 직접 확인해야 할 항목 — 노란 표시
+const warnBox: React.CSSProperties = { background: 'rgba(245,158,11,.12)', border: '2px solid #f59e0b' };
+const warnInp: React.CSSProperties = { borderColor: '#f59e0b', background: 'rgba(245,158,11,.12)' };
+const flag = (on: unknown) => (on ? { 'data-check': '' } : {});
+function CheckTag({ text, onOk }: { text: string; onOk: () => void }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#b45309', background: 'rgba(245,158,11,.18)', border: '1px solid #f59e0b', borderRadius: 999, padding: '2px 4px 2px 10px' }}>
+      ⚠️ {text}
+      <button onClick={onOk} title="확인했으면 눌러서 표시를 지웁니다" style={{ border: 'none', background: '#f59e0b', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>확인 ✓</button>
+    </span>
+  );
+}
 const hint: React.CSSProperties = { fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10, lineHeight: 1.5 };
 
 function download(b64: string, name: string) {
@@ -124,6 +136,7 @@ export default function AnnualBuilderPage() {
 
   const build = async (save: boolean) => {
     if (!spec) return;
+    if (save && checkCount > 0 && !confirm(`노란색으로 표시한 확인할 항목이 ${checkCount}개 남아 있습니다. 그대로 등록할까요?`)) return;
     if (save && station?.annual && !confirm(`${station.name}에 이미 연차 양식이 등록되어 있습니다. 새 양식으로 바꿀까요?`)) return;
     setBusy(save ? '양식 등록 중…' : '엑셀 만드는 중…'); setMsg('');
     try {
@@ -146,14 +159,17 @@ export default function AnnualBuilderPage() {
   const setPanel = (i: number, k: keyof Panel, v: any) => upd((s) => { (s.panels[i] as any)[k] = v; });
   const setBr = (pi: number, bi: number, k: keyof Breaker, v: string) => upd((s) => {
     const b = s.panels[pi].breakers[bi];
-    (b as any)[k] = v;
+    (b as any)[k] = v; delete b.check;
     if (k === 'spec') { const d = breakerDefaults(v); b.voltage = d.voltage; b.value = d.value; }
   });
   const movePanel = (i: number, d: -1 | 1) => upd((s) => { const j = i + d; if (j < 0 || j >= s.panels.length) return; [s.panels[i], s.panels[j]] = [s.panels[j], s.panels[i]]; });
-  const setHv = (i: number, k: keyof HvCircuit, v: string) => upd((s) => { (s.hv_circuits[i] as any)[k] = v; });
-  const setCh = (i: number, k: keyof ChargerGroup, v: any) => upd((s) => { (s.chargers[i] as any)[k] = v; });
+  const setHv = (i: number, k: keyof HvCircuit, v: string) => upd((s) => { (s.hv_circuits[i] as any)[k] = v; delete s.check_hv; });
+  const setCh = (i: number, k: keyof ChargerGroup, v: any) => upd((s) => { (s.chargers[i] as any)[k] = v; delete s.chargers[i].check; });
 
   const breakerCount = spec?.panels.reduce((n, p) => n + p.breakers.length, 0) || 0;
+  const checkCount = spec ? spec.panels.reduce((n, p) => n + (p.check ? 1 : 0) + p.breakers.filter((b) => b.check).length, 0)
+    + spec.chargers.filter((c) => c.check).length + (spec.check_hv ? 1 : 0) : 0;
+  const goFirstCheck = () => document.querySelector('[data-check]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   return (
     <div style={{ maxWidth: 1100, padding: '32px 28px 80px' }}>
@@ -243,6 +259,10 @@ export default function AnnualBuilderPage() {
           {spec.notes.length > 0 && (
             <div style={{ ...card, borderColor: '#f59e0b' }}>
               <div style={h2}>🔎 확인할 부분</div>
+              {checkCount > 0 && (
+                <div style={{ fontSize: 13, marginBottom: 8 }}>아래 표에서 <b style={{ color: '#b45309' }}>노란색으로 표시한 {checkCount}곳</b>은 도면에서 확실히 읽지 못했거나 추정한 값이에요. 도면·현장과 비교해 맞으면 「확인 ✓」, 틀리면 고치면 표시가 사라집니다.{' '}
+                  <button style={mini} onClick={goFirstCheck}>첫 항목으로 이동</button></div>
+              )}
               <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{spec.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
             </div>
           )}
@@ -330,7 +350,8 @@ export default function AnnualBuilderPage() {
             <div style={hint}>별지2 절연저항 표에 반 이름 → 차단기 순으로 들어가고(좌·우 2열, 넘치면 다음 페이지), 접지저항 표에는 반마다 한 줄이 생깁니다.
               측정치 기본값: MCCB 999 · ELB 11 (차단기 표기를 바꾸면 자동으로 맞춰짐).</div>
             {spec.panels.map((p, pi) => (
-              <div key={pi} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+              <div key={pi} {...flag(p.check)} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 10, ...(p.check ? warnBox : {}) }}>
+                {p.check && <div style={{ marginBottom: 8 }}><CheckTag text={p.check} onOk={() => upd((s) => { delete s.panels[pi].check; })} /></div>}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
                   <input style={{ ...inp, width: 160, fontWeight: 700 }} value={p.name} onChange={(e) => setPanel(pi, 'name', e.target.value)} />
                   <label style={{ fontSize: 12 }}>접지 사용전압 <input style={{ ...inp, width: 90, display: 'inline-block' }} value={p.voltage} onChange={(e) => setPanel(pi, 'voltage', e.target.value)} /></label>
@@ -344,12 +365,13 @@ export default function AnnualBuilderPage() {
                   <thead><tr>{['차단기', '사용전압', '측정치', '비고', ''].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
                   <tbody>
                     {p.breakers.map((b, bi) => (
-                      <tr key={bi}>
-                        <td style={td}><input style={inp} value={b.spec} onChange={(e) => setBr(pi, bi, 'spec', e.target.value)} /></td>
+                      <tr key={bi} {...flag(b.check)}>
+                        <td style={td}><input style={{ ...inp, ...(b.check ? warnInp : {}) }} title={b.check} value={b.spec} onChange={(e) => setBr(pi, bi, 'spec', e.target.value)} /></td>
                         <td style={td}><input style={inp} value={b.voltage} onChange={(e) => setBr(pi, bi, 'voltage', e.target.value)} /></td>
                         <td style={td}><input style={inp} value={b.value} onChange={(e) => setBr(pi, bi, 'value', e.target.value)} /></td>
                         <td style={td}><input style={inp} value={b.remark} onChange={(e) => setBr(pi, bi, 'remark', e.target.value)} /></td>
                         <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                          {b.check && <><CheckTag text={b.check} onOk={() => upd((s) => { delete s.panels[pi].breakers[bi].check; })} />{' '}</>}
                           <button style={mini} title="복제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi + 1, 0, { ...b }); })}>⧉</button>{' '}
                           <button style={mini} title="삭제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi, 1); })}>✕</button>
                         </td>
@@ -363,8 +385,9 @@ export default function AnnualBuilderPage() {
             <button style={mini} onClick={() => upd((s) => { s.panels.push({ name: `SS-${s.panels.length + 1}`, voltage: '380/220', ground: true, breakers: [] }); })}>+ 분전반 추가</button>
           </div>
 
-          <div style={card}>
+          <div {...flag(spec.check_hv)} style={{ ...card, ...(spec.check_hv ? warnBox : {}) }}>
             <div style={h2}>6. 고압 기기절연 측정 구간</div>
+            {spec.check_hv && <div style={{ marginBottom: 8 }}><CheckTag text={spec.check_hv} onOk={() => upd((s) => { delete s.check_hv; })} /></div>}
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
                 <thead><tr>{['측정회로 및 기기', '전선-대지', 'A-B', 'B-C', 'C-A', '결과', '비고', ''].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
@@ -385,15 +408,15 @@ export default function AnnualBuilderPage() {
 
           <div style={card}>
             <div style={h2}>7. 충전기 (별지14)</div>
-            <table style={{ width: '100%', maxWidth: 560, borderCollapse: 'collapse' }}>
+            <table style={{ width: '100%', maxWidth: 760, borderCollapse: 'collapse' }}>
               <thead><tr>{['용량(kW)', '대수', '모델명', ''].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>
                 {spec.chargers.map((c, i) => (
-                  <tr key={i}>
+                  <tr key={i} {...flag(c.check)}>
                     <td style={td}><input style={inp} type="number" value={c.kw} onChange={(e) => setCh(i, 'kw', +e.target.value)} /></td>
-                    <td style={td}><input style={inp} type="number" value={c.count} onChange={(e) => setCh(i, 'count', +e.target.value)} /></td>
+                    <td style={td}><input style={{ ...inp, ...(c.check ? warnInp : {}) }} title={c.check} type="number" value={c.count} onChange={(e) => setCh(i, 'count', +e.target.value)} /></td>
                     <td style={td}><input style={inp} value={c.model} onChange={(e) => setCh(i, 'model', e.target.value)} /></td>
-                    <td style={td}><button style={mini} onClick={() => upd((s) => { s.chargers.splice(i, 1); })}>✕</button></td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{c.check && <><CheckTag text={c.check} onOk={() => upd((s) => { delete s.chargers[i].check; })} />{' '}</>}<button style={mini} onClick={() => upd((s) => { s.chargers.splice(i, 1); })}>✕</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -413,7 +436,9 @@ export default function AnnualBuilderPage() {
           <div style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'sticky', bottom: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)' }}>
             <button style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => build(true)}>📑 이 충전소 연차 양식으로 등록</button>
             <button style={btn} disabled={!!busy} onClick={() => build(false)}>⬇️ 엑셀만 받아보기</button>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>등록하면 엑셀도 함께 내려받아집니다.</span>
+            {checkCount > 0
+              ? <button style={{ ...btn, borderColor: '#f59e0b', color: '#b45309' }} onClick={goFirstCheck}>⚠️ 확인할 항목 {checkCount}개 남음 — 보러 가기</button>
+              : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>등록하면 엑셀도 함께 내려받아집니다.</span>}
           </div>
         </>
       )}

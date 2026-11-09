@@ -77,20 +77,24 @@ export function buildPresetSpec(inp: PresetInput): AnnualSpec {
       bs = t.feeders(p);
       if (t.canopy) bs.push(m(p, 4, 50));                     // 캐노피
     }
-    if (t.spd === 'branch') bs.push(m(p, sys.spdPoles, 50, 'SPD'));
-    panels.push({ name: `SS-${i + 1}`, voltage: '380/220', ground: true, breakers: bs });
+    if (t.spd === 'branch') bs.push({ ...m(p, sys.spdPoles, 50, 'SPD'), check: 'SPD 차단기 3P/4P — 도면 확인' });
+    const panelCheck = inp.low ? '저압 분전함 표준 구성 — 도면의 ELB·MCCB와 비교'
+      : sys.feeders?.length ? undefined : '표준 구성으로 채움 — 도면 간선표와 비교';
+    panels.push({ name: `SS-${i + 1}`, voltage: '380/220', ground: true, breakers: bs, ...(panelCheck ? { check: panelCheck } : {}) });
     const tr = newTransformer(sys.size || t.size);
     if (inp.low) tr.volt = '380/220';
     s.transformers.push(tr);
   });
   for (let i = 1; i <= inp.commBoxes; i++) {
-    panels.push({ name: `통신함-${i}`, voltage: '380/220', ground: false,
+    panels.push({ name: `통신함-${i}`, voltage: '380/220', ground: false, check: '통신함 개수·차단기는 추정 — 현장 확인',
       breakers: [m(p, 4, 50, 'SPD'), ...Array.from({ length: 6 }, () => e(p, 2, 20))] });
   }
   s.panels = panels;
   s.capacity_kw = s.transformers.reduce((n, t) => n + t.kva, 0);
-  if (inp.ch200 > 0) s.chargers.push({ kw: 200, count: inp.ch200, model: 'CS20A3' });
-  if (inp.ch350 > 0) s.chargers.push({ kw: 350, count: inp.ch350, model: 'AD35A0' });
+  const chk = '추정 대수 — 실제 충전기 수 확인';
+  if (inp.ch200 > 0) s.chargers.push({ kw: 200, count: inp.ch200, model: 'CS20A3', check: chk });
+  if (inp.ch350 > 0) s.chargers.push({ kw: 350, count: inp.ch350, model: 'AD35A0', check: chk });
+  if (!inp.low) s.check_hv = '기본 구간(책임2차~ASS1차, ASS2차~TR1차) — 변압기 수·현장 구간에 맞게 확인';
   s.notes = ['표준 구성으로 채웠습니다. 도면 단선결선도와 비교해 다른 차단기·반 이름·충전기 대수를 고쳐 주세요.'];
   return s;
 }

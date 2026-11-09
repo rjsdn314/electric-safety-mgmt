@@ -12,6 +12,7 @@ export interface Breaker {
   voltage: string;   // 사용전압: 380/220, 220 ...
   value: string;     // 절연저항(㏁)/누설전류 기본값: 999(MCCB) / 11(ELB)
   remark: string;    // 비고: SPD 등
+  check?: string;    // 화면용: 직접 확인해야 할 이유(노란 표시)
 }
 
 export interface Panel {
@@ -19,6 +20,7 @@ export interface Panel {
   voltage: string;       // 접지저항 표 사용전압 (380/220)
   ground: boolean;       // 접지저항 측정 대상(별지2-접지저항에 행 생성)
   breakers: Breaker[];
+  check?: string;        // 화면용: 직접 확인해야 할 이유
 }
 
 export interface GroundRow { wire: string; standard: string; value: string }
@@ -40,7 +42,7 @@ export interface HvCircuit {
   name: string; insul: string; ab: string; bc: string; ca: string; result: string; remark: string;
 }
 
-export interface ChargerGroup { kw: number; count: number; model: string }
+export interface ChargerGroup { kw: number; count: number; model: string; check?: string }
 
 export interface AnnualSpec {
   station_label: string;        // 설비명(상호)
@@ -55,7 +57,8 @@ export interface AnnualSpec {
   charger_maker: string;
   charger_location: '옥내' | '옥외' | '기타';
   charger_types: { chademo: boolean; combo: boolean; ac3: boolean };
-  notes: string[];               // AI가 확신하지 못한 부분 등 안내
+  notes: string[];               // 확인할 부분 안내
+  check_hv?: string;             // 화면용: 고압 측정 구간 확인 필요 이유
 }
 
 // 별지1 판정 셀 위치 (병합 앵커). 라벨 = 양식 표기
