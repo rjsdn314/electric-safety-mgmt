@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle, DraftingCompass } from 'lucide-react';
 import Link from 'next/link';
+import TemplateManager from '@/components/admin/TemplateManager';
+import { Search } from 'lucide-react';
 
 export default function StationUploadPage() {
   const { profile } = useAuth();
@@ -38,6 +40,18 @@ export default function StationUploadPage() {
   const [formIds, setFormIds] = useState<Set<string>>(new Set());
   const [partialIds, setPartialIds] = useState<Set<string>>(new Set());   // 연차 없이 분기/반기 양식만 있는 충전소
   const [justAdded, setJustAdded] = useState<{ id: string; name: string } | null>(null);
+  // 화면 탭: 충전소 목록 / 충전소 추가 / 양식 엑셀 올리기  (?tab=add|forms 로 바로 열기)
+  const [tab, setTab] = useState<'list' | 'add' | 'forms'>('list');
+  const [formFilter, setFormFilter] = useState<'all' | 'full' | 'partial' | 'none'>('all');
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    if (t === 'add' || t === 'forms') setTab(t);
+  }, []);
+  const switchTab = (t: 'list' | 'add' | 'forms') => {
+    setTab(t);
+    try { window.history.replaceState(null, '', t === 'list' ? '/stations/upload' : `/stations/upload?tab=${t}`); } catch { /* 무시 */ }
+    if (t === 'list') loadStations();
+  };
   const [listLoading, setListLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState('');
@@ -213,15 +227,80 @@ export default function StationUploadPage() {
   };
 
   return (
-    <div className="page-pad" style={{ padding: '28px 32px 60px', maxWidth: 720 }}>
+    <div className="page-pad" style={{ padding: '28px 32px 60px', maxWidth: tab === 'forms' ? 1000 : 820 }}>
       {/* 헤더 */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <h1 style={{ margin: '0 0 4px' }}>관리구역</h1>
         <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>
-          담당 충전소를 엑셀로 한꺼번에 또는 하나씩 등록합니다. 등록한 충전소는 점검 생성 목록에 나타납니다.
+          충전소 정보와 점검 양식을 한곳에서 관리합니다. 충전소마다 점검 양식이 있어야 분기, 반기, 연차 점검표가 맞게 만들어집니다.
         </p>
       </div>
 
+      {/* 탭 */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        {([['list', `충전소 ${stations.length ? stations.length : ''}`], ['add', '충전소 추가'], ['forms', '양식 엑셀 올리기']] as const).map(([k, label]) => (
+          <button key={k} onClick={() => switchTab(k)} style={{
+            padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 14,
+            fontWeight: tab === k ? 600 : 500, color: tab === k ? 'var(--accent)' : 'var(--text-secondary)',
+            borderBottom: `2px solid ${tab === k ? 'var(--accent)' : 'transparent'}`, marginBottom: -1,
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {tab === 'forms' && <TemplateManager embedded />}
+
+      {tab === 'add' && (<>
+      {/* 직접 하나씩 추가 */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '20px', marginBottom: 20 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>하나씩 추가</div>
+        <div style={{ fontSize: 13, color: 'var(--dim)', marginBottom: 16 }}>엑셀 없이 충전소를 하나씩 등록합니다.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="add-grid">
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>현장명 (필수)</label>
+            <input style={inputStyle} placeholder="예: 횡성휴게소(강릉방향)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>관리구역명</label>
+            <input style={inputStyle} placeholder="예: 강원권 (미입력 시 위 구역)" value={form.sectorLabel} onChange={e => setForm({ ...form, sectorLabel: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>담당자명</label>
+            <input style={inputStyle} placeholder="점검자 이름" value={form.inspectorName} onChange={e => setForm({ ...form, inspectorName: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수전전압 (V)</label>
+            <input style={inputStyle} type="number" placeholder="예: 22900" value={form.voltage} onChange={e => setForm({ ...form, voltage: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>계약용량 (kW)</label>
+            <input style={inputStyle} type="number" placeholder="예: 950" value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수배전반 개수</label>
+            <input style={inputStyle} type="number" min={1} value={form.panelCount} onChange={e => setForm({ ...form, panelCount: e.target.value })} />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>기본 점검양식</label>
+            <select style={inputStyle} value={form.defaultType} onChange={e => setForm({ ...form, defaultType: e.target.value })}>
+              <option value="월차">월차</option>
+              <option value="분기">분기</option>
+              <option value="반기">반기</option>
+              <option value="연차">연차</option>
+            </select>
+          </div>
+        </div>
+        {addErr && (<div className="status err" style={{ marginTop: 12, fontSize: 13 }}><XCircle size={15} /> {addErr}</div>)}
+        {justAdded && (
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: 'var(--positive-soft)', border: '1px solid rgba(31,138,91,.25)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <CheckCircle2 size={16} color="var(--positive)" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 200 }}><b>{justAdded.name}</b>을(를) 추가했습니다. 이어서 설계도면으로 점검 양식을 만드세요. 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.</span>
+            <Link href={`/annual-builder?station=${justAdded.id}`} className="btn-primary" style={{ textDecoration: 'none', padding: '7px 12px', fontSize: 13 }}><DraftingCompass size={15} /> 점검 양식 만들기</Link>
+          </div>
+        )}
+        <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: adding ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{adding ? <><Loader2 size={16} className="spin" /> 추가하는 중</> : <><Plus size={16} /> 추가</>}</button>
+      </div>
+
+      <div style={{ fontSize: 15, fontWeight: 700, margin: '4px 0 10px' }}>엑셀로 한꺼번에 추가</div>
       {/* 양식 다운로드 */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
@@ -364,87 +443,57 @@ export default function StationUploadPage() {
         </div>
       )}
 
-      {/* 직접 하나씩 추가 */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '20px', marginTop: 12, marginBottom: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>하나씩 추가</div>
-        <div style={{ fontSize: 13, color: 'var(--dim)', marginBottom: 16 }}>엑셀 없이 충전소를 하나씩 등록합니다.</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }} className="add-grid">
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>현장명 (필수)</label>
-            <input style={inputStyle} placeholder="예: 횡성휴게소(강릉방향)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>관리구역명</label>
-            <input style={inputStyle} placeholder="예: 강원권 (미입력 시 위 구역)" value={form.sectorLabel} onChange={e => setForm({ ...form, sectorLabel: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>담당자명</label>
-            <input style={inputStyle} placeholder="점검자 이름" value={form.inspectorName} onChange={e => setForm({ ...form, inspectorName: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수전전압 (V)</label>
-            <input style={inputStyle} type="number" placeholder="예: 22900" value={form.voltage} onChange={e => setForm({ ...form, voltage: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>계약용량 (kW)</label>
-            <input style={inputStyle} type="number" placeholder="예: 950" value={form.capacity} onChange={e => setForm({ ...form, capacity: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수배전반 개수</label>
-            <input style={inputStyle} type="number" min={1} value={form.panelCount} onChange={e => setForm({ ...form, panelCount: e.target.value })} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>기본 점검양식</label>
-            <select style={inputStyle} value={form.defaultType} onChange={e => setForm({ ...form, defaultType: e.target.value })}>
-              <option value="월차">월차</option>
-              <option value="분기">분기</option>
-              <option value="반기">반기</option>
-              <option value="연차">연차</option>
-            </select>
-          </div>
-        </div>
-        {addErr && (<div className="status err" style={{ marginTop: 12, fontSize: 13 }}><XCircle size={15} /> {addErr}</div>)}
-        {justAdded && (
-          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: 'var(--positive-soft)', border: '1px solid rgba(31,138,91,.25)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <CheckCircle2 size={16} color="var(--positive)" style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 200 }}><b>{justAdded.name}</b>을(를) 추가했습니다. 이어서 설계도면으로 점검 양식을 만드세요. 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.</span>
-            <Link href={`/annual-builder?station=${justAdded.id}`} className="btn-primary" style={{ textDecoration: 'none', padding: '7px 12px', fontSize: 13 }}><DraftingCompass size={15} /> 점검 양식 만들기</Link>
-          </div>
-        )}
-        <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: adding ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{adding ? <><Loader2 size={16} className="spin" /> 추가하는 중</> : <><Plus size={16} /> 추가</>}</button>
-      </div>
+      </>)}
 
-      {/* 등록된 관리구역 (검색 방식) */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>등록된 충전소</span>
-          <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{stations.length}개소</span>
-        </div>
-        <input
-          style={inputStyle}
-          placeholder="현장명으로 검색 (예: 강릉휴게소)"
-          value={stationQuery}
-          onChange={e => setStationQuery(e.target.value)}
-        />
+      {/* 충전소 목록 */}
+      {tab === 'list' && (
+      <div>
+        {(() => {
+          const stateOf = (id: string) => formIds.has(id) ? 'full' : partialIds.has(id) ? 'partial' : 'none';
+          const cnt = (k: string) => k === 'all' ? stations.length : stations.filter(st => stateOf(st.id) === k).length;
+          return (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              {([['all', '전체', ''], ['none', '양식 없음', 'var(--negative)'], ['partial', '분기 양식만', 'var(--warning)'], ['full', '양식 있음', 'var(--positive)']] as const).map(([k, label, color]) => (
+                <button key={k} type="button" onClick={() => setFormFilter(k)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  border: `1px solid ${formFilter === k ? 'var(--accent)' : 'var(--border)'}`, background: formFilter === k ? 'var(--accent-soft)' : 'var(--bg-card)', color: formFilter === k ? 'var(--accent)' : 'var(--text-secondary)',
+                }}>
+                  {color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />}
+                  {label} <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>{cnt(k)}</span>
+                </button>
+              ))}
+              <div style={{ position: 'relative', marginLeft: 'auto', minWidth: 200, flex: '0 1 260px' }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
+                <input style={{ ...inputStyle, padding: '8px 10px 8px 30px', fontSize: 13 }} placeholder="현장명 검색" value={stationQuery} onChange={e => setStationQuery(e.target.value)} />
+              </div>
+            </div>
+          );
+        })()}
         {listLoading ? (
           <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>불러오는 중</div>
-        ) : stationQuery.trim() === '' ? (
-          <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>검색하면 충전소가 표시됩니다.</div>
         ) : (() => {
           const q = stationQuery.trim().toLowerCase();
-          const filtered = stations.filter(st => (st.name || '').toLowerCase().includes(q));
+          const stateOf = (id: string) => formIds.has(id) ? 'full' : partialIds.has(id) ? 'partial' : 'none';
+          const order: Record<string, number> = { none: 0, partial: 1, full: 2 };
+          const filtered = stations
+            .filter(st => !q || (st.name || '').toLowerCase().includes(q))
+            .filter(st => formFilter === 'all' || stateOf(st.id) === formFilter)
+            .sort((x, y) => order[stateOf(x.id)] - order[stateOf(y.id)] || (x.name || '').localeCompare(y.name || '', 'ko'));
+          if (stations.length === 0) {
+            return <div style={{ padding: '32px 0', textAlign: 'center', fontSize: 14, color: 'var(--dim)' }}>등록된 충전소가 없습니다. <button onClick={() => switchTab('add')} style={{ border: 'none', background: 'none', color: 'var(--accent)', fontWeight: 600, cursor: 'pointer', fontSize: 14 }}>충전소 추가</button></div>;
+          }
           if (filtered.length === 0) {
-            return <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>'{stationQuery}'에 맞는 충전소가 없습니다.</div>;
+            return <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--dim)' }}>해당하는 충전소가 없습니다.</div>;
           }
           return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {filtered.map(st => (
                 <div key={st.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {st.name}
-                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : 'var(--warning-soft)', color: formIds.has(st.id) ? 'var(--positive)' : 'var(--warning)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '점검 양식 없음'}</span>
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : partialIds.has(st.id) ? 'var(--warning-soft)' : 'var(--negative-soft)', color: formIds.has(st.id) ? 'var(--positive)' : partialIds.has(st.id) ? 'var(--warning)' : 'var(--negative)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '점검 양식 없음'}</span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, st.custom_values?.default_type].filter(Boolean).join(', ')}</div>
                     </div>
@@ -499,6 +548,7 @@ export default function StationUploadPage() {
           );
         })()}
       </div>
+      )}
 
       <style jsx>{`@media (max-width: 768px) { .add-grid { grid-template-columns: 1fr !important; } }`}</style>
     </div>

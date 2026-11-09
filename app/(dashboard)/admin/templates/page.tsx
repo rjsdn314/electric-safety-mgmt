@@ -1,11 +1,10 @@
 'use client';
-// app/(dashboard)/admin/templates/page.tsx — 관리자: 충전소별 양식 등록
-import { useAuth } from '@/hooks/useAuth';
-import TemplateManager from '@/components/admin/TemplateManager';
+// app/(dashboard)/admin/templates/page.tsx — 양식 엑셀 올리기는 관리구역 화면의 탭으로 옮김 (예전 주소 호환)
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function AdminTemplatesPage() {
-  const { profile, loading } = useAuth();
-  // 양식 등록은 승인된 사용자 누구나 가능(본인 충전소 한정 — 목록/스토리지에서 스코핑).
-  if (loading || !profile) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>불러오는 중</div>;
-  return <TemplateManager />;
+  const router = useRouter();
+  useEffect(() => { router.replace('/stations/upload?tab=forms'); }, [router]);
+  return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)' }}>관리구역으로 이동하는 중</div>;
 }

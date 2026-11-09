@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
-  LayoutDashboard, ClipboardList, FolderClock, CalendarDays, Building2, FileSpreadsheet,
-  DraftingCompass, PenLine, Thermometer, BookOpen, Users, Menu, Zap, LogOut, type LucideIcon,
+  LayoutDashboard, ClipboardList, FolderClock, CalendarDays, Building2,
+  PenLine, Thermometer, BookOpen, Users, Menu, Zap, LogOut, type LucideIcon,
 } from 'lucide-react';
 
 type MenuItem = { href: string; label: string; icon: LucideIcon };
@@ -18,9 +18,7 @@ const workMenus: MenuItem[] = [
   { href: '/calendar',   label: '캘린더',    icon: CalendarDays },
 ];
 const setupMenus: MenuItem[] = [
-  { href: '/stations/upload', label: '관리구역',        icon: Building2 },
-  { href: '/admin/templates', label: '양식 직접 올리기', icon: FileSpreadsheet },
-  { href: '/annual-builder',  label: '도면으로 양식 만들기', icon: DraftingCompass },
+  { href: '/stations/upload', label: '관리구역',        icon: Building2 },   // 충전소 정보 + 점검 양식(도면·엑셀) 한곳에서
   { href: '/signature',       label: '서명',            icon: PenLine },
   { href: '/thermal-parts',   label: '열화상 부위',     icon: Thermometer },
   { href: '/guide',           label: '사용설명서',      icon: BookOpen },
@@ -105,8 +103,10 @@ export function Sidebar() {
     return () => clearInterval(t);
   }, [isAdmin]);
 
+  // 관리구역 안에서 여는 화면(도면으로 양식 만들기, 양식 엑셀 올리기)도 관리구역으로 표시
+  const SUB_PAGES: Record<string, string[]> = { '/stations/upload': ['/annual-builder', '/admin/templates'] };
   const isActive = (href: string) =>
-    pathname === href || pathname?.startsWith(href + '/');
+    pathname === href || pathname?.startsWith(href + '/') || (SUB_PAGES[href] || []).some(p => pathname?.startsWith(p));
 
   const linkStyle = (href: string): React.CSSProperties => ({
     display: 'flex', alignItems: 'center', gap: 10,

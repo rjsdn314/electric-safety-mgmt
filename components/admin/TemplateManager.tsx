@@ -43,7 +43,7 @@ function autoMatch(fileName: string, stations: Station[]): string {
   return score >= 2 ? best : '';
 }
 
-export default function TemplateManager() {
+export default function TemplateManager({ embedded = false }: { embedded?: boolean } = {}) {
   const sb = createClient();
   const [stations, setStations] = useState<Station[]>([]);
   const [registered, setRegistered] = useState(0);
@@ -139,10 +139,10 @@ export default function TemplateManager() {
   const statusColor: Record<string, string> = { done: 'var(--positive)', error: 'var(--negative)', skip: 'var(--warning)' };
 
   return (
-    <div className="page-pad" style={{ maxWidth: 1000, padding: '28px 32px 60px' }}>
-      <h1 style={{ margin: '0 0 4px' }}>양식 직접 올리기</h1>
-      <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
-        도면이 없거나 이미 가진 엑셀 양식을 쓰고 싶을 때 충전소에 직접 올립니다. 연차 양식 하나만 있으면 분기, 반기 점검표도 만들어집니다. 도면이 있으면 <a href="/annual-builder" style={{ color: 'var(--accent)' }}>도면으로 만드는 것</a>이 더 간단합니다.
+    <div className={embedded ? undefined : 'page-pad'} style={embedded ? undefined : { maxWidth: 1000, padding: '28px 32px 60px' }}>
+      {!embedded && <h1 style={{ margin: '0 0 4px' }}>양식 엑셀 올리기</h1>}
+      <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>
+        도면이 없거나 이미 가진 엑셀 양식을 쓰고 싶을 때 충전소에 직접 올립니다. 연차 양식 하나만 있으면 분기, 반기 점검표도 만들어집니다. 도면이 있으면 충전소 목록의 [양식 만들기]로 도면에서 만드는 것이 더 간단합니다.
       </p>
 
       <div style={card}>
@@ -190,6 +190,7 @@ export default function TemplateManager() {
         {msg && <Status msg={msg} style={{ marginTop: 12 }} />}
       </div>
 
+      {!embedded && (
       <div style={card}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>등록 현황</div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
@@ -227,6 +228,7 @@ export default function TemplateManager() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

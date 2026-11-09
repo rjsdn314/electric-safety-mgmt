@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { HIGH_TYPES, LOW_TYPES, buildPresetSpec, estimateChargers } from '@/lib/annual/presets';
 import { readDrawingPdf, reconcile } from '@/lib/annual/drawingRead';
 import { Status } from '@/components/ui/Status';
+import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import { ScanSearch, ListChecks, FilePlus2, History, X, Plus, Copy, Dices, AlertTriangle, Check, Download, Upload, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import {
   AnnualSpec, Breaker, Panel, Transformer, HvCircuit, ChargerGroup,
@@ -185,7 +187,8 @@ export default function AnnualBuilderPage() {
 
   return (
     <div className="page-pad" style={{ maxWidth: 1100, padding: '28px 32px 80px' }}>
-      <h1 style={{ margin: '0 0 4px' }}>도면으로 양식 만들기</h1>
+      <Link href="/stations/upload" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--text-secondary)', textDecoration: 'none', marginBottom: 8 }}><ChevronLeft size={15} /> 관리구역</Link>
+      <h1 style={{ margin: '0 0 4px' }}>도면으로 점검 양식 만들기</h1>
       <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
         설계도면 PDF를 읽어 변압기, 분전반 차단기, 충전기를 채운 뒤 그 충전소의 점검 양식으로 등록합니다. 이 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.
       </p>
