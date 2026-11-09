@@ -1,7 +1,8 @@
 // ============================================================
 // app/api/inspection/certificate/route.ts
 // 정기검사·사용전검사를 받은 개소: 열화상·접지 측정을 검사 필증으로 대체
-//  · 요청(multipart): inspection_id, kind(정기검사|사용전검사), date(YYYY-MM-DD), file(필증 PDF/사진)
+//  · 요청(multipart): inspection_id, kind(정기검사), date(YYYY-MM-DD), file(필증 PDF/사진)
+//  · 대체는 정기검사만 인정 (사용전검사는 대체 불가)
 //  · 필증 파일 보관(inspections/certificates/<점검ID>/certificate.<확장자>)
 //  · 점검표 엑셀에 대체 문구 기입(별지7 종합의견·별지2 접지·별지14 종합의견) 후 같은 파일 덮어쓰기
 //  · measure_values.certificate 기록
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     const date = String(form.get('date') || '');
     const file = form.get('file') as File | null;
     if (!inspection_id) return NextResponse.json({ error: '점검 ID가 없습니다' }, { status: 400 });
-    if (kind !== '정기검사' && kind !== '사용전검사') return NextResponse.json({ error: '검사 종류를 골라 주세요' }, { status: 400 });
+    if (kind !== '정기검사') return NextResponse.json({ error: '필증 대체는 정기검사만 가능합니다' }, { status: 400 });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return NextResponse.json({ error: '검사일을 넣어 주세요' }, { status: 400 });
     if (!file || !file.size) return NextResponse.json({ error: '필증 파일을 골라 주세요' }, { status: 400 });
 

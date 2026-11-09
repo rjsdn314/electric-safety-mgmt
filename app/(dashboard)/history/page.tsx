@@ -33,7 +33,7 @@ export default function HistoryPage() {
     const [thermalItem, setThermalItem] = useState<any>(null);
     // 필증 대체(정기검사·사용전검사를 받은 개소)
     const [certItem, setCertItem] = useState<any>(null);
-    const [certKind, setCertKind] = useState<'정기검사' | '사용전검사'>('사용전검사');
+    const [certKind, setCertKind] = useState<'정기검사' | '사용전검사'>('정기검사');   // 대체는 정기검사만 허용
     const [certDate, setCertDate] = useState('');
     const [certFile, setCertFile] = useState<File | null>(null);
     const [certBusy, setCertBusy] = useState(false);
@@ -373,7 +373,7 @@ export default function HistoryPage() {
     // ── 필증 대체 ──
     const openCert = (item: any) => {
       const c = item.measure_values?.certificate;
-      setCertKind(c?.kind || '사용전검사'); setCertDate(c?.date || ''); setCertFile(null); setCertItem(item);
+      setCertKind('정기검사'); setCertDate(c?.date || ''); setCertFile(null); setCertItem(item);
     };
     // 사진 필증은 서버 한도(약 4.5MB) 안으로 줄여서 보냄
     const shrinkImage = (f: File) => new Promise<File>((resolve) => {
@@ -390,7 +390,7 @@ export default function HistoryPage() {
     });
     const submitCert = async () => {
       const item = certItem; if (!item) return;
-      if (!certDate) { alert('검사일을 넣어 주세요.'); return; }
+      if (!certDate) { alert('정기검사일을 넣어 주세요.'); return; }
       if (!certFile) { alert('필증 파일을 골라 주세요.'); return; }
       const file = await shrinkImage(certFile);
       if (file.size > 4.3 * 1024 * 1024) { alert('필증 파일이 너무 큽니다 (4MB 이하). PDF를 줄이거나 사진으로 올려 주세요.'); return; }
@@ -484,22 +484,17 @@ export default function HistoryPage() {
               <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 700 }}>필증으로 대체</div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>정기검사 필증으로 대체</div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{certItem.station?.name}, {certItem.inspection_type}점검, {certItem.inspection_date}</div>
                   </div>
                   <button onClick={() => setCertItem(null)} disabled={certBusy} aria-label="닫기" style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '12px 0 16px', lineHeight: 1.6 }}>
-                  정기검사나 사용전검사를 받아 열화상·접지 측정을 하지 않은 점검입니다. 점검표는 그대로 두고 별지7, 접지저항, 종합의견에 "필증으로 대체" 문구를 넣고 필증 파일을 함께 보관합니다.
+                  정기검사를 받아 열화상·접지 측정을 하지 않은 점검입니다. 점검표는 그대로 두고 별지7, 접지저항, 종합의견에 "정기검사 필증으로 대체" 문구를 넣고 필증 파일을 함께 보관합니다.
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  {(['사용전검사', '정기검사'] as const).map(k => (
-                    <button key={k} type="button" onClick={() => setCertKind(k)} style={{ flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', border: `1px solid ${certKind === k ? 'var(--accent)' : 'var(--border)'}`, background: certKind === k ? 'var(--accent-soft)' : 'var(--bg-card)', color: certKind === k ? 'var(--accent)' : 'var(--text-secondary)' }}>{k}</button>
-                  ))}
-                </div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>검사일</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>정기검사일</label>
                 <input type="date" className="toss-input" value={certDate} onChange={e => setCertDate(e.target.value)} style={{ marginBottom: 14 }} />
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>필증 파일 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(PDF 또는 사진)</span></label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, marginBottom: 6 }}>정기검사 필증 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(PDF 또는 사진)</span></label>
                 <input type="file" accept="application/pdf,.pdf,image/*" onChange={e => setCertFile(e.target.files?.[0] || null)} style={{ marginBottom: 6, fontSize: 13 }} />
                 {certItem.measure_values?.certificate && (
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6 }}>이미 반영됨: {certItem.measure_values.certificate.kind}, {certItem.measure_values.certificate.date} (<a href={certItem.measure_values.certificate.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>필증 보기</a>). 다시 반영하면 바뀝니다.</div>
@@ -625,7 +620,7 @@ export default function HistoryPage() {
                                         <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
                                                               )}
                                                 {item.inspection_type !== '월차' && item.file_path && (
-                                        <button onClick={() => openCert(item)} title={item.measure_values?.certificate ? '필증 대체 고치기' : '정기검사·사용전검사 필증으로 대체'} style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.certificate ? 'var(--positive)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', lineHeight: 0 }}><FileCheck2 size={15} /></button>
+                                        <button onClick={() => openCert(item)} title={item.measure_values?.certificate ? '필증 대체 고치기' : '정기검사 필증으로 대체'} style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.certificate ? 'var(--positive)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', lineHeight: 0 }}><FileCheck2 size={15} /></button>
                                                               )}
                                                 {item.file_path && (
                                         <a href={item.file_path} download={item.file_name} title="엑셀 내려받기" style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', lineHeight: 0 }}><Download size={15} /></a>
