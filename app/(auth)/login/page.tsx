@@ -6,6 +6,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { Zap, Lock, Loader2 } from 'lucide-react';
 
 // useSearchParams를 사용하는 내부 컴포넌트 (Suspense 필요)
 function LoginContent() {
@@ -62,30 +63,28 @@ function LoginContent() {
       width: '100%',
       maxWidth: 420,
       background: '#ffffff',
-      border: '1px solid #e4e9f0',
-      borderRadius: 20,
-      padding: '40px 40px',
-      boxShadow: '0 4px 16px rgba(0,102,255,.06), 0 2px 4px rgba(15,23,42,.04)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      padding: '36px 32px',
+      boxShadow: 'var(--shadow-md)',
     }}>
       {/* 로고 */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{
-          width: 52, height: 52, borderRadius: 16, margin: '0 auto 14px',
-          background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
-        }}>⚡</div>
-        <h1 style={{ fontSize: 22, fontWeight: 900, marginBottom: 6, letterSpacing: '-0.5px', margin: '0 0 6px' }}>
-          전기안전관리
-        </h1>
-        <p style={{ fontSize: 13, color: '#4b5563', margin: 0 }}>직무고시 자동화 시스템</p>
+          width: 44, height: 44, borderRadius: 10, margin: '0 auto 14px',
+          background: 'var(--accent)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}><Zap size={22} strokeWidth={2.2} /></div>
+        <h1 style={{ margin: '0 0 4px' }}>전기안전관리</h1>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>직무고시 점검 자동화</p>
       </div>
 
       {/* 에러 */}
       {error && (
         <div style={{
-          marginBottom: 20, padding: '12px 16px', borderRadius: 10,
-          background: 'rgba(239,68,68,.08)', color: '#dc2626',
-          border: '1px solid rgba(239,68,68,.2)', fontSize: 13, fontWeight: 500,
+          marginBottom: 20, padding: '12px 16px', borderRadius: 8,
+          background: 'var(--negative-soft)', color: 'var(--negative)',
+          border: '1px solid rgba(201,54,54,.2)', fontSize: 13, fontWeight: 500,
         }}>{error}</div>
       )}
 
@@ -99,9 +98,9 @@ function LoginContent() {
             type="email"
             style={{
               width: '100%', padding: '12px 14px',
-              background: '#f6f8fc', border: '1.5px solid #e4e9f0',
-              borderRadius: 10, fontSize: 14, color: '#111827',
-              outline: 'none', fontFamily: 'inherit', letterSpacing: '-0.02em',
+              background: '#ffffff', border: '1px solid var(--border)',
+              borderRadius: 8, fontSize: 14, color: 'var(--text-primary)',
+              fontFamily: 'inherit',
               boxSizing: 'border-box',
             }}
             placeholder="example@company.com"
@@ -118,9 +117,9 @@ function LoginContent() {
             type="password"
             style={{
               width: '100%', padding: '12px 14px',
-              background: '#f6f8fc', border: '1.5px solid #e4e9f0',
-              borderRadius: 10, fontSize: 14, color: '#111827',
-              outline: 'none', fontFamily: 'inherit', letterSpacing: '-0.02em',
+              background: '#ffffff', border: '1px solid var(--border)',
+              borderRadius: 8, fontSize: 14, color: 'var(--text-primary)',
+              fontFamily: 'inherit',
               boxSizing: 'border-box',
             }}
             placeholder="비밀번호 입력"
@@ -137,46 +136,33 @@ function LoginContent() {
         style={{
           width: '100%', padding: '14px 0',
           background: loading || !email || !password
-            ? '#9ca3af'
-            : 'linear-gradient(135deg, #0066ff, #00b8d9)',
-          color: '#fff', border: 'none', borderRadius: 99,
-          fontSize: 15, fontWeight: 700,
+            ? 'var(--text-tertiary)'
+            : 'var(--accent)',
+          color: '#fff', border: 'none', borderRadius: 8,
+          fontSize: 15, fontWeight: 600,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
           fontFamily: 'inherit', transition: 'all .15s',
         }}
       >
-        {loading ? '로그인 중...' : '로그인'}
+        {loading ? <><Loader2 size={17} className="spin" /> 로그인하는 중</> : '로그인'}
       </button>
 
       {/* 안내 */}
       <div style={{ marginTop: 20, textAlign: 'center' }}>
-        <p style={{ fontSize: 13, color: '#4b5563', marginBottom: 12 }}>
-          아직 계정이 없으신가요?
-        </p>
-        <Link href="/register" style={{
-          display: 'block', padding: '12px 0',
-          border: '1.5px solid #0066ff',
-          borderRadius: 99, color: '#0066ff',
-          fontWeight: 700, fontSize: 14, textDecoration: 'none',
-          transition: 'all .15s',
-        }}>
-          회원가입 신청
+        <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>계정이 없으면 </span>
+        <Link href="/register" style={{ color: 'var(--accent)', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>
+          가입 신청
         </Link>
       </div>
 
       {/* 보안 안내 */}
       <div style={{
-        marginTop: 20, padding: '14px 16px', borderRadius: 10,
-        background: '#f6f8fc', border: '1px solid #e4e9f0',
-        display: 'flex', gap: 10, alignItems: 'flex-start',
+        marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)',
+        display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center',
+        fontSize: 12, color: 'var(--text-tertiary)',
       }}>
-        <span style={{ fontSize: 16, flexShrink: 0 }}>🔒</span>
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3 }}>계정별 데이터 분리</div>
-          <div style={{ fontSize: 11, color: '#4b5563', lineHeight: 1.6 }}>
-            로그인한 계정에 등록된 관리구역만 접근 가능합니다
-          </div>
-        </div>
+        <Lock size={13} /> 내 계정에 등록된 관리구역만 볼 수 있습니다.
       </div>
     </div>
   );
@@ -192,11 +178,10 @@ export default function LoginPage() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '20px 16px',
-      background: '#f6f8fc',
-      backgroundImage: 'radial-gradient(ellipse 600px 400px at 50% 0%, rgba(0,102,255,.05), transparent)',
+      background: 'var(--bg-page)',
     }}>
       <Suspense fallback={
-        <div style={{ textAlign: 'center', color: '#4b5563', fontSize: 14 }}>로딩 중...</div>
+        <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 14 }}>불러오는 중</div>
       }>
         <LoginContent />
       </Suspense>

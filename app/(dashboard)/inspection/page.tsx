@@ -2,11 +2,11 @@
 import { InspectionForm } from '@/components/inspection/InspectionForm';
 export default function InspectionPage() {
   return (
-    <div style={{ padding: '32px 36px 60px' }}>
-      <div className="mb-7" style={{ maxWidth: 940 }}>
-        <h1 className="text-2xl font-[800] tracking-tight">점검 생성</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-          정보를 입력하면 직무고시 엑셀이 자동으로 생성 및 저장됩니다
+    <div className="page-pad" style={{ padding: '28px 32px 60px' }}>
+      <div style={{ maxWidth: 940, marginBottom: 20 }}>
+        <h1 style={{ margin: '0 0 4px' }}>점검 생성</h1>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)' }}>
+          측정값을 넣으면 직무고시 점검표 엑셀을 만들어 저장합니다.
         </p>
       </div>
       <InspectionForm />

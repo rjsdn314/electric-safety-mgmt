@@ -7,6 +7,8 @@
 // ============================================================
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { Status } from '@/components/ui/Status';
+import { Upload, Loader2 } from 'lucide-react';
 
 type Station = { station_id: string; name: string; base_name: string; registered: boolean };
 type FileRow = { file: File; stationId: string; status: string; error?: string };
@@ -104,75 +106,75 @@ export default function TemplateManager() {
       }
       setRows([...next]);
     }
-    setMsg(`✅ 완료 ${ok}개${fail ? ` · 실패 ${fail}개` : ''}`);
+    setMsg(`${fail ? '⚠️' : '✅'} ${ok}개를 올렸습니다${fail ? `, ${fail}개 실패` : ''}.`);
     setBusy(false);
     loadStatus();
   };
 
-  const card: React.CSSProperties = { background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 16 };
+  const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 };
   const sel: React.CSSProperties = { padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13, maxWidth: 280, fontFamily: 'inherit' };
-  const statusLabel: Record<string, string> = { ready: '대기', uploading: '업로드중…', done: '✅ 완료', error: '❌ 실패', skip: '⚠️ 미지정' };
+  const statusLabel: Record<string, string> = { ready: '대기', uploading: '올리는 중', done: '완료', error: '실패', skip: '미지정' };
+  const statusColor: Record<string, string> = { done: 'var(--positive)', error: 'var(--negative)', skip: 'var(--warning)' };
 
   return (
-    <div style={{ maxWidth: 1000, padding: '32px 36px 60px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>충전소별 양식 등록</h1>
-      <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20 }}>
-        분기·반기·연차 점검표 양식을 충전소별로 등록합니다. 파일은 브라우저에서 직접 업로드되어 용량 제한이 없습니다.
-        (등록 {registered} / 전체 {stations.length})
+    <div className="page-pad" style={{ maxWidth: 1000, padding: '28px 32px 60px' }}>
+      <h1 style={{ margin: '0 0 4px' }}>점검 양식</h1>
+      <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
+        충전소마다 분기, 반기, 연차 점검표 양식을 등록합니다. 등록 {registered}곳, 전체 {stations.length}곳.
       </p>
 
       <div style={card}>
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>📤 양식 업로드 (여러 개 동시 선택 가능)</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>양식 올리기 <span style={{ fontWeight: 400, fontSize: 13, color: 'var(--text-tertiary)' }}>여러 개를 한 번에 고를 수 있습니다</span></div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           {(['분기', '반기', '연차'] as const).map((g) => (
             <button key={g} type="button" disabled={busy} onClick={() => setGroup(g)}
-              style={{ padding: '8px 18px', borderRadius: 10, border: `1.5px solid ${group === g ? 'var(--accent)' : 'var(--border)'}`, background: group === g ? 'var(--accent-soft)' : 'transparent', color: group === g ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {g}점검 양식{g === '분기' ? ' (접지저항 제외)' : ' (접지저항 포함)'}
+              style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${group === g ? 'var(--accent)' : 'var(--border)'}`, background: group === g ? 'var(--accent-soft)' : 'var(--bg-card)', color: group === g ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+              {g}
             </button>
           ))}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          선택한 종별 양식으로 등록됩니다. 분기는 별지2(접지저항) 없는 양식, 반기·연차는 별지2 포함 양식을 올리세요.
+          분기는 별지2(접지저항)가 없는 양식, 반기와 연차는 별지2가 있는 양식을 올리세요.
         </div>
         <input type="file" multiple accept=".xlsx" disabled={busy}
           onChange={(e) => onPick(e.target.files)} style={{ marginBottom: 12 }} />
         {rows.length > 0 && (
           <>
             <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '8px 0 12px' }}>
-              선택 {rows.length}개 · 자동매칭 {matchedCount}개 — 매칭이 틀린 경우 드롭다운에서 직접 지정하세요.
+              {rows.length}개 중 {matchedCount}개를 충전소와 자동으로 맞췄습니다. 틀린 것은 직접 고르세요.
             </div>
             <div style={{ marginBottom: 14 }}>
               {rows.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.file.name}</span>
                   <select value={r.stationId} disabled={busy} onChange={(e) => setRowStation(i, e.target.value)} style={sel}>
-                    <option value="">— 충전소 선택 —</option>
+                    <option value="">충전소 선택</option>
                     {stations.map((s) => (
                       <option key={s.station_id} value={s.station_id}>{s.name}{s.registered ? ' (등록됨)' : ''}</option>
                     ))}
                   </select>
-                  <span style={{ fontSize: 12, width: 72, textAlign: 'right', color: r.status === 'error' ? '#dc2626' : 'var(--text-secondary)' }} title={r.error || ''}>
+                  <span style={{ fontSize: 12, width: 72, textAlign: 'right', color: statusColor[r.status] || 'var(--text-secondary)' }} title={r.error || ''}>
                     {statusLabel[r.status] || r.status}
                   </span>
                 </div>
               ))}
             </div>
             <button onClick={upload} disabled={busy || matchedCount === 0}
-              style={{ padding: '11px 20px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 700, cursor: busy ? 'default' : 'pointer', opacity: busy || matchedCount === 0 ? 0.6 : 1 }}>
-              {busy ? '업로드 중…' : `지정된 ${matchedCount}개 업로드`}
+              className="btn-primary" style={{ padding: '10px 18px', fontSize: 14 }}>
+              {busy ? <><Loader2 size={16} className="spin" /> 올리는 중</> : <><Upload size={16} /> {matchedCount}개 올리기</>}
             </button>
           </>
         )}
-        {msg && <div style={{ marginTop: 12, fontSize: 14 }}>{msg}</div>}
+        {msg && <Status msg={msg} style={{ marginTop: 12 }} />}
       </div>
 
       <div style={card}>
-        <div style={{ fontWeight: 700, marginBottom: 12 }}>등록 현황</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>등록 현황</div>
         {stations.map((s) => (
           <div key={s.station_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{s.name}</span>
-            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: s.registered ? 'rgba(16,185,129,.12)' : 'var(--bg-elevated)', color: s.registered ? '#059669' : 'var(--text-secondary)' }}>
-              {s.registered ? '등록됨' : '미등록'}
+            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: s.registered ? 'var(--positive-soft)' : 'var(--bg-elevated)', color: s.registered ? 'var(--positive)' : 'var(--text-tertiary)' }}>
+              {s.registered ? '등록됨' : '없음'}
             </span>
           </div>
         ))}

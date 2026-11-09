@@ -1,69 +1,32 @@
 'use client';
 // ============================================================
-// app/(dashboard)/dashboard/page.tsx — WATER 디자인 시스템 적용
+// app/(dashboard)/dashboard/page.tsx — 대시보드
 // ============================================================
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import { Plus, Download, ChevronRight } from 'lucide-react';
 
-// ── 통계 카드 컴포넌트 ──────────────────────────────────────
-function StatCard({ label, value, sub, color, accentColor }: {
-  label: string; value: string | number;
-  sub?: string; color?: string; accentColor?: string;
-}) {
-  const accent = accentColor || '#0066ff';
+// ── 통계 카드 ──────────────────────────────────────
+function StatCard({ label, value, unit, color }: { label: string; value: string | number; unit?: string; color?: string }) {
   return (
-    <div
-      style={{
-        background: 'var(--bg-card)',
-        border: `1px solid var(--border)`,
-        borderLeft: `3px solid ${accent}`,
-        borderRadius: 'var(--radius)',
-        padding: '20px 22px',
-        boxShadow: 'var(--shadow)',
-        transition: 'all .15s',
-        cursor: 'default',
-      }}
-      onMouseEnter={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow-md)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)';
-      }}
-      onMouseLeave={e => {
-        (e.currentTarget as HTMLDivElement).style.boxShadow = 'var(--shadow)';
-        (e.currentTarget as HTMLDivElement).style.transform = 'translateY(0)';
-      }}
-    >
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 10, letterSpacing: '0.02em' }}>
-        {label}
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px 18px' }}>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 6 }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{ fontSize: 26, fontWeight: 700, color: color || 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+        {unit && <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{unit}</span>}
       </div>
-      <div style={{
-        fontSize: 28, fontWeight: 800, letterSpacing: '-1px',
-        color: color || accent,
-        fontFamily: "'JetBrains Mono', 'Courier New', monospace",
-      }}>
-        {value}
-      </div>
-      {sub && (
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>{sub}</div>
-      )}
     </div>
   );
 }
 
 // ── 점검유형 배지 ────────────────────────────────────────────
 function TypeBadge({ type }: { type: string }) {
-  const map: Record<string, { bg: string; color: string }> = {
-    '월차': { bg: 'rgba(0,102,255,.1)',   color: '#0066ff' },
-    '분기': { bg: 'rgba(245,158,11,.1)',  color: '#d97706' },
-    '반기': { bg: 'rgba(245,158,11,.1)',  color: '#d97706' },
-    '연차': { bg: 'rgba(16,185,129,.1)', color: '#059669' },
-  };
-  const s = map[type] ?? { bg: 'rgba(0,0,0,.06)', color: '#4b5563' };
   return (
     <span style={{
-      fontSize: 11, fontWeight: 700, padding: '2px 8px',
-      borderRadius: 99, background: s.bg, color: s.color,
+      fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+      background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)',
     }}>{type}</span>
   );
 }
@@ -144,255 +107,154 @@ export default function DashboardPage() {
   // 이번달 아직 점검하지 않은 개소 목록
   const pendingStations = stations.filter(st => !doneStationIds.has(st.id)); const [pendingShow, setPendingShow] = useState(10); const visiblePending = pendingStations.slice(0, pendingShow);
 
+
+  const cardBox: React.CSSProperties = {
+    background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px 20px',
+  };
+  const cardTitle: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' };
+  const stationRow: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8,
+    border: '1px solid var(--border)', background: 'var(--bg-card)', textDecoration: 'none',
+  };
+  const ownerLabel = viewOwner === 'mine' ? '내 관리구역' : viewOwner === 'all' ? '전체 회원' : `${members.find(m => m.id === viewOwner)?.name} 관리구역`;
+
   return (
-    <div style={{ padding: '32px 36px 60px', maxWidth: 900 }}>
+    <div className="dash" style={{ padding: '28px 32px 60px', maxWidth: 960 }}>
 
       {/* 헤더 */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{
-          fontSize: 28, fontWeight: 900, letterSpacing: '-1px',
-          color: 'var(--text-primary)', margin: '0 0 8px 0', lineHeight: 1.2,
-        }}>대시보드</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center',
-            background: 'rgba(0,102,255,.08)', color: '#0066ff',
-            borderRadius: 99, padding: '3px 10px',
-            fontSize: 11, fontWeight: 700,
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>
-            {currentYear}년 {currentMonth}월 — {viewOwner === 'mine' ? '내 관리구역' : viewOwner === 'all' ? '전체 회원' : (members.find(m => m.id === viewOwner)?.name + ' 관리구역')} 충전소 현황
-          </span>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ margin: '0 0 4px' }}>대시보드</h1>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{currentYear}년 {currentMonth}월, {ownerLabel}</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {isAdmin && (
             <select value={viewOwner} onChange={e => setViewOwner(e.target.value)}
-              style={{ padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-elevated)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit' }}>
-              <option value="mine">내 관리구역 (기본)</option>
+              style={{ padding: '8px 10px', borderRadius: 8, fontSize: 13, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+              <option value="mine">내 관리구역</option>
               {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
-              <option value="all">전체 (모든 회원)</option>
+              <option value="all">전체 회원</option>
             </select>
           )}
+          <Link href="/inspection" className="btn-primary" style={{ textDecoration: 'none', padding: '9px 16px', fontSize: 14 }}>
+            <Plus size={16} /> 점검 생성
+          </Link>
         </div>
       </div>
 
-      {/* 통계 카드 4열 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: 14,
-        marginBottom: 24,
-      }}>
-        <StatCard label="관리 충전소" value={stations.length}                           sub="총 개소"   accentColor="#0066ff" />
-        <StatCard label="이번달 완료" value={thisMonthDone}                              sub="건"       accentColor="#10b981" />
-        <StatCard label="미점검"       value={pendingStations.length}           sub="개소"     accentColor="#f59e0b" />
-        <StatCard
-          label="총 수전용량"
-          value={`${(stations.reduce((s, st) => s + (st.capacity ?? 0), 0) / 1000).toFixed(1)}MW`}
-          sub="관리 설비 합산"
-          accentColor="#0066ff"
-        />
+      {/* 통계 */}
+      <div className="dash-stats" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+        <StatCard label="관리 충전소" value={stations.length} unit="개소" />
+        <StatCard label="이번달 점검" value={thisMonthDone} unit="건" />
+        <StatCard label="이번달 미점검" value={pendingStations.length} unit="개소" color={pendingStations.length ? 'var(--warning)' : undefined} />
+        <StatCard label="총 수전용량" value={(stations.reduce((s, st) => s + (st.capacity ?? 0), 0) / 1000).toFixed(1)} unit="MW" />
       </div>
 
-{/* ── 이번달 미점검 개소 (한눈에 보기) ── */}
-      <div style={{
-        background: 'var(--bg-card)',
-        border: '1px solid var(--border)',
-        borderLeft: '3px solid #f59e0b',
-        borderRadius: 'var(--radius)',
-        padding: '22px 24px',
-        boxShadow: 'var(--shadow)',
-        marginBottom: 14,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
-            이번달 미점검 개소
-          </span>
-          <span style={{
-            fontSize: 12, fontWeight: 800, padding: '2px 10px', borderRadius: 99,
-            background: 'rgba(245,158,11,.12)', color: '#d97706',
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>{pendingStations.length}개소</span>
-          <span style={{ fontSize: 12, color: 'var(--text-tertiary)', marginLeft: 'auto' }}>— {currentMonth}월 기준</span>
+      {/* 이번달 미점검 개소 */}
+      <div style={{ ...cardBox, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
+          <span style={cardTitle}>이번달 미점검</span>
+          <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{pendingStations.length}개소</span>
         </div>
         {pendingStations.length === 0 ? (
-          <p style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
-            🎉 이번달 모든 충전소 점검이 완료되었습니다</p>
+          <p style={{ padding: '20px 0', margin: 0, textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>
+            이번달 점검을 모두 마쳤습니다.</p>
         ) : (<>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
             {visiblePending.map(station => (
-              <Link key={station.id} href="/inspection" style={{ textDecoration: 'none' }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 10,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid transparent', transition: 'all .15s', cursor: 'pointer',
-                }}
-                onMouseEnter={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: '#f59e0b', background: 'rgba(245,158,11,.06)' })}
-                onMouseLeave={e => Object.assign((e.currentTarget as HTMLDivElement).style, { borderColor: 'transparent', background: 'var(--bg-elevated)' })}
-                >
-                  <span style={{ fontSize: 14 }}>🟡</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {station.base_name}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      {station.capacity}kW · {station.voltage}V
-                    </div>
+              <Link key={station.id} href="/inspection" className="dash-row" style={stationRow}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--warning)', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {station.base_name}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 1 }}>
+                    {station.capacity}kW, {station.voltage}V
                   </div>
                 </div>
               </Link>
             ))}
           </div>
-  {pendingShow < pendingStations.length && (
-  <button onClick={() => setPendingShow(n => n + 10)} style={{ width: '100%', marginTop: 12, padding: '10px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>
-    더보기 ({pendingStations.length - pendingShow}개 더)
-  </button>
-        )}
-        </>
-            )}
+          {pendingShow < pendingStations.length && (
+            <button onClick={() => setPendingShow(n => n + 10)} style={{ width: '100%', marginTop: 10, padding: '9px 0', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+              {pendingStations.length - pendingShow}개 더 보기
+            </button>
+          )}
+        </>)}
       </div>
 
-            {/* 2단 그리드: 최근 이력 + 충전소 현황 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 360px',
-        gap: 14,
-        alignItems: 'start',
-      }}>
+      {/* 최근 점검 + 충전소 현황 */}
+      <div className="dash-cols" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, alignItems: 'start' }}>
 
-        {/* ── 최근 점검이력 ── */}
-        <div style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          padding: '22px 24px',
-          boxShadow: 'var(--shadow)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 16 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>
-              최근 점검이력
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>— 이번달</span>
+        <div style={cardBox}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={cardTitle}>최근 점검</span>
+            <Link href="/history" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+              전체 이력 <ChevronRight size={14} />
+            </Link>
           </div>
-          <div style={{ borderTop: '1px solid var(--border)' }}>
+          <div>
             {inspections.length === 0 && (
-              <p style={{
-                padding: '32px 0', textAlign: 'center',
-                fontSize: 13, color: 'var(--text-tertiary)',
-              }}>이번달 점검이력이 없습니다</p>
+              <p style={{ padding: '28px 0', margin: 0, textAlign: 'center', fontSize: 14, color: 'var(--text-tertiary)' }}>점검 기록이 없습니다.</p>
             )}
-            {inspections.map(ins => (
-              <div key={ins.id} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 0',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <span style={{
-                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                  background: '#10b981',
-                  boxShadow: '0 0 6px rgba(16,185,129,.5)',
-                }} />
+            {inspections.slice(0, 12).map(ins => (
+              <div key={ins.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: '1px solid var(--border)' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {ins.station?.base_name}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                    {ins.inspection_date} · {ins.inspector_name}
+                  <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 1 }}>
+                    {ins.inspection_date}, {ins.inspector_name}
                   </div>
                 </div>
                 <TypeBadge type={ins.inspection_type} />
                 {ins.file_path && (
-                  <a href={ins.file_path} download style={{
-                    width: 28, height: 28, borderRadius: 8,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 12, textDecoration: 'none', transition: 'all .15s',
-                    background: 'var(--bg-elevated)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-tertiary)',
-                  }}
-                  onMouseEnter={e => Object.assign((e.currentTarget as HTMLAnchorElement).style, {
-                    background: 'var(--accent-soft)', color: 'var(--accent)', borderColor: 'var(--accent)'
-                  })}
-                  onMouseLeave={e => Object.assign((e.currentTarget as HTMLAnchorElement).style, {
-                    background: 'var(--bg-elevated)', color: 'var(--text-tertiary)', borderColor: 'var(--border)'
-                  })}
-                  >⬇</a>
+                  <a href={ins.file_path} download title="엑셀 내려받기" className="dash-icon-btn" style={{
+                    width: 30, height: 30, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: '1px solid var(--border)', color: 'var(--text-secondary)', textDecoration: 'none',
+                  }}><Download size={15} /></a>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── 충전소 점검 현황 ── */}
-        <div style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)',
-          padding: '22px 24px',
-          boxShadow: 'var(--shadow)',
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)', marginBottom: 14 }}>
-            충전소 점검 현황
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={cardBox}>
+          <div style={{ ...cardTitle, marginBottom: 12 }}>충전소 점검 현황</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {stations.slice(0, 6).map(station => {
               const done = inspections.some(i => i.station_id === station.id);
               return (
-                <div key={station.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 10,
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid transparent',
-                  transition: 'all .15s', cursor: 'pointer',
-                }}
-                onMouseEnter={e => Object.assign((e.currentTarget as HTMLDivElement).style, {
-                  borderColor: 'var(--accent)', background: 'var(--accent-soft)',
-                })}
-                onMouseLeave={e => Object.assign((e.currentTarget as HTMLDivElement).style, {
-                  borderColor: 'transparent', background: 'var(--bg-elevated)',
-                })}
-                >
-                  <span style={{ fontSize: 16 }}>{done ? '🟢' : '🟡'}</span>
+                <div key={station.id} style={{ ...stationRow, cursor: 'default' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {station.base_name}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                      {station.capacity}kW · {station.voltage}V
+                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 1 }}>
+                      {station.capacity}kW, {station.voltage}V
                     </div>
                   </div>
                   <span style={{
-                    fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99,
-                    background: done ? 'rgba(16,185,129,.1)' : 'rgba(245,158,11,.1)',
-                    color: done ? '#059669' : '#d97706',
+                    fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 6,
+                    background: done ? 'var(--positive-soft)' : 'var(--warning-soft)',
+                    color: done ? 'var(--positive)' : 'var(--warning)',
                   }}>{done ? '완료' : '미점검'}</span>
                 </div>
               );
             })}
           </div>
-          <Link href="/inspection">
-            <button style={{
-              width: '100%', marginTop: 12,
-              padding: '10px 0', fontSize: 13, fontWeight: 700,
-              borderRadius: 99, border: 'none', cursor: 'pointer',
-              background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
-              color: '#fff',
-              boxShadow: '0 4px 12px rgba(0,102,255,.2)',
-              transition: 'all .15s',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '0.9';
-              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.opacity = '1';
-              (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)';
-            }}
-            >
-              + 점검 생성하기
-            </button>
-          </Link>
         </div>
       </div>
+
+      <style>{`
+        .dash-row:hover { border-color: var(--border-hover) !important; background: var(--bg-elevated) !important; }
+        .dash-icon-btn:hover { color: var(--accent) !important; border-color: var(--accent) !important; }
+        @media (max-width: 900px) {
+          .dash { padding: 20px 16px 60px !important; }
+          .dash-stats { grid-template-columns: repeat(2, 1fr) !important; }
+          .dash-cols { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   );
 }

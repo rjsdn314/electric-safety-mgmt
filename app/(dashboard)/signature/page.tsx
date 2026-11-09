@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { Status } from '@/components/ui/Status';
+import { PenLine, ImageUp, Loader2 } from 'lucide-react';
 
 export default function SignaturePage() {
   const [name, setName] = useState('');
@@ -92,18 +94,18 @@ export default function SignaturePage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || '저장 실패');
       setCurrent(preview); setPreview(null); clearCanvas();
-      setMsg('✅ 저장되었습니다. 이제 이 점검자로 생성하는 점검표에 서명이 들어갑니다.');
+      setMsg('✅ 저장했습니다. 이 점검자로 만드는 점검표에 서명이 들어갑니다.');
     } catch (e: any) { setMsg('❌ ' + e.message); } finally { setSaving(false); }
   };
 
-  const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: 24, marginBottom: 16 };
-  const input: React.CSSProperties = { width: '100%', padding: '12px 14px', background: 'var(--bg-input, var(--bg))', border: '1.5px solid var(--border)', borderRadius: 10, fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
+  const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 };
+  const input: React.CSSProperties = { width: '100%', padding: '12px 14px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
 
   return (
-    <div style={{ padding: '32px 36px 60px', maxWidth: 720 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>✍️ 점검자 서명 등록</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-        점검자별로 서명을 한 번 등록해두면, 그 점검자로 생성하는 점검표(별지1·별지14 서명칸)에 자동으로 들어갑니다.
+    <div className="page-pad" style={{ padding: '28px 32px 60px', maxWidth: 720 }}>
+      <h1 style={{ margin: '0 0 4px' }}>서명</h1>
+      <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--text-secondary)' }}>
+        점검자마다 서명을 한 번 등록하면 그 점검자로 만드는 점검표의 서명칸(별지1, 별지14)에 들어갑니다.
       </p>
 
       <div style={card}>
@@ -111,7 +113,7 @@ export default function SignaturePage() {
         <input style={input} value={name} onChange={e => setName(e.target.value)} placeholder="예: 황건우" />
         {current && (
           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>현재 등록된 서명:</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>등록된 서명</span>
             <img src={current} alt="등록된 서명" style={{ height: 48, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: 2 }} />
           </div>
         )}
@@ -121,11 +123,12 @@ export default function SignaturePage() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {(['draw', 'upload'] as const).map(m => (
             <button key={m} onClick={() => { setMode(m); setPreview(null); }} style={{
-              padding: '8px 18px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-              border: `1.5px solid ${mode === m ? 'var(--accent)' : 'var(--border)'}`,
-              background: mode === m ? 'var(--accent-soft)' : 'transparent',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              border: `1px solid ${mode === m ? 'var(--accent)' : 'var(--border)'}`,
+              background: mode === m ? 'var(--accent-soft)' : 'var(--bg-card)',
               color: mode === m ? 'var(--accent)' : 'var(--text-secondary)',
-            }}>{m === 'draw' ? '✏️ 직접 그리기' : '🖼️ 이미지 업로드'}</button>
+            }}>{m === 'draw' ? <><PenLine size={15} /> 직접 그리기</> : <><ImageUp size={15} /> 이미지 올리기</>}</button>
           ))}
         </div>
 
@@ -133,25 +136,21 @@ export default function SignaturePage() {
           <div>
             <canvas ref={canvasRef} width={600} height={200}
               onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerLeave={up}
-              style={{ width: '100%', height: 200, background: '#fff', border: '1.5px dashed var(--border)', borderRadius: 10, touchAction: 'none', cursor: 'crosshair' }} />
+              style={{ width: '100%', height: 200, background: '#fff', border: '1px solid var(--border-hover)', borderRadius: 8, touchAction: 'none', cursor: 'crosshair' }} />
             <button onClick={clearCanvas} style={{ marginTop: 10, padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>지우기</button>
           </div>
         ) : (
           <div>
             <input type="file" accept="image/png,image/jpeg" onChange={e => onFile(e.target.files?.[0])} />
             {preview && <div style={{ marginTop: 14 }}><img src={preview} alt="미리보기" style={{ height: 80, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: 4 }} /></div>}
-            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>흰 배경 서명 이미지(PNG/JPG)를 올리세요. 투명 PNG면 더 깔끔합니다.</p>
+            <p style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 10 }}>흰 배경 서명 이미지(PNG, JPG)를 올리세요. 배경이 투명한 PNG가 가장 깔끔합니다.</p>
           </div>
         )}
       </div>
 
-      {msg && <div style={{ ...card, padding: '14px 18px', fontSize: 14 }}>{msg}</div>}
+      {msg && <Status msg={msg} style={{ marginBottom: 12 }} />}
 
-      <button onClick={save} disabled={saving} style={{
-        width: '100%', padding: 16, borderRadius: 12, border: 'none',
-        background: saving ? 'var(--border)' : 'linear-gradient(135deg, #0066ff, #00b8d9)',
-        color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit',
-      }}>{saving ? '저장 중...' : '💾 서명 저장'}</button>
+      <button onClick={save} disabled={saving} className="btn-primary" style={{ width: '100%' }}>{saving ? <><Loader2 size={17} className="spin" /> 저장하는 중</> : '서명 저장'}</button>
     </div>
   );
 }

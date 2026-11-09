@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Zap, MailCheck, ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -89,35 +90,35 @@ export default function RegisterPage() {
       background: 'var(--bg-page)',
     }}>
       <div style={{
-        width: '100%', maxWidth: 480, padding: 48,
+        width: '100%', maxWidth: 480, padding: '40px 32px',
         background: 'var(--surface)', border: '1px solid var(--border)',
         borderRadius: 'var(--radius)', textAlign: 'center',
         boxShadow: 'var(--shadow-md)',
       }}>
-        <div style={{ fontSize: 56, marginBottom: 16 }}>📬</div>
-        <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 10, letterSpacing: '-0.5px' }}>
-          신청이 접수되었습니다
+        <MailCheck size={40} color="var(--accent)" strokeWidth={1.6} />
+        <h2 style={{ fontSize: 20, margin: '14px 0 8px' }}>
+          가입 신청을 받았습니다
         </h2>
-        <p style={{ fontSize: 14, color: 'var(--mid)', lineHeight: 1.7, marginBottom: 28 }}>
-          관리자 확인 후 승인 메일이 발송됩니다.<br />
-          승인 완료 시 로그인하실 수 있습니다.
+        <p style={{ fontSize: 14, color: 'var(--mid)', lineHeight: 1.7, marginBottom: 24 }}>
+          관리자가 확인하면 승인 메일을 보내 드립니다.<br />
+          승인된 뒤부터 로그인할 수 있습니다.
         </p>
         <div style={{
           padding: '16px 20px',
-          background: 'rgba(0,102,255,.06)',
-          border: '1px solid rgba(0,102,255,.15)',
-          borderRadius: 10, fontSize: 13, color: 'var(--mid)',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border)',
+          borderRadius: 8, fontSize: 13, color: 'var(--mid)',
           marginBottom: 24,
         }}>
-          <strong style={{ color: 'var(--blue)' }}>관리자 이메일:</strong> rjsdn43666211@gmail.com
+          관리자 이메일 <strong style={{ color: 'var(--text-primary)' }}>rjsdn43666211@gmail.com</strong>
         </div>
         <Link href="/login" style={{
-          display: 'block', padding: '14px 0',
-          background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
-          color: '#fff', borderRadius: 99, fontWeight: 700, fontSize: 14,
+          display: 'block', padding: '12px 0',
+          background: 'var(--accent)',
+          color: '#fff', borderRadius: 8, fontWeight: 600, fontSize: 14,
           textDecoration: 'none',
         }}>
-          로그인 페이지로 이동
+          로그인 화면으로
         </Link>
       </div>
     </div>
@@ -126,9 +127,9 @@ export default function RegisterPage() {
   // ── 입력 폼 ────────────────────────────────────────────────
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 14px',
-    background: 'var(--bg-page)', border: '1.5px solid var(--border)',
-    borderRadius: 10, fontSize: 14, color: 'var(--text-primary)',
-    outline: 'none', fontFamily: 'inherit', letterSpacing: '-0.02em',
+    background: '#ffffff', border: '1px solid var(--border)',
+    borderRadius: 8, fontSize: 14, color: 'var(--text-primary)',
+    fontFamily: 'inherit',
     boxSizing: 'border-box',
   };
   const labelStyle: React.CSSProperties = {
@@ -144,60 +145,55 @@ export default function RegisterPage() {
       <div style={{
         width: '100%', maxWidth: 500,
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 'var(--radius)', padding: '40px 40px',
+        borderRadius: 12, padding: '36px 32px',
         boxShadow: 'var(--shadow-md)',
       }}>
         {/* 헤더 */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{
-            width: 52, height: 52, borderRadius: 16, margin: '0 auto 14px',
-            background: 'linear-gradient(135deg, #0066ff, #00b8d9)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 26,
-          }}>⚡</div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, marginBottom: 6, letterSpacing: '-0.5px' }}>
-            회원가입 신청
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--mid)' }}>
-            관리자 승인 후 서비스를 이용하실 수 있습니다
+          width: 44, height: 44, borderRadius: 10, margin: '0 auto 14px',
+          background: 'var(--accent)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}><Zap size={22} strokeWidth={2.2} /></div>
+          <h1 style={{ margin: '0 0 4px' }}>가입 신청</h1>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--mid)' }}>
+            관리자가 승인하면 사용할 수 있습니다.
           </p>
         </div>
 
         {/* 오류 */}
         {error && (
           <div style={{
-            marginBottom: 20, padding: '12px 16px', borderRadius: 10,
-            background: 'rgba(239,68,68,.08)', color: '#dc2626',
-            border: '1px solid rgba(239,68,68,.2)', fontSize: 13, fontWeight: 500,
+            marginBottom: 20, padding: '12px 16px', borderRadius: 8,
+            background: 'var(--negative-soft)', color: 'var(--negative)',
+            border: '1px solid rgba(201,54,54,.2)', fontSize: 13, fontWeight: 500,
           }}>{error}</div>
         )}
 
         {/* 필수 항목 */}
         <div style={{ marginBottom: 16 }}>
           <div style={{
-            fontSize: 11, fontWeight: 700, color: 'var(--blue)',
-            letterSpacing: '0.05em', textTransform: 'uppercase',
-            marginBottom: 12,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 13, fontWeight: 600, color: 'var(--text-tertiary)',
+            marginBottom: 10,
           }}>필수 정보</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label style={labelStyle}>이름 *</label>
+              <label style={labelStyle}>이름</label>
               <input style={inputStyle} placeholder="홍길동" value={form.name} onChange={set('name')} />
             </div>
             <div>
-              <label style={labelStyle}>이메일 *</label>
+              <label style={labelStyle}>이메일</label>
               <input style={inputStyle} type="email" placeholder="example@company.com"
                 value={form.email} onChange={set('email')} />
             </div>
             <div>
-              <label style={labelStyle}>비밀번호 * (8자 이상)</label>
+              <label style={labelStyle}>비밀번호 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(8자 이상)</span></label>
               <input style={inputStyle} type="password" placeholder="비밀번호 입력"
                 value={form.password} onChange={set('password')} />
             </div>
             <div>
-              <label style={labelStyle}>비밀번호 확인 *</label>
-              <input style={inputStyle} type="password" placeholder="비밀번호 재입력"
+              <label style={labelStyle}>비밀번호 확인</label>
+              <input style={inputStyle} type="password" placeholder="비밀번호 다시 입력"
                 value={form.confirmPassword} onChange={set('confirmPassword')} />
             </div>
           </div>
@@ -206,11 +202,9 @@ export default function RegisterPage() {
         {/* 선택 항목 */}
         <div style={{ marginBottom: 24 }}>
           <div style={{
-            fontSize: 11, fontWeight: 700, color: 'var(--dim)',
-            letterSpacing: '0.05em', textTransform: 'uppercase',
-            marginBottom: 12,
-            fontFamily: "'JetBrains Mono', monospace",
-          }}>추가 정보 (선택)</div>
+            fontSize: 13, fontWeight: 600, color: 'var(--text-tertiary)',
+            marginBottom: 10,
+          }}>추가 정보 (선택 사항)</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label style={labelStyle}>소속 회사</label>
@@ -234,17 +228,13 @@ export default function RegisterPage() {
 
         {/* 안내 박스 */}
         <div style={{
-          padding: '14px 16px', borderRadius: 10, marginBottom: 20,
-          background: 'rgba(0,102,255,.06)', border: '1px solid rgba(0,102,255,.15)',
+          padding: '12px 14px', borderRadius: 8, marginBottom: 20,
+          background: 'var(--bg-elevated)', border: '1px solid var(--border)',
           display: 'flex', gap: 10, alignItems: 'flex-start',
         }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>🔒</span>
-          <div>
-            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 3 }}>관리자 승인 방식</div>
-            <div style={{ fontSize: 11, color: 'var(--mid)', lineHeight: 1.6 }}>
-              신청 후 관리자(황건우)의 승인이 완료되면 이메일로 안내드립니다.
-              승인 완료 전까지는 로그인이 제한됩니다.
-            </div>
+          <ShieldCheck size={17} color="var(--text-tertiary)" style={{ flexShrink: 0, marginTop: 1 }} />
+          <div style={{ fontSize: 13, color: 'var(--mid)', lineHeight: 1.6 }}>
+            관리자(황건우)가 승인하면 이메일로 알려 드립니다. 승인 전에는 로그인할 수 없습니다.
           </div>
         </div>
 
@@ -254,18 +244,18 @@ export default function RegisterPage() {
           disabled={loading}
           style={{
             width: '100%', padding: '14px 0',
-            background: loading ? 'var(--dim)' : 'linear-gradient(135deg, #0066ff, #00b8d9)',
-            color: '#fff', border: 'none', borderRadius: 99,
-            fontSize: 15, fontWeight: 700, cursor: loading ? 'wait' : 'pointer',
-            fontFamily: 'inherit', transition: 'all .15s',
+            background: loading ? 'var(--dim)' : 'var(--accent)',
+            color: '#fff', border: 'none', borderRadius: 8,
+            fontSize: 15, fontWeight: 600, cursor: loading ? 'wait' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}
         >
-          {loading ? '신청 중...' : '회원가입 신청'}
+          {loading ? <><Loader2 size={17} className="spin" /> 신청하는 중</> : '가입 신청'}
         </button>
 
         <p style={{ marginTop: 20, textAlign: 'center', fontSize: 13, color: 'var(--mid)' }}>
-          이미 계정이 있으신가요?{' '}
-          <Link href="/login" style={{ color: 'var(--blue)', fontWeight: 600, textDecoration: 'none' }}>
+          계정이 있으면{' '}
+          <Link href="/login" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
             로그인
           </Link>
         </p>

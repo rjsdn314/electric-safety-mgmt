@@ -15,7 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <style>{`
         .app-shell {
           display: grid;
-          grid-template-columns: 260px 1fr;
+          grid-template-columns: 240px 1fr;
           min-height: 100vh;
           background: var(--bg-page);
         }

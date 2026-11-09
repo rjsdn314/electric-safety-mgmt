@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from '@/components/inspection/ThermalPhotos';
+import { Thermometer, Download, HardDriveDownload, Trash2, X, Save, Loader2, Smartphone } from 'lucide-react';
 
 // 열화상 기능 도입일 — 이전에 생성된 점검은 '열화상 대기' 표시를 하지 않음
 const THERMAL_SINCE = '2026-09-15';
@@ -243,7 +244,7 @@ export default function HistoryPage() {
                           } catch (e: any) { console.error(`동기화 실패: ${item.file_name}`, e); failCount++; }
                 }
                 setSyncProgress('');
-                alert(`동기화 완료!\n\n✅ 성공: ${successCount}개\n❌ 실패: ${failCount}개`);
+                alert(`PC 폴더 동기화를 마쳤습니다.\n\n성공 ${successCount}개, 실패 ${failCount}개`);
         } catch (e: any) {
                 if (e.name !== 'AbortError') alert('동기화 오류: ' + e.message);
         } finally { setSyncing(false); setSyncProgress(''); }
@@ -322,7 +323,7 @@ export default function HistoryPage() {
                 const newMv = { ...(item.measure_values || {}), saved_to_pc: true };
                 await sb.from('inspections').update({ measure_values: newMv }).eq('id', item.id);
                 setItems(prev => prev.map(it => it.id === item.id ? { ...it, measure_values: newMv } : it));
-                alert(`✅ PC 저장 완료\n\n${subFolderName} / ${fileName}`);
+                alert(`PC에 저장했습니다.\n\n${subFolderName} / ${fileName}`);
         } catch (e: any) {
                 if (e.name !== 'AbortError') alert('PC 저장 실패: ' + e.message);
         } finally { setSavingId(null); }
@@ -357,7 +358,7 @@ export default function HistoryPage() {
                 const newMv = { ...(item.measure_values || {}), local_deleted: true, saved_to_pc: false };
                 await sb.from('inspections').update({ measure_values: newMv }).eq('id', item.id);
                 setItems(prev => prev.map(it => it.id === item.id ? { ...it, measure_values: newMv } : it));
-                alert(removed ? `✅ 로컬 파일을 삭제했습니다.\n\n${fileName}` : `로컬 파일을 찾지 못했습니다(이미 삭제되었을 수 있음). "파일 없음"으로 표시합니다.`);
+                alert(removed ? `PC의 파일을 삭제했습니다.\n\n${fileName}` : `PC에서 파일을 찾지 못했습니다. 이미 지워졌을 수 있어 "파일 없음"으로 표시합니다.`);
         } catch (e: any) {
                 if (e.name !== 'AbortError') alert('로컬 파일 삭제 실패: ' + e.message);
         } finally { setSavingId(null); }
@@ -376,19 +377,19 @@ export default function HistoryPage() {
       const item = thermalItem; if (!item) return;
       if (!thermalApi.hasAny) { alert('열화상 사진을 먼저 선택해주세요.'); return; }
       if (thermalApi.busy) { alert('열화상 사진 처리 중입니다. 잠시 후 다시 시도해주세요.'); return; }
-      if (thermalApi.unassigned && !confirm(`⚠️ 부위가 지정되지 않은 사진이 ${thermalApi.unassigned}장 있습니다.\n해당 사진은 제외하고 반영할까요?`)) return;
+      if (thermalApi.unassigned && !confirm(`부위를 정하지 않은 사진이 ${thermalApi.unassigned}장 있습니다.\n그 사진은 빼고 반영할까요?`)) return;
       if (item.measure_values?.thermal && !confirm('이미 열화상이 반영된 점검표입니다.\n기존 별지7 온도·사진을 새 사진으로 교체할까요?')) return;
       setThermalSaving(true);
       try {
         const b7_panels = await thermalApi.buildPanels(thermalPanelCount(item));
         const res = await fetch('/api/inspection/thermal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inspection_id: item.id, b7_panels, b7_labels: thermalApi.b7Labels }) });
         const r = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''}`);
+        if (!res.ok) throw new Error(r.error || `HTTP ${res.status}${res.status === 413 ? ', 사진 용량 초과' : ''}`);
         const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
         setItems(prev => prev.map(it => it.id === item.id ? updated : it));
         await thermalApi.learn();   // 확정 분류를 계정별 예시로 저장 — 사진을 옮기기 전에 먼저 읽어둠
         if (isDesktop) {
-          alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n이어서 PC 폴더의 엑셀 파일도 새 파일로 저장합니다.`);
+          alert(`열화상을 반영했습니다 (별지7 ${r.applied}장).\n\n이어서 PC 폴더의 엑셀 파일도 새 파일로 저장합니다.`);
           await saveOneToPc(updated);
           // 열화상 사진 전부를 같은 점검 폴더(약칭\수배전반번호)에 저장 — '폴더 선택'으로 고른 사진은 이동
           const handle = await getStationFolder(updated);
@@ -397,12 +398,12 @@ export default function HistoryPage() {
             const stName = updated.station?.name || updated.station?.base_name || 'unknown';
             try {
               const a = await thermalApi.archivePhotos(handle, `${dateNum}_${stName}_${updated.inspection_type}`, thermalPanelCount(updated));
-              if (a) alert(`📷 열화상 사진 ${a.copied}장을 ${a.folder} 에 저장했습니다${a.moved ? `\n(원본 ${a.moved}장은 옮겨짐)` : ''}${a.failed ? `\n⚠️ 실패 ${a.failed}장` : ''}`);
-            } catch (e: any) { alert('⚠️ 열화상 사진 폴더 저장 실패: ' + e.message); }
+              if (a) alert(`열화상 사진 ${a.copied}장을 ${a.folder}에 저장했습니다.${a.moved ? `\n원본 ${a.moved}장은 옮겼습니다.` : ''}${a.failed ? `\n${a.failed}장은 저장하지 못했습니다.` : ''}`);
+            } catch (e: any) { alert('열화상 사진을 폴더에 저장하지 못했습니다.\n' + e.message); }
           }
           thermalApi.reset(); setThermalItem(null);
         } else {
-          alert(`✅ 열화상 반영 완료 (별지7 ${r.applied}장)\n\n목록의 다운로드 버튼으로 새 파일을 받을 수 있습니다.`);
+          alert(`열화상을 반영했습니다 (별지7 ${r.applied}장).\n\n목록의 내려받기 버튼으로 새 파일을 받을 수 있습니다.`);
           thermalApi.reset(); setThermalItem(null);
         }
       } catch (e: any) {
@@ -416,41 +417,41 @@ export default function HistoryPage() {
     const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
 
   return (
-        <div style={{padding: '32px 36px 60px'}}>
+        <div className="page-pad" style={{padding: '28px 32px 60px'}}>
           {thermalItem && (
             <div onClick={closeThermal} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '40px 16px' }}>
-              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 900, background: 'var(--bg-card)', borderRadius: 16, padding: 24, boxShadow: '0 12px 40px rgba(0,0,0,.35)' }}>
+              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 900, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>🌡️ 열화상 추가</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{thermalItem.station?.name} · {thermalItem.inspection_type}점검 · {thermalItem.inspection_date}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>열화상 추가</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{thermalItem.station?.name}, {thermalItem.inspection_type}점검, {thermalItem.inspection_date}</div>
                   </div>
-                  <button onClick={closeThermal} disabled={thermalSaving} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 15 }}>✕</button>
+                  <button onClick={closeThermal} disabled={thermalSaving} style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', lineHeight: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} aria-label="닫기"><X size={16} /></button>
                 </div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 10 }}>
-                  수배전반별로 사진을 고르면 별지7에 온도·판정·사진을 채웁니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용설명서</a>
+                  수배전반마다 사진을 고르면 별지7에 온도, 판정, 사진을 채웁니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용 방법</a>
                 </div>
                 {Array.from({ length: thermalPanelCount(thermalItem) }, (_, idx) => (
                   <div key={idx} style={{ marginTop: 16 }}>
-                    <div style={{ display: 'inline-block', fontSize: 13, fontWeight: 700, color: 'var(--accent)', padding: '4px 12px', borderRadius: 8, background: 'var(--accent-soft)' }}>수배전반 #{idx + 1}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>수배전반 #{idx + 1}</div>
                     <ThermalPhotoBox idx={idx} api={thermalApi} />
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-                  <button onClick={closeThermal} disabled={thermalSaving} style={{ flex: 1, padding: 14, borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
-                  <button onClick={submitThermal} disabled={thermalSaving || thermalApi.busy || !thermalApi.hasAny} style={{ flex: 2, padding: 14, borderRadius: 12, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: thermalSaving ? 'wait' : 'pointer', opacity: (thermalSaving || thermalApi.busy || !thermalApi.hasAny) ? 0.6 : 1, fontFamily: 'inherit' }}>{thermalSaving ? '⏳ 점검표에 반영 중...' : '⚡ 점검표에 반영'}</button>
+                  <button onClick={closeThermal} disabled={thermalSaving} style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>취소</button>
+                  <button onClick={submitThermal} disabled={thermalSaving || thermalApi.busy || !thermalApi.hasAny} className="btn-primary" style={{ flex: 2, padding: 12, fontSize: 14 }}>{thermalSaving ? <><Loader2 size={16} className="spin" /> 점검표에 반영하는 중</> : '점검표에 반영'}</button>
                 </div>
               </div>
             </div>
           )}
                 <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap'}}>
                           <div>
-                                    <h1 style={{fontSize: 24, fontWeight: 800, marginBottom: 8}}>점검 이력</h1>
-                                    <p style={{color: 'var(--text-secondary)'}}>생성된 직무고시 파일 목록</p>
+                                    <h1 style={{margin: '0 0 4px'}}>점검 이력</h1>
+                                    <p style={{margin: 0, fontSize: 14, color: 'var(--text-secondary)'}}>만든 점검표 파일 목록입니다.</p>
                           </div>
                   {isDesktop && (<button onClick={handleSync} disabled={syncing}
-                                             style={{ padding: '12px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1, fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {syncing ? `⏳ ${syncProgress || '동기화 중...'}` : '📥 PC 폴더로 일괄 동기화'}
+                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                    {syncing ? <><Loader2 size={15} className="spin" /> {syncProgress || '동기화 중'}</> : <><HardDriveDownload size={15} /> PC 폴더로 모두 저장</>}
                   </button>)}
                 </div>
         
@@ -458,9 +459,9 @@ export default function HistoryPage() {
                 {isAdmin && (
                   <select value={viewOwner} onChange={e => setViewOwner(e.target.value)}
                     style={{ padding: '8px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-elevated)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', marginRight: 4 }}>
-                          <option value="mine">내 관리구역 (기본)</option>
+                          <option value="mine">내 관리구역</option>
                           {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
-                          <option value="all">전체 (모든 회원)</option>
+                          <option value="all">전체 회원</option>
                   </select>
                 )}
                 {TYPES.map(t => (
@@ -476,77 +477,77 @@ export default function HistoryPage() {
               </div>
         
           {selectedIds.size > 0 && (
-                  <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '12px 16px', borderRadius: 12, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)'}}>
-                            <div style={{fontSize: 13, fontWeight: 700, color: '#ef4444'}}>{selectedIds.size}건 선택됨</div>
+                  <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, padding: '12px 16px', borderRadius: 12, background: 'var(--negative-soft)', border: '1px solid rgba(201,54,54,0.25)'}}>
+                            <div style={{fontSize: 13, fontWeight: 600, color: 'var(--negative)'}}>{selectedIds.size}건 선택됨</div>
                             <div style={{display: 'flex', gap: 8}}>
                                         <button onClick={() => setSelectedIds(new Set())} style={{padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'}}>선택 해제</button>
-                                        <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{padding: '8px 16px', borderRadius: 8, border: 'none', background: '#ef4444', color: '#fff', fontSize: 13, fontWeight: 700, cursor: bulkDeleting ? 'wait' : 'pointer', opacity: bulkDeleting ? 0.6 : 1, fontFamily: 'inherit'}}>{bulkDeleting ? '삭제 중...' : `🗑 선택 ${selectedIds.size}건 삭제`}</button>
+                                        <button onClick={handleBulkDelete} disabled={bulkDeleting} style={{padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--negative)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: bulkDeleting ? 'wait' : 'pointer', opacity: bulkDeleting ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6}}>{bulkDeleting ? '삭제 중' : <><Trash2 size={14} /> {selectedIds.size}건 삭제</>}</button>
                             </div>
                   </div>
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
-                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', alignItems: 'center'}}>
+                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
                                 <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
-                                <div>충전소</div><div>점검유형</div><div>점검일자</div><div>점검자</div><div>파일명</div><div style={{textAlign: 'center'}}>액션</div>
+                                <div>충전소</div><div>종류</div><div>점검일</div><div>점검자</div><div>파일</div><div></div>
                       </div>
               
                 {loading ? (
-                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>로딩 중...</div>
+                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-tertiary)'}}>불러오는 중</div>
                   ) : visibleItems.length === 0 ? (
-                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-secondary)'}}>이력이 없습니다</div>
+                    <div style={{padding: 40, textAlign: 'center', color: 'var(--text-tertiary)'}}>점검 기록이 없습니다.</div>
                   ) : (
-                    visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'10px 20px',background:'var(--bg-elevated)',fontWeight:800,fontSize:13,color:'var(--accent)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,7)} 생성</div>)}
-                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'rgba(239,68,68,0.04)' : 'transparent'}}>
+                    visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'8px 20px',fontWeight:600,fontSize:12,color:'var(--text-tertiary)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,4)}년 {Number((item.created_at||'').slice(5,7))}월에 만듦</div>)}
+                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 1fr 1fr 1fr 2fr 150px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
                                               <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
                                                 {item.measure_values?.device === 'mobile' && (
-                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,0.12)', color: '#6366f1'}}>📱 휴대폰</span>
+                                        <span style={{marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 3, verticalAlign: 'middle'}}><Smartphone size={11} />휴대폰</span>
                                                               )}
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
-                                        <span style={{marginLeft: 4, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>PC 저장 대기</span>
+                                        <span style={{marginLeft: 4, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--warning-soft)', color: 'var(--warning)'}}>PC 저장 전</span>
                                                               )}
                                               </div>
-                                              <div><span style={{padding: '2px 8px', borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 11, fontWeight: 700}}>{item.inspection_type}</span></div>
+                                              <div><span style={{padding: '2px 8px', borderRadius: 5, background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600}}>{item.inspection_type}</span></div>
                                               <div>{item.inspection_date}</div>
                                               <div>{item.inspector_name}</div>
                                               <div style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12, color: 'var(--text-secondary)'}}>
                                                 {item.file_name}
                                                 {item.inspection_type !== '월차' && !item.measure_values?.thermal && (item.created_at || '') >= THERMAL_SINCE && (
-                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(245,158,11,0.12)', color: '#d97706'}}>🌡️ 열화상 대기</span>
+                                        <span style={{marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--warning-soft)', color: 'var(--warning)'}}>열화상 없음</span>
                                                               )}
                                                 {item.measure_values?.local_deleted && (
-                                        <span style={{marginLeft: 6, fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,0.18)', color: 'var(--text-secondary)'}}>🗙 파일 없음</span>
+                                        <span style={{marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--bg-elevated)', color: 'var(--text-tertiary)'}}>PC 파일 없음</span>
                                                               )}
                                               </div>
                                               <div style={{display: 'flex', gap: 6, justifyContent: 'flex-end', alignItems: 'center'}}>
                                                 {item.measure_values?.device === 'mobile' && !item.measure_values?.saved_to_pc && (
-                                        <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ padding: '4px 8px', borderRadius: 6, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 11, fontWeight: 700, lineHeight: 1, whiteSpace: 'nowrap', fontFamily: 'inherit' }}>{savingId === item.id ? '⏳' : '💾 저장'}</button>
+                                        <button onClick={() => saveOneToPc(item)} disabled={savingId === item.id} title="PC 폴더에 저장" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 9px', borderRadius: 7, background: 'var(--accent)', color: '#fff', border: 'none', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, lineHeight: 1, whiteSpace: 'nowrap' }}>{savingId === item.id ? <Loader2 size={13} className="spin" /> : <><Save size={13} />PC 저장</>}</button>
                                                               )}
                                                 {item.inspection_type !== '월차' && item.file_path && (
-                                        <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: item.measure_values?.thermal ? 'var(--bg-elevated)' : 'rgba(245,158,11,0.14)', border: `1px solid ${item.measure_values?.thermal ? 'var(--border)' : 'rgba(245,158,11,0.45)'}`, cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>🌡️</button>
+                                        <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
                                                               )}
                                                 {item.file_path && (
-                                        <a href={item.file_path} download={item.file_name} title="다운로드" style={{ padding: 6, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', textDecoration: 'none', fontSize: 14, lineHeight: 1 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></a>
+                                        <a href={item.file_path} download={item.file_name} title="엑셀 내려받기" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, border: '1px solid var(--border)', color: 'var(--accent)', textDecoration: 'none', lineHeight: 0 }}><Download size={15} /></a>
                                                               )}
-                                                {/* 로컬 파일 삭제 — PC의 엑셀 파일만 (🗑) */}
+                                                {/* 로컬 파일 삭제: PC의 엑셀 파일만 */}
                                                 {isDesktop && (
                                                   item.measure_values?.local_deleted ? (
-                                                    <span title="로컬 파일 없음" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, lineHeight: 1, opacity: .25, cursor: 'default' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></span>
+                                                    <span title="로컬 파일 없음" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 0, color: 'var(--text-tertiary)', opacity: .4, cursor: 'default' }}><Trash2 size={15} /></span>
                                                   ) : (
-                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="로컬 저장 파일 삭제 (PC의 엑셀 파일만 삭제, 이력은 유지)" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)', cursor: savingId === item.id ? 'wait' : 'pointer', fontSize: 15, lineHeight: 1 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg></button>
+                                        <button onClick={() => deleteLocalFile(item)} disabled={savingId === item.id} title="PC에 저장된 엑셀 파일만 삭제 (이력은 남음)" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: savingId === item.id ? 'wait' : 'pointer', lineHeight: 0 }}><Trash2 size={15} /></button>
                                                   )
                                                 )}
-                                                {/* 점검이력 삭제 — 맨 오른쪽, 빨간 ✕ */}
-                                                              <button onClick={() => handleDelete(item)} title="점검이력 삭제 (서버 기록·파일 모두 삭제)" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, background: 'rgba(239,68,68,0.12)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.35)', cursor: 'pointer', fontSize: 14, fontWeight: 800, lineHeight: 1, fontFamily: 'inherit' }}>✕</button>
+                                                {/* 점검이력 삭제 */}
+                                                              <button onClick={() => handleDelete(item)} title="점검 기록 삭제 (서버 기록과 파일 모두)" aria-label="점검 기록 삭제" style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: 'var(--negative)', border: '1px solid rgba(201,54,54,0.3)', cursor: 'pointer', lineHeight: 0 }}><X size={15} /></button>
                                               </div>
                                 </div>
                     </div> ))
                   )}
               </div>
           {!loading && hasMore && (
-                  <button onClick={() => loadData(false, items.length)} disabled={loadingMore} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 700, borderRadius: 10, border: '1px solid var(--border)', cursor: loadingMore ? 'wait' : 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', fontFamily: 'inherit' }}>{loadingMore ? '불러오는 중...' : '더보기'}</button>
+                  <button onClick={() => loadData(false, items.length)} disabled={loadingMore} style={{ width: '100%', marginTop: 12, padding: '12px 0', fontSize: 13, fontWeight: 600, borderRadius: 8, border: '1px solid var(--border)', cursor: loadingMore ? 'wait' : 'pointer', background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>{loadingMore ? '불러오는 중' : '더 보기'}</button>
               )}
         </div>
       );

@@ -8,6 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { HIGH_TYPES, LOW_TYPES, buildPresetSpec, estimateChargers } from '@/lib/annual/presets';
 import { readDrawingPdf, reconcile } from '@/lib/annual/drawingRead';
+import { Status } from '@/components/ui/Status';
+import { ScanSearch, ListChecks, FilePlus2, History, X, Plus, Copy, Dices, AlertTriangle, Check, Download, Upload, Loader2, ArrowUp, ArrowDown } from 'lucide-react';
 import {
   AnnualSpec, Breaker, Panel, Transformer, HvCircuit, ChargerGroup,
   LOW_ITEMS, HIGH_ITEMS, GROUND_ITEMS, LIMITS,
@@ -16,23 +18,23 @@ import {
 
 type Station = { station_id: string; name: string; annual: boolean };
 
-const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 16 };
-const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', background: 'var(--bg-input, var(--bg))', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit', boxSizing: 'border-box', minWidth: 0 };
-const btn: React.CSSProperties = { padding: '8px 14px', borderRadius: 9, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' };
-const primary: React.CSSProperties = { ...btn, border: 'none', background: 'var(--accent)', color: '#fff', fontWeight: 700 };
-const mini: React.CSSProperties = { ...btn, padding: '4px 8px', fontSize: 12 };
+const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 };
+const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit', boxSizing: 'border-box', minWidth: 0 };
+const btn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 13px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontWeight: 600, fontSize: 13, cursor: 'pointer' };
+const primary: React.CSSProperties = { ...btn, border: '1px solid var(--accent)', background: 'var(--accent)', color: '#fff' };
+const mini: React.CSSProperties = { ...btn, padding: '4px 8px', fontSize: 12, gap: 4, borderColor: 'var(--border)' };
 const th: React.CSSProperties = { textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', padding: '4px 4px' };
 const td: React.CSSProperties = { padding: '3px 4px', verticalAlign: 'middle' };
-const h2: React.CSSProperties = { fontSize: 16, fontWeight: 800, marginBottom: 12 };
+const h2: React.CSSProperties = { fontSize: 15, fontWeight: 700, marginBottom: 12 };
 // 직접 확인해야 할 항목 — 노란 표시
-const warnBox: React.CSSProperties = { background: 'rgba(245,158,11,.12)', border: '2px solid #f59e0b' };
-const warnInp: React.CSSProperties = { borderColor: '#f59e0b', background: 'rgba(245,158,11,.12)' };
+const warnBox: React.CSSProperties = { background: 'var(--warning-soft)', border: '1px solid rgba(183,121,31,.55)' };
+const warnInp: React.CSSProperties = { borderColor: 'rgba(183,121,31,.7)', background: 'var(--warning-soft)' };
 const flag = (on: unknown) => (on ? { 'data-check': '' } : {});
 function CheckTag({ text, onOk }: { text: string; onOk: () => void }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#b45309', background: 'rgba(245,158,11,.18)', border: '1px solid #f59e0b', borderRadius: 999, padding: '2px 4px 2px 10px' }}>
-      ⚠️ {text}
-      <button onClick={onOk} title="확인했으면 눌러서 표시를 지웁니다" style={{ border: 'none', background: '#f59e0b', color: '#fff', borderRadius: 999, padding: '2px 8px', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>확인 ✓</button>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: 'var(--warning)', background: 'var(--warning-soft)', border: '1px solid rgba(183,121,31,.4)', borderRadius: 6, padding: '2px 3px 2px 8px' }}>
+      <AlertTriangle size={13} /> {text}
+      <button onClick={onOk} title="확인했으면 눌러서 표시를 지웁니다" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, border: 'none', background: 'var(--warning)', color: '#fff', borderRadius: 4, padding: '2px 7px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}><Check size={11} strokeWidth={3} />확인</button>
     </span>
   );
 }
@@ -97,7 +99,7 @@ export default function AnnualBuilderPage() {
   const applyPreset = () => {
     if (spec && !confirm('지금 입력한 내용을 표준 구성으로 덮어쓸까요?')) return;
     setSpec(buildPresetSpec({ low, systems, commBoxes, ch200, ch350, prefix, stationLabel: station?.name || '' }));
-    setMsg('✅ 표준 구성으로 채웠습니다. 도면과 비교해 다른 부분만 고친 뒤 등록하세요.'); setWarnings([]);
+    setMsg('✅ 표준 구성으로 채웠습니다. 도면과 다른 부분만 고친 뒤 등록하세요.'); setWarnings([]);
   };
 
   // 도면 글자를 브라우저 안에서 OCR로 읽어 변압기 용량·간선 차단기를 채운다 (무료)
@@ -108,8 +110,8 @@ export default function AnnualBuilderPage() {
     try {
       const recs = [];
       for (let i = 0; i < pdfs.length; i++) {
-        setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}) — 처음엔 글자인식 데이터를 받느라 조금 더 걸려요`);
-        const r = await readDrawingPdf(pdfs[i].file, prefix, (st) => setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}) · ${st}`));
+        setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}). 처음 한 번은 조금 더 걸립니다.`);
+        const r = await readDrawingPdf(pdfs[i].file, prefix, (st) => setBusy(`도면 읽는 중 (${i + 1}/${pdfs.length}): ${st}`));
         recs.push({ read: r, rec: reconcile(r, prefix) });
       }
       const isLow = recs.filter((x) => x.read.low).length > recs.length / 2;
@@ -125,8 +127,8 @@ export default function AnnualBuilderPage() {
         `충전기 대수(200kW ${c200}대 · 350kW ${c350}대)와 통신함 수는 변압기 종류로 추정한 값이에요 — 실제와 다르면 고쳐 주세요.`,
       ];
       setSpec(s);
-      setMsg('✅ 도면을 읽어 채웠습니다. 아래 「확인할 부분」을 보고 도면과 비교한 뒤 등록하세요.');
-    } catch (e: any) { setMsg('❌ 도면 읽기 실패: ' + (e?.message || e) + ' — 표준 구성 고르기로 채워 주세요.'); }
+      setMsg('✅ 도면을 읽어 채웠습니다. 노란색으로 표시한 칸을 도면과 비교한 뒤 등록하세요.');
+    } catch (e: any) { setMsg('❌ 도면을 읽지 못했습니다. 표준 구성을 골라 채워 주세요. (' + (e?.message || e) + ')'); }
     finally { setBusy(''); }
   };
 
@@ -146,10 +148,10 @@ export default function AnnualBuilderPage() {
       setWarnings(j.warnings || []);
       download(j.fileBase64, j.fileName);
       if (save) {
-        setMsg('✅ 연차 양식으로 등록했습니다. 이제 [점검 생성 → 연차]에서 이 양식이 자동으로 쓰입니다.');
+        setMsg('✅ 연차 양식으로 등록했습니다. 이제 연차점검을 만들 때 이 양식이 쓰입니다.');
         setStations((prev) => prev.map((s) => (s.station_id === stationId ? { ...s, annual: true } : s)));
         setSavedSpec(spec);
-      } else setMsg('✅ 엑셀을 내려받았습니다(등록은 하지 않음).');
+      } else setMsg('✅ 엑셀을 내려받았습니다. 등록은 하지 않았습니다.');
     } catch (e: any) { setMsg('❌ ' + e.message); }
     finally { setBusy(''); }
   };
@@ -172,27 +174,26 @@ export default function AnnualBuilderPage() {
   const goFirstCheck = () => document.querySelector('[data-check]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
   return (
-    <div style={{ maxWidth: 1100, padding: '32px 28px 80px' }}>
-      <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>도면으로 연차 양식 만들기</h1>
-      <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-        도면(PDF)을 고르고 [도면에서 읽어 채우기]를 누르면 브라우저 안에서 도면 글자를 읽어 변압기 용량·저압 간선 차단기·충전기를 채웁니다.
-        도면과 다른 부분만 고쳐 등록하면 이후 연차점검 생성에 자동으로 쓰입니다. (도면은 서버로 올라가지 않고 AI도 쓰지 않아 크레딧이 들지 않아요 · 고압/저압 수전 모두 지원)
+    <div className="page-pad" style={{ maxWidth: 1100, padding: '28px 32px 80px' }}>
+      <h1 style={{ margin: '0 0 4px' }}>연차 양식 만들기</h1>
+      <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
+        설계도면 PDF를 읽어 변압기, 분전반 차단기, 충전기를 채운 뒤 그 충전소의 연차점검 양식으로 등록합니다.
       </p>
 
       <div style={card}>
-        <div style={h2}>1. 충전소 · 도면</div>
+        <div style={h2}>1. 충전소와 도면</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12, alignItems: 'end' }}>
           <label style={{ fontSize: 13 }}>충전소
             <select value={stationId} onChange={(e) => setStationId(e.target.value)} style={{ ...inp, marginTop: 4 }} disabled={!!busy}>
-              <option value="">— 충전소 선택 —</option>
-              {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (연차양식 있음)' : ''}</option>)}
+              <option value="">충전소 선택</option>
+              {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (연차 양식 있음)' : ''}</option>)}
             </select>
           </label>
-          <label style={{ fontSize: 13 }}>도면 PDF 보기 (서버로 올리지 않음 · 여러 개 가능)
+          <label style={{ fontSize: 13 }}>설계도면 PDF (여러 개 가능)
             <input type="file" multiple accept="application/pdf,.pdf" disabled={!!busy} onChange={(e) => pickPdfs(Array.from(e.target.files || []))} style={{ ...inp, marginTop: 4 }} />
           </label>
           <label style={{ fontSize: 13 }}>차단기 표기 앞 번호
-            <input value={prefix} onChange={(e) => setPrefix(e.target.value)} style={{ ...inp, marginTop: 4 }} placeholder="예: 2 → 2MCCB4P350A" disabled={!!busy} />
+            <input value={prefix} onChange={(e) => setPrefix(e.target.value)} style={{ ...inp, marginTop: 4 }} placeholder="예: 2 (2MCCB4P350A)" disabled={!!busy} />
           </label>
         </div>
 
@@ -203,13 +204,13 @@ export default function AnnualBuilderPage() {
                 {pdfs.map((f, i) => <button key={f.url} style={{ ...mini, borderColor: i === pdfIdx ? 'var(--accent)' : 'var(--border)', color: i === pdfIdx ? 'var(--accent)' : 'var(--text-primary)' }} onClick={() => setPdfIdx(i)}>{f.name}</button>)}
               </div>
             )}
-            <div style={hint}>단선결선도(고압은 보통 3쪽, 저압은 수전 분전함 결선도)에서 변압기 용량과 저압 간선을 확인하세요.</div>
+            <div style={hint}>변압기 용량과 저압 간선은 단선결선도(보통 3쪽)에서 확인할 수 있습니다.</div>
             <iframe src={pdfs[pdfIdx]?.url} title="도면" style={{ width: '100%', height: 560, border: '1px solid var(--border)', borderRadius: 10, background: '#fff' }} />
           </div>
         )}
 
-        <div style={{ marginTop: 16, padding: 14, border: '1px dashed var(--border)', borderRadius: 10 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>표준 구성 (도면에서 읽으면 자동으로 맞춰져요)</div>
+        <div style={{ marginTop: 16, padding: 14, background: 'var(--bg-elevated)', borderRadius: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>표준 구성 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', fontSize: 13 }}>도면을 읽으면 자동으로 맞춰집니다</span></div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 10 }}>
             <label><input type="radio" checked={!low} onChange={() => setLowMode(false)} /> 고압 수전 (22.9kV, 변압기)</label>
             <label><input type="radio" checked={low} onChange={() => setLowMode(true)} /> 저압 수전 (380V, 한전 공급 계통)</label>
@@ -220,7 +221,7 @@ export default function AnnualBuilderPage() {
               <select style={{ ...inp, flex: 1, minWidth: 260 }} value={sys.typeId} onChange={(e) => setSystems((p) => p.map((x, j) => (j === i ? { typeId: e.target.value, spdPoles: x.spdPoles } : x)))}>
                 {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
               </select>
-              {sys.feeders && <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }} title="도면 간선표에서 읽은 차단기를 씁니다 (종류를 바꾸면 표준 구성으로)">도면값</span>}
+              {sys.feeders && <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 700 }} title="도면 간선표에서 읽은 차단기를 씁니다. 종류를 바꾸면 표준 구성으로 바뀝니다.">도면에서 읽음</span>}
               {!low && (
                 <label style={{ fontSize: 12 }}>SPD 차단기
                   <select style={{ ...inp, width: 70, display: 'inline-block', marginLeft: 4 }} value={sys.spdPoles} onChange={(e) => setSystems((p) => p.map((x, j) => (j === i ? { ...x, spdPoles: +e.target.value as 3 | 4 } : x)))}>
@@ -228,11 +229,11 @@ export default function AnnualBuilderPage() {
                   </select>
                 </label>
               )}
-              {systems.length > 1 && <button style={mini} onClick={() => setSystems((p) => p.filter((_, j) => j !== i))}>✕</button>}
+              {systems.length > 1 && <button style={mini} aria-label="삭제" onClick={() => setSystems((p) => p.filter((_, j) => j !== i))}><X size={13} /></button>}
             </div>
           ))}
           {systems.length < LIMITS.transformers && (
-            <button style={{ ...mini, marginBottom: 10 }} onClick={() => setSystems((p) => [...p, { typeId: types[0].id, spdPoles: 4 }])}>+ {low ? '수전 계통' : '변압기'} 추가</button>
+            <button style={{ ...mini, marginBottom: 10 }} onClick={() => setSystems((p) => [...p, { typeId: types[0].id, spdPoles: 4 }])}><Plus size={13} /> {low ? '수전 계통' : '변압기'} 추가</button>
           )}
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, alignItems: 'center' }}>
             <label>200kW 충전기 <input type="number" min={0} style={{ ...inp, width: 64, display: 'inline-block' }} value={ch200} onChange={(e) => setCh200(+e.target.value)} />대</label>
@@ -242,25 +243,25 @@ export default function AnnualBuilderPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={readDrawings}>🔍 도면에서 읽어 채우기{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
-          <button style={btn} disabled={!stationId || !!busy} onClick={applyPreset}>⚡ 고른 구성으로 채우기</button>
-          <button style={btn} disabled={!stationId || !!busy} onClick={startManual}>✏️ 빈 양식부터 직접 입력</button>
-          {savedSpec && <button style={btn} disabled={!!busy} onClick={() => { setSpec(structuredClone(savedSpec)); setMsg('이전에 등록한 설비 내용을 불러왔습니다.'); }}>📂 이전 등록 내용 불러오기</button>}
+          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={readDrawings}><ScanSearch size={15} /> 도면 읽어서 채우기{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
+          <button style={btn} disabled={!stationId || !!busy} onClick={applyPreset}><ListChecks size={15} /> 고른 구성으로 채우기</button>
+          <button style={btn} disabled={!stationId || !!busy} onClick={startManual}><FilePlus2 size={15} /> 빈 양식으로 시작</button>
+          {savedSpec && <button style={btn} disabled={!!busy} onClick={() => { setSpec(structuredClone(savedSpec)); setMsg('이전에 등록한 설비 내용을 불러왔습니다.'); }}><History size={15} /> 이전 등록 내용</button>}
         </div>
-        {busy && <div style={{ marginTop: 12, fontSize: 14 }}>⏳ {busy}</div>}
-        {msg && <div style={{ marginTop: 12, fontSize: 14 }}>{msg}</div>}
+        {busy && <Status msg={busy} kind="busy" style={{ marginTop: 12 }} />}
+        {!busy && msg && <Status msg={msg} style={{ marginTop: 12 }} />}
         {warnings.length > 0 && (
-          <ul style={{ marginTop: 10, paddingLeft: 18, fontSize: 13, color: '#b45309' }}>{warnings.map((w, i) => <li key={i}>⚠️ {w}</li>)}</ul>
+          <div style={{ marginTop: 10, display: 'grid', gap: 4 }}>{warnings.map((w, i) => <Status key={i} msg={w} kind="warn" style={{ fontSize: 13 }} />)}</div>
         )}
       </div>
 
       {spec && (
         <>
           {spec.notes.length > 0 && (
-            <div style={{ ...card, borderColor: '#f59e0b' }}>
-              <div style={h2}>🔎 확인할 부분</div>
+            <div style={{ ...card, borderColor: 'rgba(183,121,31,.55)' }}>
+              <div style={h2}>확인할 부분</div>
               {checkCount > 0 && (
-                <div style={{ fontSize: 13, marginBottom: 8 }}>아래 표에서 <b style={{ color: '#b45309' }}>노란색으로 표시한 {checkCount}곳</b>은 도면에서 확실히 읽지 못했거나 추정한 값이에요. 도면·현장과 비교해 맞으면 「확인 ✓」, 틀리면 고치면 표시가 사라집니다.{' '}
+                <div style={{ fontSize: 13, marginBottom: 8 }}>아래 표에서 <b style={{ color: 'var(--warning)' }}>노란색으로 표시한 {checkCount}곳</b>은 도면에서 확실히 읽지 못했거나 추정한 값입니다. 맞으면 [확인]을 누르고, 틀리면 고치면 표시가 사라집니다.{' '}
                   <button style={mini} onClick={goFirstCheck}>첫 항목으로 이동</button></div>
               )}
               <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{spec.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
@@ -325,7 +326,7 @@ export default function AnnualBuilderPage() {
               </table>
             </div>
             {openGround !== null && spec.transformers[openGround] && (
-              <div style={{ marginTop: 10, padding: 12, border: '1px dashed var(--border)', borderRadius: 10 }}>
+              <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-elevated)', borderRadius: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>고압 접지저항 표 — {spec.transformers[openGround].kva}kVA</div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead><tr>{['설비', '접지선 종류·굵기', '기준치(Ω)', '측정치(Ω)'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
@@ -342,19 +343,19 @@ export default function AnnualBuilderPage() {
                 </table>
               </div>
             )}
-            <button style={{ ...mini, marginTop: 10 }} disabled={spec.transformers.length >= LIMITS.transformers} onClick={() => upd((s) => { s.transformers.push(newTransformer()); })}>+ 변압기 추가</button>
+            <button style={{ ...mini, marginTop: 10 }} disabled={spec.transformers.length >= LIMITS.transformers} onClick={() => upd((s) => { s.transformers.push(newTransformer()); })}><Plus size={13} /> 변압기 추가</button>
           </div>
 
           <div style={card}>
             <div style={h2}>5. 저압 분전반 · 차단기 ({spec.panels.length}개 반 / 차단기 {breakerCount}개)</div>
-            <div style={hint}>별지2 절연저항 표에 반 이름 → 차단기 순으로 들어가고(좌·우 2열, 넘치면 다음 페이지), 접지저항 표에는 반마다 한 줄이 생깁니다.
-              절연저항 측정치는 랜덤: 단상(1·2극) 10~14 · 3상(3·4극) 400~999 (차단기 표기를 바꾸면 다시 뽑힘).</div>
+            <div style={hint}>별지2 절연저항 표에 반 이름과 차단기 순서대로 들어가고, 접지저항 표에는 반마다 한 줄이 생깁니다.
+              절연저항 측정치는 단상(1, 2극) 10~14, 3상(3, 4극) 400~999 사이에서 정해집니다.</div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
               <label>접지저항 측정치(전 분전반 같은 값)
                 <input style={{ ...inp, width: 80, display: 'inline-block', marginLeft: 6 }} value={spec.ground_value || ''} onChange={(e) => upd((s) => { s.ground_value = e.target.value; })} /> Ω
               </label>
-              <button style={mini} onClick={() => upd((s) => { s.ground_value = randomGround(); })}>🎲 접지저항 다시 뽑기</button>
-              <button style={mini} onClick={() => upd((s) => { s.panels.forEach((p) => p.breakers.forEach((b) => { b.value = randomInsulation(b.spec); })); })}>🎲 절연저항 전체 다시 뽑기</button>
+              <button style={mini} onClick={() => upd((s) => { s.ground_value = randomGround(); })}><Dices size={13} /> 접지저항 다시 정하기</button>
+              <button style={mini} onClick={() => upd((s) => { s.panels.forEach((p) => p.breakers.forEach((b) => { b.value = randomInsulation(b.spec); })); })}><Dices size={13} /> 절연저항 다시 정하기</button>
             </div>
             {spec.panels.map((p, pi) => (
               <div key={pi} {...flag(p.check)} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 10, ...(p.check ? warnBox : {}) }}>
@@ -364,8 +365,8 @@ export default function AnnualBuilderPage() {
                   <label style={{ fontSize: 12 }}>접지 사용전압 <input style={{ ...inp, width: 90, display: 'inline-block' }} value={p.voltage} onChange={(e) => setPanel(pi, 'voltage', e.target.value)} /></label>
                   <label style={{ fontSize: 12 }}><input type="checkbox" checked={p.ground} onChange={(e) => setPanel(pi, 'ground', e.target.checked)} /> 접지저항 측정</label>
                   <span style={{ flex: 1 }} />
-                  <button style={mini} onClick={() => movePanel(pi, -1)}>▲</button>
-                  <button style={mini} onClick={() => movePanel(pi, 1)}>▼</button>
+                  <button style={mini} aria-label="위로" onClick={() => movePanel(pi, -1)}><ArrowUp size={13} /></button>
+                  <button style={mini} aria-label="아래로" onClick={() => movePanel(pi, 1)}><ArrowDown size={13} /></button>
                   <button style={mini} onClick={() => upd((s) => { s.panels.splice(pi, 1); })}>반 삭제</button>
                 </div>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -379,17 +380,17 @@ export default function AnnualBuilderPage() {
                         <td style={td}><input style={inp} value={b.remark} onChange={(e) => setBr(pi, bi, 'remark', e.target.value)} /></td>
                         <td style={{ ...td, whiteSpace: 'nowrap' }}>
                           {b.check && <><CheckTag text={b.check} onOk={() => upd((s) => { delete s.panels[pi].breakers[bi].check; })} />{' '}</>}
-                          <button style={mini} title="복제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi + 1, 0, { ...b }); })}>⧉</button>{' '}
-                          <button style={mini} title="삭제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi, 1); })}>✕</button>
+                          <button style={mini} title="복제" aria-label="복제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi + 1, 0, { ...b }); })}><Copy size={13} /></button>{' '}
+                          <button style={mini} title="삭제" aria-label="삭제" onClick={() => upd((s) => { s.panels[pi].breakers.splice(bi, 1); })}><X size={13} /></button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { { const sp = `${prefix}MCCB4P50A`; s.panels[pi].breakers.push({ spec: sp, ...breakerDefaults(sp), remark: '' }); } })}>+ 차단기</button>
+                <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { { const sp = `${prefix}MCCB4P50A`; s.panels[pi].breakers.push({ spec: sp, ...breakerDefaults(sp), remark: '' }); } })}><Plus size={13} /> 차단기</button>
               </div>
             ))}
-            <button style={mini} onClick={() => upd((s) => { s.panels.push({ name: `SS-${s.panels.length + 1}`, voltage: '380/220', ground: true, breakers: [] }); })}>+ 분전반 추가</button>
+            <button style={mini} onClick={() => upd((s) => { s.panels.push({ name: `SS-${s.panels.length + 1}`, voltage: '380/220', ground: true, breakers: [] }); })}><Plus size={13} /> 분전반 추가</button>
           </div>
 
           <div {...flag(spec.check_hv)} style={{ ...card, ...(spec.check_hv ? warnBox : {}) }}>
@@ -404,13 +405,13 @@ export default function AnnualBuilderPage() {
                       {(['name', 'insul', 'ab', 'bc', 'ca', 'result', 'remark'] as const).map((k) => (
                         <td key={k} style={td}><input style={inp} value={c[k]} onChange={(e) => setHv(i, k, e.target.value)} /></td>
                       ))}
-                      <td style={td}><button style={mini} onClick={() => upd((s) => { s.hv_circuits.splice(i, 1); })}>✕</button></td>
+                      <td style={td}><button style={mini} aria-label="삭제" onClick={() => upd((s) => { s.hv_circuits.splice(i, 1); })}><X size={13} /></button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <button style={{ ...mini, marginTop: 6 }} disabled={spec.hv_circuits.length >= LIMITS.hvCircuits} onClick={() => upd((s) => { s.hv_circuits.push({ name: '', insul: '2000', ab: '0', bc: '0', ca: '0', result: '적 합', remark: '' }); })}>+ 구간 추가</button>
+            <button style={{ ...mini, marginTop: 6 }} disabled={spec.hv_circuits.length >= LIMITS.hvCircuits} onClick={() => upd((s) => { s.hv_circuits.push({ name: '', insul: '2000', ab: '0', bc: '0', ca: '0', result: '적 합', remark: '' }); })}><Plus size={13} /> 구간 추가</button>
           </div>
 
           <div style={card}>
@@ -423,12 +424,12 @@ export default function AnnualBuilderPage() {
                     <td style={td}><input style={inp} type="number" value={c.kw} onChange={(e) => setCh(i, 'kw', +e.target.value)} /></td>
                     <td style={td}><input style={{ ...inp, ...(c.check ? warnInp : {}) }} title={c.check} type="number" value={c.count} onChange={(e) => setCh(i, 'count', +e.target.value)} /></td>
                     <td style={td}><input style={inp} value={c.model} onChange={(e) => setCh(i, 'model', e.target.value)} /></td>
-                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{c.check && <><CheckTag text={c.check} onOk={() => upd((s) => { delete s.chargers[i].check; })} />{' '}</>}<button style={mini} onClick={() => upd((s) => { s.chargers.splice(i, 1); })}>✕</button></td>
+                    <td style={{ ...td, whiteSpace: 'nowrap' }}>{c.check && <><CheckTag text={c.check} onOk={() => upd((s) => { delete s.chargers[i].check; })} />{' '}</>}<button style={mini} aria-label="삭제" onClick={() => upd((s) => { s.chargers.splice(i, 1); })}><X size={13} /></button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { s.chargers.push({ kw: 200, count: 1, model: 'CS20A3' }); })}>+ 충전기 종류 추가</button>
+            <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { s.chargers.push({ kw: 200, count: 1, model: 'CS20A3' }); })}><Plus size={13} /> 충전기 종류 추가</button>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, alignItems: 'center', fontSize: 13 }}>
               <label>제조사 <input style={{ ...inp, width: 140, display: 'inline-block' }} value={spec.charger_maker} onChange={(e) => upd((s) => { s.charger_maker = e.target.value; })} /></label>
               <span>설치위치 {(['옥내', '옥외', '기타'] as const).map((l) => (
@@ -440,12 +441,12 @@ export default function AnnualBuilderPage() {
             </div>
           </div>
 
-          <div style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'sticky', bottom: 12, boxShadow: '0 4px 20px rgba(0,0,0,.12)' }}>
-            <button style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => build(true)}>📑 이 충전소 연차 양식으로 등록</button>
-            <button style={btn} disabled={!!busy} onClick={() => build(false)}>⬇️ 엑셀만 받아보기</button>
+          <div style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'sticky', bottom: 12, boxShadow: 'var(--shadow-lg)' }}>
+            <button style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => build(true)}><Upload size={15} /> 이 충전소 연차 양식으로 등록</button>
+            <button style={btn} disabled={!!busy} onClick={() => build(false)}><Download size={15} /> 엑셀만 내려받기</button>
             {checkCount > 0
-              ? <button style={{ ...btn, borderColor: '#f59e0b', color: '#b45309' }} onClick={goFirstCheck}>⚠️ 확인할 항목 {checkCount}개 남음 — 보러 가기</button>
-              : <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>등록하면 엑셀도 함께 내려받아집니다.</span>}
+              ? <button style={{ ...btn, borderColor: 'rgba(183,121,31,.55)', color: 'var(--warning)' }} onClick={goFirstCheck}><AlertTriangle size={15} /> 확인할 칸 {checkCount}개</button>
+              : <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>등록하면 엑셀도 함께 내려받습니다.</span>}
           </div>
         </>
       )}

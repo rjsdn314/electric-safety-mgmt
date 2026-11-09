@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { RefreshCw, MessageSquare, Phone, Check, X } from 'lucide-react';
 
 type UserRow = {
   id: string; email: string; name: string;
@@ -16,9 +17,9 @@ type UserRow = {
 };
 
 const STATUS_BADGE: Record<string, { bg: string; color: string; label: string }> = {
-  pending:  { bg: 'rgba(245,158,11,.1)',  color: '#d97706', label: '승인 대기' },
-  approved: { bg: 'rgba(16,185,129,.1)',  color: '#059669', label: '승인됨'   },
-  rejected: { bg: 'rgba(239,68,68,.1)',   color: '#dc2626', label: '거절됨'   },
+  pending:  { bg: 'var(--warning-soft)',  color: 'var(--warning)',  label: '승인 대기' },
+  approved: { bg: 'var(--positive-soft)', color: 'var(--positive)', label: '승인됨'   },
+  rejected: { bg: 'var(--negative-soft)', color: 'var(--negative)', label: '거절됨'   },
 };
 
 export default function AdminUsersPage() {
@@ -123,30 +124,28 @@ export default function AdminUsersPage() {
   const badge = (status: string) => STATUS_BADGE[status] || STATUS_BADGE.pending;
 
   return (
-    <div style={{ padding: '32px 36px 60px', maxWidth: 1100 }}>
+    <div className="page-pad" style={{ padding: '28px 32px 60px', maxWidth: 1100 }}>
       {/* 헤더 */}
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 900, letterSpacing: '-1px', marginBottom: 8 }}>
-          👥 사용자 관리
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--mid)' }}>회원가입 승인 및 사용자 계정 관리</p>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ margin: '0 0 4px' }}>사용자 관리</h1>
+        <p style={{ margin: 0, fontSize: 14, color: 'var(--mid)' }}>가입 신청을 승인하고 계정을 관리합니다.</p>
       </div>
 
       {/* 필터 탭 */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         {(['pending','approved','rejected','all'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)} style={{
-            padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600,
-            border: `1px solid ${filter === f ? 'var(--blue)' : 'var(--border)'}`,
-            background: filter === f ? 'rgba(0,102,255,.08)' : 'transparent',
-            color: filter === f ? 'var(--blue)' : 'var(--mid)',
+            padding: '7px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+            border: `1px solid ${filter === f ? 'var(--accent)' : 'var(--border)'}`,
+            background: filter === f ? 'var(--accent-soft)' : 'var(--bg-card)',
+            color: filter === f ? 'var(--accent)' : 'var(--mid)',
             cursor: 'pointer', fontFamily: 'inherit',
           }}>
             {{ pending:'승인 대기', approved:'승인됨', rejected:'거절됨', all:'전체' }[f]}
             {f === 'pending' && users.filter(u => u.status === 'pending').length > 0 && filter !== 'pending' && (
               <span style={{
-                marginLeft: 6, background: '#ef4444', color: '#fff',
-                borderRadius: 99, padding: '1px 6px', fontSize: 10, fontWeight: 700,
+                marginLeft: 6, background: 'var(--negative)', color: '#fff',
+                borderRadius: 99, padding: '1px 6px', fontSize: 11, fontWeight: 700,
               }}>
                 {users.filter(u => u.status === 'pending').length}
               </span>
@@ -154,16 +153,16 @@ export default function AdminUsersPage() {
           </button>
         ))}
         <button onClick={loadData} style={{
-          marginLeft: 'auto', padding: '8px 16px', borderRadius: 99,
-          border: '1px solid var(--border)', background: 'transparent',
-          color: 'var(--mid)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-        }}>↻ 새로고침</button>
+          marginLeft: 'auto', padding: '7px 12px', borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 6,
+          border: '1px solid var(--border)', background: 'var(--bg-card)',
+          color: 'var(--mid)', fontSize: 13, cursor: 'pointer',
+        }}><RefreshCw size={14} /> 새로고침</button>
       </div>
 
       {/* 사용자 목록 */}
       <div style={{
         background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 14, boxShadow: 'var(--shadow)', overflow: 'hidden',
+        borderRadius: 10, overflow: 'hidden',
       }}>
         {/* 테이블 헤더 */}
         <div style={{
@@ -171,23 +170,22 @@ export default function AdminUsersPage() {
           gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1fr 160px',
           gap: 12, padding: '14px 20px',
           borderBottom: '1px solid var(--border)',
-          background: 'var(--bg)',
-          fontSize: 11, fontWeight: 700, color: 'var(--dim)',
-          letterSpacing: '0.05em', textTransform: 'uppercase',
+          background: 'var(--bg-elevated)',
+          fontSize: 12, fontWeight: 600, color: 'var(--dim)',
         }}>
           <div>사용자</div>
-          <div>소속/연락처</div>
+          <div>소속, 연락처</div>
           <div>관리구역</div>
           <div>상태</div>
           <div>신청일</div>
-          <div style={{ textAlign: 'center' }}>액션</div>
+          <div></div>
         </div>
 
         {loading ? (
-          <div style={{ padding: 48, textAlign: 'center', color: 'var(--dim)' }}>로딩 중...</div>
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--dim)' }}>불러오는 중</div>
         ) : users.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--dim)', fontSize: 14 }}>
-            {filter === 'pending' ? '승인 대기 중인 신청이 없습니다' : '사용자가 없습니다'}
+            {filter === 'pending' ? '승인을 기다리는 신청이 없습니다.' : '사용자가 없습니다.'}
           </div>
         ) : users.map(u => (
           <div key={u.id} style={{
@@ -204,23 +202,23 @@ export default function AdminUsersPage() {
               {u.message && (
                 <div style={{
                   marginTop: 4, fontSize: 11, color: 'var(--mid)',
-                  background: 'rgba(0,102,255,.05)', borderRadius: 6,
-                  padding: '3px 8px', maxWidth: 220,
+                  background: 'var(--bg-elevated)', borderRadius: 5,
+                  padding: '3px 8px', maxWidth: 220, display: 'flex', alignItems: 'center', gap: 4,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>💬 {u.message}</div>
+                }}><MessageSquare size={11} style={{ flexShrink: 0 }} /> {u.message}</div>
               )}
             </div>
             {/* 소속 */}
             <div>
               {u.company && <div style={{ fontSize: 12, fontWeight: 600 }}>{u.company}</div>}
-              {u.phone   && <div style={{ fontSize: 11, color: 'var(--dim)', marginTop: 2 }}>📞 {u.phone}</div>}
+              {u.phone   && <div className="ico" style={{ fontSize: 12, color: 'var(--dim)', marginTop: 2, gap: 4 }}><Phone size={11} />{u.phone}</div>}
             </div>
             {/* 관리구역 */}
             <div>
               {u.sector_name ? (
                 <span style={{
-                  fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                  borderRadius: 99, background: 'rgba(0,102,255,.08)', color: 'var(--blue)',
+                  fontSize: 12, fontWeight: 600, padding: '2px 8px',
+                  borderRadius: 5, background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
                 }}>{u.sector_name}</span>
               ) : (
                 <span style={{ fontSize: 11, color: 'var(--dim)' }}>미배정</span>
@@ -229,8 +227,8 @@ export default function AdminUsersPage() {
             {/* 상태 */}
             <div>
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: '3px 10px',
-                borderRadius: 99, ...badge(u.status),
+                fontSize: 12, fontWeight: 600, padding: '2px 8px',
+                borderRadius: 5, background: badge(u.status).bg, color: badge(u.status).color,
               }}>{badge(u.status).label}</span>
             </div>
             {/* 신청일 */}
@@ -242,15 +240,15 @@ export default function AdminUsersPage() {
               {u.status === 'pending' && (
                 <>
                   <button onClick={() => { setModal({ user: u, action: 'approve' }); setSelectedSector(''); }} style={{
-                    padding: '6px 12px', borderRadius: 8, border: 'none',
-                    background: 'rgba(16,185,129,.1)', color: '#059669',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  }}>✅ 승인</button>
+                    padding: '6px 10px', borderRadius: 7, border: 'none', display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: 'var(--accent)', color: '#fff',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}><Check size={13} /> 승인</button>
                   <button onClick={() => setModal({ user: u, action: 'reject' })} style={{
-                    padding: '6px 12px', borderRadius: 8, border: 'none',
-                    background: 'rgba(239,68,68,.1)', color: '#dc2626',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
-                  }}>✗ 거절</button>
+                    padding: '6px 10px', borderRadius: 7, border: '1px solid rgba(201,54,54,.3)', display: 'inline-flex', alignItems: 'center', gap: 4,
+                    background: 'var(--bg-card)', color: 'var(--negative)',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}><X size={13} /> 거절</button>
                 </>
               )}
               {u.status === 'approved' && (
@@ -262,10 +260,10 @@ export default function AdminUsersPage() {
               )}
               {u.status === 'rejected' && (
                 <button onClick={() => setModal({ user: u, action: 'approve' })} style={{
-                  padding: '6px 12px', borderRadius: 8, border: 'none',
-                  background: 'rgba(0,102,255,.08)', color: 'var(--blue)',
-                  fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                }}>재승인</button>
+                  padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-hover)',
+                  background: 'var(--bg-card)', color: 'var(--accent)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}>다시 승인</button>
               )}
             </div>
           </div>
@@ -280,12 +278,12 @@ export default function AdminUsersPage() {
           zIndex: 1000, padding: 20,
         }} onClick={e => e.target === e.currentTarget && setModal(null)}>
           <div style={{
-            background: 'var(--surface)', borderRadius: 16,
-            padding: 32, width: '100%', maxWidth: 440,
+            background: 'var(--surface)', borderRadius: 12,
+            padding: 28, width: '100%', maxWidth: 440,
             border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)',
           }}>
-            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>
-              {modal.action === 'approve' ? '✅ 승인 확인' : '✗ 거절 확인'}
+            <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 6px' }}>
+              {modal.action === 'approve' ? '가입 승인' : '가입 거절'}
             </h3>
             <p style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 20 }}>
               <strong>{modal.user.name}</strong> ({modal.user.email})
@@ -294,19 +292,19 @@ export default function AdminUsersPage() {
             {modal.action === 'approve' && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                  관리구역 배정 (선택)
+                  관리구역 배정 (선택 사항)
                 </label>
                 <select
                   value={selectedSector}
                   onChange={e => setSelectedSector(e.target.value)}
                   style={{
                     width: '100%', padding: '10px 12px',
-                    background: 'var(--bg)', border: '1px solid var(--border)',
+                    background: 'var(--bg-input)', border: '1px solid var(--border)',
                     borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
                     color: 'var(--text)',
                   }}
                 >
-                  <option value="">나중에 설정 (엑셀 업로드 시 자동 배정)</option>
+                  <option value="">나중에 정하기 (엑셀을 올리면 자동 배정)</option>
                   {sectors.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -316,7 +314,7 @@ export default function AdminUsersPage() {
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                메모 (선택)
+                메모 (선택 사항)
               </label>
               <textarea
                 value={note}
@@ -324,7 +322,7 @@ export default function AdminUsersPage() {
                 placeholder={modal.action === 'reject' ? '거절 사유 입력' : '승인 메모'}
                 style={{
                   width: '100%', padding: '10px 12px', resize: 'none', height: 80,
-                  background: 'var(--bg)', border: '1px solid var(--border)',
+                  background: 'var(--bg-input)', border: '1px solid var(--border)',
                   borderRadius: 8, fontSize: 13, fontFamily: 'inherit',
                   color: 'var(--text)', boxSizing: 'border-box',
                 }}
@@ -333,20 +331,18 @@ export default function AdminUsersPage() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setModal(null)} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10,
+                flex: 1, padding: '11px 0', borderRadius: 8,
                 border: '1px solid var(--border)', background: 'transparent',
                 color: 'var(--mid)', fontSize: 14, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
               }}>취소</button>
               <button onClick={handleAction} disabled={processing} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                background: modal.action === 'approve'
-                  ? 'linear-gradient(135deg, #10b981, #059669)'
-                  : 'linear-gradient(135deg, #ef4444, #dc2626)',
-                color: '#fff', fontSize: 14, fontWeight: 700,
+                flex: 1, padding: '11px 0', borderRadius: 8, border: 'none',
+                background: modal.action === 'approve' ? 'var(--accent)' : 'var(--negative)',
+                color: '#fff', fontSize: 14, fontWeight: 600,
                 cursor: processing ? 'wait' : 'pointer', fontFamily: 'inherit',
               }}>
-                {processing ? '처리 중...' : modal.action === 'approve' ? '승인 완료' : '거절'}
+                {processing ? '처리하는 중' : modal.action === 'approve' ? '승인' : '거절'}
               </button>
             </div>
           </div>

@@ -2,6 +2,8 @@
 // 계정별 열화상 촬영 부위 설정 + AI가 참고하는 내 분류 예시 관리
 import { useEffect, useState } from 'react';
 import { DEFAULT_PARTS, MAX_PARTS, type ThermalPart } from '@/lib/thermal/parts';
+import { Status } from '@/components/ui/Status';
+import { ArrowUp, ArrowDown, X, Plus, Loader2 } from 'lucide-react';
 
 type Example = { id: number; part: string; image: string; created_at: string };
 
@@ -23,7 +25,7 @@ export default function ThermalPartsPage() {
       setParts(p.parts || DEFAULT_PARTS);
       setIsDefault(!!p.is_default);
       setExamples(e.examples || []);
-    } catch (err: any) { setMsg('❌ 불러오기 실패: ' + err.message); }
+    } catch (err: any) { setMsg('❌ 불러오지 못했습니다: ' + err.message); }
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
@@ -42,7 +44,7 @@ export default function ThermalPartsPage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || '저장 실패');
       setParts(j.parts); setIsDefault(false);
-      setMsg('✅ 저장되었습니다. 다음 열화상 분류부터 이 부위 목록을 사용합니다.');
+      setMsg('✅ 저장했습니다. 다음 열화상 분류부터 이 부위 목록을 씁니다.');
     } catch (e: any) { setMsg('❌ ' + e.message); } finally { setSaving(false); }
   };
 
@@ -52,52 +54,52 @@ export default function ThermalPartsPage() {
     if (r.ok) setExamples((await (await fetch('/api/thermal/examples', { cache: 'no-store' })).json()).examples || []);
   };
 
-  const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: 20, marginBottom: 16 };
-  const input: React.CSSProperties = { width: '100%', padding: '10px 12px', background: 'var(--bg-input, var(--bg))', border: '1.5px solid var(--border)', borderRadius: 10, fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
-  const smallBtn: React.CSSProperties = { width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' };
+  const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 };
+  const input: React.CSSProperties = { width: '100%', padding: '10px 12px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, color: 'var(--text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
+  const smallBtn: React.CSSProperties = { width: 32, height: 32, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' };
 
   const names = parts.map(p => p.name.trim()).filter(Boolean);
   const groups = [...new Set([...names, ...examples.map(e => e.part)])];
 
   return (
-    <div style={{ padding: '32px 36px 60px', maxWidth: 820 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900, marginBottom: 6 }}>🌡️ 열화상 촬영 부위</h1>
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
-        내가 찍는 부위를 순서대로 적어두면 사진 분류와 엑셀 기입에 사용됩니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용설명서</a>
+    <div className="page-pad" style={{ padding: '28px 32px 60px', maxWidth: 820 }}>
+      <h1 style={{ margin: '0 0 4px' }}>열화상 부위</h1>
+      <p style={{ margin: '0 0 20px', fontSize: 14, color: 'var(--text-secondary)' }}>
+        찍는 부위를 순서대로 적어 두면 사진 분류와 엑셀 기입에 쓰입니다. <a href="/guide" style={{ color: 'var(--accent)' }}>사용 방법</a>
       </p>
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>내 촬영 부위 {isDefault && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-tertiary)', marginLeft: 6 }}>(기본값 사용 중)</span>}</div>
-          <button onClick={() => setParts(DEFAULT_PARTS)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>기본값(PF/PT/CH)으로</button>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>내 촬영 부위 {isDefault && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>기본값 사용 중</span>}</div>
+          <button onClick={() => setParts(DEFAULT_PARTS)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>기본값으로 (PF, PT, CH)</button>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14 }}>
-          위에 적은 부위부터 13·15·17행 순서로 들어갑니다. 특징은 AI가 사진을 구분할 때 씁니다.
+          위에 적은 부위부터 엑셀 13, 15, 17행에 들어갑니다. 특징은 사진을 구분할 때 참고합니다.
         </div>
-        {loading ? <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>불러오는 중...</div> : parts.map((p, i) => (
+        {loading ? <div style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>불러오는 중</div> : parts.map((p, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '28px 120px 1fr auto', gap: 8, alignItems: 'start', marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent)', paddingTop: 10, textAlign: 'center' }}>{i + 1}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-tertiary)', paddingTop: 10, textAlign: 'center' }}>{i + 1}</div>
             <input style={input} value={p.name} maxLength={20} placeholder="이름 (예: PF)" onChange={e => update(i, 'name', e.target.value)} />
             <textarea style={{ ...input, resize: 'vertical', minHeight: 42 }} rows={2} value={p.desc} maxLength={300} placeholder="사진상 특징 (예: 갈색 긴 원통형 퓨즈, 노란 라벨)" onChange={e => update(i, 'desc', e.target.value)} />
             <div style={{ display: 'flex', gap: 4 }}>
-              <button style={smallBtn} onClick={() => move(i, -1)} title="위로">↑</button>
-              <button style={smallBtn} onClick={() => move(i, 1)} title="아래로">↓</button>
-              <button style={{ ...smallBtn, color: '#ef4444' }} onClick={() => remove(i)} title="삭제">✕</button>
+              <button style={smallBtn} onClick={() => move(i, -1)} title="위로" aria-label="위로"><ArrowUp size={14} /></button>
+              <button style={smallBtn} onClick={() => move(i, 1)} title="아래로" aria-label="아래로"><ArrowDown size={14} /></button>
+              <button style={{ ...smallBtn, color: 'var(--negative)' }} onClick={() => remove(i)} title="삭제" aria-label="삭제"><X size={14} /></button>
             </div>
           </div>
         ))}
         {!loading && parts.length < MAX_PARTS && (
-          <button onClick={add} style={{ marginTop: 4, padding: '8px 16px', borderRadius: 10, border: '1.5px dashed var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>+ 부위 추가</button>
+          <button onClick={add} style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}><Plus size={14} /> 부위 추가</button>
         )}
       </div>
 
-      {msg && <div style={{ ...card, padding: '12px 16px', fontSize: 14 }}>{msg}</div>}
-      <button onClick={save} disabled={saving || loading} style={{ width: '100%', padding: 16, borderRadius: 12, border: 'none', background: saving ? 'var(--border)' : 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: saving ? 'default' : 'pointer', fontFamily: 'inherit', marginBottom: 24 }}>{saving ? '저장 중...' : '💾 부위 목록 저장'}</button>
+      {msg && <Status msg={msg} style={{ marginBottom: 12 }} />}
+      <button onClick={save} disabled={saving || loading} className="btn-primary" style={{ width: '100%', marginBottom: 24 }}>{saving ? <><Loader2 size={17} className="spin" /> 저장하는 중</> : '부위 목록 저장'}</button>
 
       <div style={card}>
-        <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 6 }}>AI가 참고하는 내 예시</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>분류에 참고하는 내 예시</div>
         <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.6 }}>
-          반영할 때 자동으로 쌓여 다음 분류에 쓰입니다(부위별 최근 20장). 잘못 들어간 예시는 지워주세요.
+          열화상을 반영할 때 자동으로 쌓여 다음 분류에 쓰입니다 (부위별 최근 20장). 잘못 들어간 예시는 지워 주세요.
         </div>
         {!loading && !examples.length && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>아직 예시가 없습니다. 열화상을 한 번 반영하면 생깁니다.</div>}
         {groups.filter(g => examples.some(e => e.part === g)).map(g => {
@@ -106,14 +108,14 @@ export default function ThermalPartsPage() {
           return (
             <div key={g} style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 700 }}>{g} <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>{list.length}장{orphan ? ' · 현재 부위 목록에 없음(분류에 사용 안 됨)' : ''}</span></div>
+                <div style={{ fontSize: 13, fontWeight: 700 }}>{g} <span style={{ color: 'var(--text-tertiary)', fontWeight: 500 }}>{list.length}장{orphan ? ', 지금 부위 목록에 없어 분류에 쓰지 않음' : ''}</span></div>
                 <button onClick={() => delExample('part=' + encodeURIComponent(g), `'${g}' 예시 ${list.length}장을 모두 삭제할까요?`)} style={{ padding: '4px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>모두 삭제</button>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                 {list.map(ex => (
                   <div key={ex.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)' }}>
                     <img src={`data:image/jpeg;base64,${ex.image}`} alt={g} style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }} />
-                    <button onClick={() => delExample('id=' + ex.id)} title="이 예시 삭제" style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', fontSize: 11, cursor: 'pointer' }}>✕</button>
+                    <button onClick={() => delExample('id=' + ex.id)} title="이 예시 삭제" style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 6, border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} aria-label="이 예시 삭제"><X size={12} /></button>
                   </div>
                 ))}
               </div>

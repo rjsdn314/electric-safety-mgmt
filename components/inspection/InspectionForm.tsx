@@ -2,6 +2,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from './ThermalPhotos';
+import { Status, plain } from '@/components/ui/Status';
+import { CheckCircle2, FileText, FolderOpen, Folder, Download, FileDown, Plus, X, Loader2 } from 'lucide-react';
 
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,10,12월' },
@@ -424,7 +426,7 @@ export function InspectionForm() {
       setFolderHandle(handle);
       setFolderName(handle.name);
       await saveStationFolder(selected, handle);
-      alert(`✅ 폴더 저장 완료\\n\\n충전소: ${selected.name}\\n폴더: ${handle.name}\\n\\n이 충전소는 앞으로 항상 이 폴더에 저장됩니다.`);
+      alert(`저장 폴더를 지정했습니다.\n\n충전소: ${selected.name}\n폴더: ${handle.name}\n\n이 충전소는 앞으로 이 폴더에 저장됩니다.`);
     } catch (e: any) {
       if (e.name !== 'AbortError') alert('폴더 선택 실패: ' + e.message);
     }
@@ -459,13 +461,13 @@ export function InspectionForm() {
     if (!selected) return alert('충전소를 선택해주세요');
     if (!inspector) return alert('점검자를 입력해주세요');
     if (!folderHandle) {
-      const proceed = confirm('⚠️ 저장 폴더가 지정되지 않았습니다.\n\n폴더를 지정하지 않으면 파일이 로컬 폴더에 자동 저장되지 않고, 생성 후 직접 다운로드만 가능합니다.\n\n그래도 계속 진행하시겠습니까?');
+      const proceed = confirm('저장 폴더를 지정하지 않았습니다.\n\n이대로 만들면 PC 폴더에 자동 저장되지 않고 내려받기만 할 수 있습니다.\n\n계속할까요?');
       if (!proceed) return;
     }
     const useThermal = inspType !== '월차' && thermal.some(t => t?.shots.length);
     if (useThermal) {
       const unassigned = thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0);
-      if (unassigned && !confirm(`⚠️ 부위가 지정되지 않은 열화상 사진이 ${unassigned}장 있습니다.\n해당 사진은 제외하고 생성할까요?`)) return;
+      if (unassigned && !confirm(`부위를 정하지 않은 열화상 사진이 ${unassigned}장 있습니다.\n그 사진은 빼고 만들까요?`)) return;
       if (thermal.some(t => t?.busy)) return alert('열화상 사진 처리 중입니다. 잠시 후 다시 시도해주세요.');
     }
     setLoading(true);
@@ -493,7 +495,7 @@ export function InspectionForm() {
         }),
       });
       const r = await res.json();
-      if (!res.ok) throw new Error(r.error || `생성 실패 (HTTP ${res.status}${res.status === 413 ? ' — 사진 용량 초과' : ''})`);
+      if (!res.ok) throw new Error(r.error || `생성 실패 (HTTP ${res.status}${res.status === 413 ? ', 사진 용량 초과' : ''})`);
       // 확정 분류를 계정별 예시로 저장(다음 AI 분류 참고) — 사진을 옮기기 전에 먼저 읽어둠
       if (useThermal) await thermalApi.learn();
       if (folderHandle && r.fileBase64) {
@@ -504,7 +506,7 @@ export function InspectionForm() {
         if (useThermal) {
           try {
             const a = await thermalApi.archivePhotos(folderHandle, subFolderName, measureSets.length);
-            if (a) setSaveMsg(`📷 열화상 사진 ${a.copied}장을 ${a.folder} 에 저장했습니다${a.moved ? ` (원본 ${a.moved}장은 옮겨짐)` : ''}${a.failed ? ` · ⚠️ 실패 ${a.failed}장` : ''}`);
+            if (a) setSaveMsg(`${a.failed ? '⚠️' : '✅'} 열화상 사진 ${a.copied}장을 ${a.folder}에 저장했습니다${a.moved ? ` (원본 ${a.moved}장은 옮김)` : ''}${a.failed ? `, ${a.failed}장 실패` : ''}`);
           } catch (e: any) { setSaveMsg('⚠️ 열화상 사진 폴더 저장 실패: ' + e.message); }
         }
       }
@@ -514,7 +516,7 @@ export function InspectionForm() {
       setDoneTodayNames(prev => new Set(prev).add(selected.name));  // 작성 완료 → 목록 맨 아래로 즉시 반영
       setDone(true);
     } catch (e: any) {
-      alert('오류: ' + e.message);
+      alert('점검표를 만들지 못했습니다.\n' + e.message);
     } finally { setLoading(false); }
   };
 
@@ -539,7 +541,7 @@ export function InspectionForm() {
     if (folderHandle && result?.fileBase64) {
       try {
         const ok = await writeMarker('pdfonly');
-        setSaveMsg(ok ? '🕒 PDF 변환 요청됨 — "PDF 변환 도우미"가 켜져 있으면 잠시 후 폴더에 PDF만 남습니다.' : '');
+        setSaveMsg(ok ? 'PDF 변환을 요청했습니다. PDF 변환 도우미가 켜져 있으면 잠시 후 폴더에 PDF만 남습니다.' : '');
       } catch (e: any) { setSaveMsg('❌ ' + e.message); }
     } else {
       handlePrintPdf(); // 폴더 미지정/모바일: 브라우저 인쇄로 대체
@@ -549,7 +551,7 @@ export function InspectionForm() {
     if (folderHandle && result?.fileBase64) {
       try {
         const ok = await writeMarker('pdfboth');
-        setSaveMsg(ok ? '🕒 엑셀 저장 + PDF 변환 요청됨 — 도우미가 켜져 있으면 잠시 후 PDF가 함께 생성됩니다.' : '');
+        setSaveMsg(ok ? '엑셀을 저장하고 PDF 변환을 요청했습니다. 도우미가 켜져 있으면 잠시 후 PDF도 생깁니다.' : '');
       } catch (e: any) { setSaveMsg('❌ ' + e.message); }
     } else {
       const a = document.createElement('a'); a.href = downloadUrl; a.download = savedFile;
@@ -564,27 +566,27 @@ export function InspectionForm() {
   if (done) return (
     <>
       <div className="no-print" style={{ maxWidth: 940, margin: 0, padding: 0 }}>
-        <div style={{ background: 'linear-gradient(135deg,rgba(5,192,114,.08),rgba(49,130,246,.08))', border: '1px solid rgba(5,192,114,.3)', borderRadius: 20, padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 64 }}>✅</div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, margin: '14px 0 10px' }}>저장 완료</h2>
-          <div style={{ color: 'var(--accent)', fontWeight: 600, marginBottom: 8, fontSize: 15, wordBreak: 'break-all' }}>📄 {savedFile}</div>
-          {folderName && (<div style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>💾 로컬 저장: {folderName}</div>)}
-          <div style={{ display: 'grid', gap: 10, maxWidth: 400, margin: '0 auto 10px' }}>
+        <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '32px 28px', textAlign: 'center' }}>
+          <CheckCircle2 size={40} color="var(--positive)" strokeWidth={1.8} />
+          <h2 style={{ fontSize: 20, margin: '12px 0 10px' }}>점검표를 만들었습니다</h2>
+          <div className="ico" style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 14, wordBreak: 'break-all', justifyContent: 'center' }}><FileText size={16} color="var(--text-tertiary)" />{savedFile}</div>
+          {folderName && (<div className="ico" style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6, justifyContent: 'center', display: 'flex' }}><FolderOpen size={15} color="var(--text-tertiary)" />{folderName}에 저장됨</div>)}
+          <div style={{ display: 'grid', gap: 8, maxWidth: 380, margin: '22px auto 0' }}>
             {downloadUrl && (
-              <a href={downloadUrl} download={savedFile} style={{ display: 'block', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, textDecoration: 'none' }}>⬇️ 엑셀 저장 (.xlsx)</a>
+              <a href={downloadUrl} download={savedFile} className="btn-primary" style={{ textDecoration: 'none' }}><Download size={17} /> 엑셀 내려받기</a>
             )}
-            <button onClick={savePdf} style={{ display: 'block', width: '100%', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1.5px solid var(--accent)', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📄 PDF 저장{folderHandle && result?.fileBase64 ? ' (엑셀 모양 그대로)' : ' (인쇄 → PDF로 저장)'}</button>
+            <button onClick={savePdf} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)', borderRadius: 8, padding: '12px 20px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}><FileDown size={17} /> PDF로 저장{folderHandle && result?.fileBase64 ? '' : ' (인쇄 화면)'}</button>
             {downloadUrl && (
-              <button onClick={saveBoth} style={{ display: 'block', width: '100%', background: 'rgba(49,130,246,.12)', color: 'var(--accent)', border: 'none', borderRadius: 12, padding: '16px 24px', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📦 엑셀 + PDF 저장</button>
+              <button onClick={saveBoth} style={{ width: '100%', background: 'transparent', color: 'var(--accent)', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>엑셀과 PDF 함께 저장</button>
             )}
-            {saveMsg && <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{saveMsg}</div>}
+            {saveMsg && <Status msg={saveMsg} style={{ fontSize: 13, textAlign: 'left' }} />}
             {folderHandle && result?.fileBase64 && (
-              <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-                PDF는 PC의 <b>“PDF 변환 도우미”</b>(바탕화면 <code>PDF변환도우미</code>)가 켜져 있을 때 실제 엑셀 모양 그대로 자동 생성됩니다.
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
+                PDF는 PC에서 PDF 변환 도우미가 켜져 있을 때 엑셀 모양 그대로 만들어집니다.
               </div>
             )}
           </div>
-          <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); thermalApi.reset(); }} style={{ width: '100%', maxWidth: 400, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 24px', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', marginTop: 8 }}>새 점검 생성</button>
+          <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); thermalApi.reset(); }} style={{ marginTop: 18, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>새 점검 생성</button>
         </div>
       </div>
       {result && <PrintableSheet data={result} />}
@@ -604,48 +606,48 @@ export function InspectionForm() {
 
   return (
     <div style={{ maxWidth: 940, margin: 0, padding: 0 }}>
-      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 18, display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: folderHandle ? 'rgba(5,192,114,.15)' : 'var(--bg-elevated)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>📁</div>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: folderHandle ? 'var(--positive-soft)' : 'var(--bg-elevated)', color: folderHandle ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Folder size={18} /></div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>저장 폴더</div>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName ? (selected ? `${folderName} / ${selected.name}` : folderName) : '⚠️ 저장 폴더가 지정되지 않았습니다 (다운로드만 가능)'}</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>저장 폴더</div>
+          <div style={{ fontSize: 13, color: folderName ? 'var(--text-secondary)' : 'var(--warning)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folderName ? (selected ? `${folderName} / ${selected.name}` : folderName) : '지정하지 않음. 생성 후 내려받기만 됩니다.'}</div>
         </div>
-        <button onClick={selectFolder} style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}>{folderHandle ? '변경' : '선택'}</button>
+        <button onClick={selectFolder} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>{folderHandle ? '변경' : '폴더 선택'}</button>
       </div>
 
-      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 14 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div style={sectionTitle}>충전소 선택</div>
           {isAdmin && (
             <select value={viewOwner} onChange={e => { setViewOwner(e.target.value); setSelected(null); setQuery(''); }}
               style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, border: `1px solid ${viewOwner === 'mine' ? 'var(--border)' : 'var(--accent)'}`, background: viewOwner === 'mine' ? 'var(--bg-input)' : 'var(--accent-soft)', color: viewOwner === 'mine' ? 'var(--text-secondary)' : 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 8 }}>
-              <option value="mine">내 관리구역 (기본)</option>
+              <option value="mine">내 관리구역</option>
               {members.map(m => (<option key={m.id} value={m.id}>{m.name} 관리구역</option>))}
-              <option value="all">전체 (모든 회원)</option>
+              <option value="all">전체 회원</option>
             </select>
           )}
         </div>
         <div style={{ position: 'relative' }}>
-          <input className="toss-input" placeholder="충전소명 검색..." value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} />
+          <input className="toss-input" placeholder="충전소 이름으로 검색" value={query} onChange={e => { setQuery(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)} />
           {open && filtered.length > 0 && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'var(--bg-elevated)', border: '1px solid var(--border-hover)', borderRadius: 14, padding: 6, boxShadow: '0 8px 32px rgba(0,0,0,.4)', maxHeight: 320, overflowY: 'auto' }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-hover)', borderRadius: 10, padding: 6, boxShadow: 'var(--shadow-lg)', maxHeight: 320, overflowY: 'auto' }}>
               {filtered.map(s => {
                 const doneToday = isDoneToday(s);
                 const today = !doneToday && isTodayStation(s);
                 const otherOwner = isAdmin && s.user_id && s.user_id !== meId ? memberName(s.user_id) : null;
                 return (
-                  <button key={s.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 10, border: 'none', background: today ? 'rgba(5,192,114,.08)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', opacity: doneToday ? 0.55 : 1 }} onClick={() => handleSelectStation(s)}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: doneToday ? 'var(--text-tertiary)' : '#05C072', flexShrink: 0 }} />
+                  <button key={s.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 7, border: 'none', background: today ? 'var(--positive-soft)' : 'transparent', color: 'var(--text-primary)', cursor: 'pointer', textAlign: 'left', opacity: doneToday ? 0.55 : 1 }} onClick={() => handleSelectStation(s)}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: doneToday ? 'var(--text-tertiary)' : 'var(--positive)', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {today && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(5,192,114,.18)', color: '#05a862' }}>📅 오늘</span>}
-                        {doneToday && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(148,163,184,.18)', color: 'var(--text-secondary)' }}>✅ 오늘 작성됨</span>}
-                        {otherOwner && <span style={{ marginRight: 6, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 6, background: 'rgba(99,102,241,.14)', color: '#6366f1' }}>👤 {otherOwner}</span>}
+                        {today && <span style={{ marginRight: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--positive-soft)', color: 'var(--positive)' }}>오늘 일정</span>}
+                        {doneToday && <span style={{ marginRight: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>오늘 작성함</span>}
+                        {otherOwner && <span style={{ marginRight: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, background: 'var(--accent-soft)', color: 'var(--accent)' }}>{otherOwner}</span>}
                         {s.name}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{s.voltage}V · {s.capacity}kW</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 1 }}>{s.voltage}V, {s.capacity}kW</div>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 8, background: 'var(--accent-soft)', color: 'var(--accent)', flexShrink: 0 }}>{s.voltage >= 3000 ? '고압' : '저압'}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 5, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', flexShrink: 0 }}>{s.voltage >= 3000 ? '고압' : '저압'}</span>
                   </button>
                 );
               })}
@@ -653,22 +655,22 @@ export function InspectionForm() {
           )}
         </div>
         {selected && (
-          <div style={{ marginTop: 14, padding: 18, background: 'var(--bg-elevated)', borderRadius: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: 'var(--accent)' }}>{selected.name}</div>
+          <div style={{ marginTop: 12, padding: '14px 16px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>{selected.name}</div>
             <div style={{ display: 'flex', gap: 24, fontSize: 13, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
               <div><span style={{ opacity: 0.7 }}>수전전압</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.voltage}V</strong></div>
               <div><span style={{ opacity: 0.7 }}>수전용량</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.capacity}kW</strong></div>
-              {selected.panel_count > 1 && (<div><span style={{ opacity: 0.7 }}>수배전반</span> <strong style={{ color: 'var(--accent)', marginLeft: 6 }}>{selected.panel_count}개</strong></div>)}
+              {selected.panel_count > 1 && (<div><span style={{ opacity: 0.7 }}>수배전반</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.panel_count}개</strong></div>)}
             </div>
           </div>
         )}
       </div>
 
-      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 14 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, marginBottom: 12 }}>
         <div style={sectionTitle}>점검 정보</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 18 }}>
           {TYPE_OPTIONS.map(t => (
-            <button key={t.value} onClick={() => setInspType(t.value)} style={{ padding: '16px 4px', borderRadius: 12, border: `1.5px solid ${inspType === t.value ? 'var(--accent)' : 'transparent'}`, background: inspType === t.value ? 'var(--accent-soft)' : 'var(--bg-input)', color: inspType === t.value ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}>
+            <button key={t.value} onClick={() => setInspType(t.value)} style={{ padding: '12px 4px', borderRadius: 8, border: `1px solid ${inspType === t.value ? 'var(--accent)' : 'var(--border)'}`, background: inspType === t.value ? 'var(--accent-soft)' : 'var(--bg-card)', color: inspType === t.value ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}>
               {t.value}
               <div style={{ fontSize: 11, opacity: .7, marginTop: 4, fontWeight: 500 }}>{t.months}</div>
             </button>
@@ -689,16 +691,16 @@ export function InspectionForm() {
         </div>
       </div>
 
-      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 14 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={sectionTitle}>측정값 입력</div>
-          <button onClick={addMeasureSet} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: '1.5px dashed var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>+ 개소 추가</button>
+          <button onClick={addMeasureSet} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}><Plus size={15} /> 수배전반 추가</button>
         </div>
         {measureSets.map((set, idx) => (
           <div key={idx} style={{ marginBottom: idx < measureSets.length - 1 ? 28 : 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', padding: '4px 12px', borderRadius: 8, background: 'var(--accent-soft)' }}>수배전반 #{idx + 1}</div>
-              {measureSets.length > 1 && (<button onClick={() => removeMeasureSet(idx)} style={{ padding: '4px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>✕ 제거</button>)}
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>수배전반 #{idx + 1}</div>
+              {measureSets.length > 1 && (<button onClick={() => removeMeasureSet(idx)} style={{ padding: '4px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}><X size={13} /> 삭제</button>)}
             </div>
             <div style={{ marginBottom: 14 }}>
               <label style={labelStyle}>전압 (V)</label>
@@ -725,7 +727,7 @@ export function InspectionForm() {
             </div>
             {(inspType === '반기' || inspType === '연차') && (
               <div style={{ marginBottom: 14 }}>
-                <label style={labelStyle}>접지저항 (Ω) — 별지2-접지저항 D{5 + idx}</label>
+                <label style={labelStyle}>접지저항 (Ω)</label>
                 <div style={{ position: 'relative', maxWidth: 220 }}>
                   <input type="number" inputMode="decimal" step="0.01" className="toss-input" placeholder="측정치" style={{ paddingRight: 36 }} value={set.ground ?? ''} onChange={e => updateMeasureSet(idx, 'ground', e.target.value)} />
                   <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 13, color: 'var(--text-secondary)', pointerEvents: 'none', fontWeight: 600 }}>Ω</span>
@@ -744,19 +746,19 @@ export function InspectionForm() {
         ))}
       </div>
 
-      <div style={{ background: 'var(--bg-card)', borderRadius: 16, padding: 24, marginBottom: 14 }}>
+      <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: 22, marginBottom: 12 }}>
         <label style={sectionTitle}>종합 의견(별지14)</label>
         <textarea className="toss-input" rows={3} style={{ resize: 'none' }} placeholder="특이사항이 없으면 비워두세요" value={remarks} onChange={e => setRemarks(e.target.value)} />
       </div>
 
       {selected && (
-        <div style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13, marginBottom: 14 }}>
-          <div style={{ color: 'var(--text-secondary)', marginBottom: 4, fontSize: 11 }}>생성될 파일</div>
-          <div style={{ color: 'var(--accent)', fontWeight: 700, wordBreak: 'break-all' }}>{selected.name}_{inspType}점검_{date.replace(/-/g, '')}.xlsx</div>
+        <div style={{ padding: '12px 16px', background: 'var(--bg-elevated)', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+          <div style={{ color: 'var(--text-tertiary)', marginBottom: 2, fontSize: 12 }}>만들어질 파일</div>
+          <div style={{ color: 'var(--text-primary)', fontWeight: 600, wordBreak: 'break-all' }}>{selected.name}_{inspType}점검_{date.replace(/-/g, '')}.xlsx</div>
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={loading} style={{ width: '100%', padding: 18, borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', opacity: loading ? .6 : 1, fontFamily: 'inherit' }}>{loading ? '⏳ 생성 중...' : '⚡ 직무고시 점검표 생성 — 완료 후 엑셀/PDF 선택'}</button>
+      <button onClick={handleSubmit} disabled={loading} className="btn-primary" style={{ width: '100%', padding: 15, fontSize: 16 }}>{loading ? <><Loader2 size={18} className="spin" /> 점검표 만드는 중</> : '점검표 만들기'}</button>
 
       <style jsx>{`
         @media (max-width: 768px) {

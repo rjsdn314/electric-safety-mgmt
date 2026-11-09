@@ -1,44 +1,54 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css');
 
 :root {
-  /* WATER 브랜드 컬러 */
-  --blue: #0066ff;
-  --cyan: #00b8d9;
-  --grad: linear-gradient(135deg, #0066ff, #00b8d9);
+  /* 브랜드: 단색 블루 하나 (그라데이션 없음) */
+  --blue: #2451c7;
+  --cyan: #2451c7;
+  --grad: #2451c7;
 
-  /* 배경 */
-  --bg-page: #f6f8fc;
+  /* 배경 (중성 회색) */
+  --bg-page: #f4f5f7;
   --bg-card: #ffffff;
-  --bg-elevated: #eef2fb;
-  --bg-input: #f6f8fc;
-  --bg-primary: #f6f8fc;
+  --bg-elevated: #f0f2f5;
+  --bg-input: #ffffff;
+  --bg-primary: #f4f5f7;
   --bg-surface: #ffffff;
 
   /* 보더 */
-  --border: #e4e9f0;
-  --border-hover: #c7d4e8;
+  --border: #e1e4e9;
+  --border-hover: #c5cad3;
 
   /* 텍스트 */
-  --text-primary: #111827;
-  --text-secondary: #4b5563;
-  --text-tertiary: #9ca3af;
+  --text-primary: #16191f;
+  --text-secondary: #555d6b;
+  --text-tertiary: #959cab;
+  --dim: #959cab;
+  /* 예전 화면에서 쓰던 이름 (같은 값으로 연결) */
+  --mid: #555d6b;
+  --text: #16191f;
+  --surface: #ffffff;
+  --bg: #f4f5f7;
 
   /* 액센트 */
-  --accent: #0066ff;
-  --accent-soft: rgba(0,102,255,0.08);
+  --accent: #2451c7;
+  --accent-hover: #1d43a8;
+  --accent-soft: rgba(36,81,199,0.08);
 
   /* 상태 */
-  --positive: #10b981;
-  --negative: #ef4444;
-  --warning: #f59e0b;
+  --positive: #1f8a5b;
+  --negative: #c93636;
+  --warning: #b7791f;
+  --positive-soft: rgba(31,138,91,0.09);
+  --negative-soft: rgba(201,54,54,0.08);
+  --warning-soft: rgba(183,121,31,0.10);
 
   /* 반경 */
-  --radius: 14px;
+  --radius: 10px;
 
-  /* 그림자 */
-  --shadow: 0 1px 3px rgba(15,23,42,.04), 0 1px 2px rgba(15,23,42,.06);
-  --shadow-md: 0 4px 16px rgba(0,102,255,.06), 0 2px 4px rgba(15,23,42,.04);
-  --shadow-lg: 0 10px 40px rgba(0,102,255,.12), 0 4px 12px rgba(15,23,42,.06);
+  /* 그림자 (아주 옅게) */
+  --shadow: 0 1px 2px rgba(16,24,40,.04);
+  --shadow-md: 0 2px 8px rgba(16,24,40,.06);
+  --shadow-lg: 0 8px 24px rgba(16,24,40,.10);
 }
 
 * {
@@ -54,26 +64,35 @@ html, body {
   font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', sans-serif;
   font-feature-settings: 'tnum';
   -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 button {
   font-family: inherit;
-  letter-spacing: -0.02em;
-  transition: all .15s;
+  letter-spacing: -0.01em;
+  transition: background-color .12s, border-color .12s, color .12s;
 }
 
 input, textarea, select {
   font-family: inherit;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* 아이콘 + 글자 정렬 */
+.ico { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.ico > svg { flex-shrink: 0; }
 
 /* ─── 카드 컴포넌트 ─── */
 .toss-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 22px 24px;
+  padding: 20px 22px;
   box-shadow: var(--shadow);
 }
 
@@ -82,8 +101,8 @@ input, textarea, select {
   width: 100%;
   padding: 14px 16px;
   background: var(--bg-input);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-primary);
   font-size: 15px;
   font-weight: 500;
@@ -95,7 +114,7 @@ input, textarea, select {
 
 .toss-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(0,102,255,.1);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .toss-input::placeholder {
@@ -112,11 +131,11 @@ input, textarea, select {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0,102,255,.2);
+  background: rgba(16,24,40,.15);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,102,255,.4);
+  background: rgba(16,24,40,.3);
 }
 
 /* ─── 이슈 점 깜빡임 ─── */
@@ -130,41 +149,43 @@ input, textarea, select {
   input, textarea, select {
     font-size: 16px !important;
   }
+  .page-pad { padding: 20px 16px 60px !important; }
 }
 
 
-/* ─── 타이포그래피 (참고: awwwards cdiscount jumping max) ─── */
+/* ─── 타이포그래피 ─── */
 h1, h2, h3 {
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   color: var(--text-primary);
 }
-h1 {
-  font-weight: 900;
-  letter-spacing: -0.045em;
-}
+/* 화면 제목은 크기·굵기 통일 (각 화면의 인라인 900 굵기를 덮어씀) */
+h1 { font-size: 22px !important; font-weight: 700 !important; }
 
 /* 본문 가독성 */
 body {
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-/* 카드/버튼 라운드 강조 */
-.toss-card {
-  border-radius: 16px;
-}
-
-/* 1차 액션 버튼 공통 (둥근 알약형 + 강조) */
+/* 1차 액션 버튼 공통 */
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 14px 22px;
-  border: none; border-radius: 12px;
-  background: linear-gradient(135deg, #0066ff, #0052cc);
-  color: #fff; font-size: 15px; font-weight: 800;
-  letter-spacing: -0.02em; cursor: pointer;
-  box-shadow: 0 6px 18px rgba(0,102,255,.22);
-  transition: transform .12s, box-shadow .12s;
+  padding: 12px 20px;
+  border: none; border-radius: 8px;
+  background: var(--accent);
+  color: #fff; font-size: 15px; font-weight: 600;
+  cursor: pointer;
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,102,255,.28); }
-.btn-primary:active { transform: translateY(0); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: .55; cursor: default; }
+
+/* 상태 문구 */
+.status { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; line-height: 1.5; }
+.status > svg { flex-shrink: 0; margin-top: 2px; }
+.status.ok { color: var(--positive); }
+.status.err { color: var(--negative); }
+.status.warn { color: var(--warning); }
+.status.info { color: var(--text-secondary); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
