@@ -15,7 +15,7 @@ import { DEFAULT_PARTS, type ThermalPart } from '@/lib/thermal/parts';
 import { classifyLocally, invalidateExamples } from '@/lib/thermal/localClassify';
 import { archivePanelPhotos } from '@/lib/thermal/archive';
 import { Status } from '@/components/ui/Status';
-import { FolderOpen, Camera, RefreshCw, X, MapPin } from 'lucide-react';
+import { FolderOpen, Camera, RefreshCw, X, MapPin, Info, FolderDown } from 'lucide-react';
 
 export type UIShot = ThermalShot & { url: string };
 // files = 사용자가 고른 사진 전부(점검 폴더 저장용), source = '폴더 선택'으로 고른 경우 원본 위치(이동 시 삭제용)
@@ -170,6 +170,32 @@ export function useThermalPanels() {
     let dir: any;
     try { dir = await (window as any).showDirectoryPicker({ mode: 'readwrite' }); }
     catch (e: any) { if (e?.name !== 'AbortError') patch(idx, { status: '❌ 폴더 선택 실패: ' + e.message }); return; }
+    await addFolderHandle(idx, dir);
+  };
+
+  // 탐색기에서 끌어다 놓기: 폴더면 폴더째 옮기기와 같게(원본 이동), 사진 파일이면 복사만
+  const dropOnPanel = async (idx: number, dt: DataTransfer) => {
+    const items = Array.from(dt.items || []).filter((it) => it.kind === 'file');
+    // getAsFileSystemHandle 은 drop 이벤트 안에서 바로 불러야 해서 먼저 모두 요청
+    const handleReqs = items.map((it: any) => (typeof it.getAsFileSystemHandle === 'function' ? it.getAsFileSystemHandle() : Promise.resolve(null)));
+    const plainFiles = Array.from(dt.files || []);
+    const handles = (await Promise.all(handleReqs)).filter(Boolean) as any[];
+    const dir = handles.find((h) => h.kind === 'directory');
+    if (dir) {
+      try {
+        if ((await dir.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await dir.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+          patch(idx, { status: '⚠️ 폴더 수정 권한을 허용해야 사진을 옮길 수 있습니다.' }); return;
+        }
+      } catch { /* 권한 요청 실패 시 아래에서 읽기만 시도 */ }
+      await addFolderHandle(idx, dir);
+      return;
+    }
+    const jpgs = plainFiles.filter((f) => /\.jpe?g$/i.test(f.name));
+    if (jpgs.length) await addFiles(idx, jpgs);
+    else patch(idx, { status: '⚠️ 사진(JPG)이나 사진 폴더를 끌어다 놓아 주세요.' });
+  };
+
+  const addFolderHandle = async (idx: number, dir: any) => {
     const files: File[] = [];
     const source: { name: string; dir: any }[] = [];
     for await (const [name, h] of dir.entries()) {
@@ -229,7 +255,7 @@ export function useThermalPanels() {
     // 현장별 설정이 있으면 그 이름(행 순서)으로 엑셀 라벨을 바꿔 적도록 전송
     b7Labels: stationParts ? stationParts.map(p => p.name) : null,
     setStationContext, saveStationParts, clearStationParts,
-    addFiles, addFolder, classify, setPart, clear, reset, removeAt, buildPanels, learn, archivePhotos,
+    addFiles, addFolder, dropOnPanel, classify, setPart, clear, reset, removeAt, buildPanels, learn, archivePhotos,
     hasAny: thermal.some(t => t?.shots.length),
     busy: thermal.some(t => t?.busy),
     unassigned: thermal.reduce((n, t) => n + (t?.shots.filter(s => !s.part).length || 0), 0),
@@ -294,9 +320,14 @@ export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typ
     return list.length ? list.reduce((a, b) => (b.center > a.center ? b : a)).id : '';
   }));
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)' };
+  const [dragOver, setDragOver] = useState(false);
   const pickBtn: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 7, background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: th?.busy ? 'wait' : 'pointer', opacity: th?.busy ? 0.6 : 1, border: 'none', fontFamily: 'inherit' };
   return (
-    <div style={{ marginTop: 14, padding: 14, borderRadius: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+    <div
+      onDragOver={e => { if (th?.busy) return; e.preventDefault(); setDragOver(true); }}
+      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+      onDrop={e => { e.preventDefault(); setDragOver(false); if (!th?.busy) api.dropOnPanel(idx, e.dataTransfer); }}
+      style={{ marginTop: 14, padding: 14, borderRadius: 8, background: dragOver ? 'var(--accent-soft)' : 'var(--bg-elevated)', border: `1px ${dragOver ? 'dashed var(--accent)' : 'solid var(--border)'}`, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
         <label style={{ ...labelStyle, fontWeight: 600, color: 'var(--text-primary)' }}>열화상 사진 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(별지7{low ? ', 저압' : ''}, 찍은 사진 전부 선택)</span></label>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -316,8 +347,20 @@ export function ThermalPhotoBox({ idx, api }: { idx: number; api: ReturnType<typ
           </label>
         </div>
       </div>
+      {api.canPickFolder && shots.length === 0 && !th?.busy && (
+        <div style={{ display: 'grid', gap: 8, margin: '4px 0 8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '16px 12px', borderRadius: 8, border: '1px dashed var(--border-hover)', background: 'var(--bg-card)', fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center' }}>
+            <FolderDown size={18} color="var(--text-tertiary)" />
+            <span>탐색기에서 <b style={{ color: 'var(--text-primary)' }}>사진 폴더를 여기로 끌어다 놓으세요</b>. 사진을 보면서 고를 수 있고, 반영하면 사진이 점검 폴더로 옮겨집니다.</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12, color: 'var(--text-secondary)' }}>
+            <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} color="var(--accent)" />
+            <span>[폴더째 옮기기] 창에서는 <b>사진이 회색으로 보이는 게 정상</b>입니다. 사진이 든 폴더 안으로 들어간 뒤 아래 <b>[폴더 선택]</b>을 누르세요.</span>
+          </div>
+        </div>
+      )}
       <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-        {api.canPickFolder ? '폴더째 옮기기: 폴더 창에서는 사진이 회색으로 보입니다. 사진이 든 폴더를 열고 [폴더 선택]을 누르면 됩니다. ' : ''}{low ? '저압: 전경 1장, 측정 3장 순서' : `부위: ${api.parts.map(p => p.name).join(', ')}`}
+        {low ? '저압: 전경 1장, 측정 3장 순서' : `부위: ${api.parts.map(p => p.name).join(', ')}`}
         {', '}<a href="/guide" style={{ color: 'var(--accent)' }}>사용 방법</a>
       </div>
       {idx === 0 && <StationPartsEditor api={api} />}
