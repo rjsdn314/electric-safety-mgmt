@@ -31,6 +31,9 @@ export interface FillData {
   b7_panels?: Array<Record<string, { temps: number[]; photo_y?: string; photo_x?: string }> | null>;
   b7_mode?: 'high' | 'low';     // 별지7 기입 방식 — 고압: 시트=수배전반·행=부위 / 저압: 온도 행 하나=저압반 하나 (미지정 시 is_high_voltage)
   b7_labels?: string[] | null;  // 현장별 부위 이름(행 순서) — 있으면 라벨 매칭 대신 이 순서로 넣고, 행·사진 라벨 셀도 이 이름으로 교체
+  // 이 생성에 쓴 양식의 종별(분기/반기/연차). 연차 양식 하나로 분기·반기도 만들 때
+  //  연차 전용 시트(전원품질·변압기점검·고압) 삭제 + 점검종별 동그라미 위치 이동에 쓴다. 미지정 = '분기'(구버전 동작)
+  template_group?: '분기' | '반기' | '연차';
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -708,6 +711,10 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   // 분기점검은 접지저항·절연저항 측정 제외 → 별지2 시트(접지저항+절연저항)를 출력에서 완전히 삭제.
   // (반기점검은 같은 양식을 폴백으로 쓰므로 별지2 시트를 모두 유지한다)
   const removeB2 = d.inspection_type === '분기';
+  const tplGroup = d.template_group || '분기';
+  // 연차 양식으로 분기·반기를 만들 때: 연차에만 있는 시트는 빼고 출력
+  const removeAnnualOnly = tplGroup === '연차' && (d.inspection_type === '분기' || d.inspection_type === '반기');
+  const isAnnualOnlySheet = (n: string) => n.includes('전원품질') || n.includes('변압기점검') || n.includes('고압전기설비');
   const toRemove: Array<{ rid: string; target: string }> = [];
   // 드로잉 후처리 대상: 별지7(사진 제거 + 반기 타원이동), 별지2-절연(반기 타원이동)
   const drawingTargets: Array<{ path: string; kind: 'b7' | 'b2' }> = [];
@@ -728,8 +735,8 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     if (isB7) drawingTargets.push({ path, kind: 'b7' });
     else if (isB2 && !removeB2 && name.includes('절연')) drawingTargets.push({ path, kind: 'b2' });
 
-    if (isB2 && removeB2) {
-      // 분기: 별지2(접지저항/절연저항) 모두 채우지 않고 삭제 대상으로 표시
+    if ((isB2 && removeB2) || (removeAnnualOnly && isAnnualOnlySheet(name))) {
+      // 분기: 별지2(접지저항/절연저항) 삭제 / 연차 양식으로 분기·반기 생성: 연차 전용 시트 삭제
       toRemove.push({ rid, target });
       continue;
     }
@@ -758,8 +765,8 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     zip.file(path, xml);
   }
 
-  // 별지2 시트 실제 삭제 (workbook.xml / rels / 시트파일 / Content_Types / calcChain)
-  if (removeB2 && toRemove.length) {
+  // 시트 실제 삭제 (workbook.xml / rels / 시트파일 / Content_Types / calcChain)
+  if (toRemove.length) {
     const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     let curWbx = wbx;
     let curRels = rels;
@@ -789,7 +796,13 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
   //  · 별지7: 양식에 박혀 있던 기본 열화상 사진(임베드 이미지)을 제거 → 사진 미첨부 시 공란 생성
   //  · 반기: 점검종별 동그라미(타원 도형)가 양식상 '분기' 위에 그려져 있어, '반기' 위로 이동
   //    (분기·반기·연차 균등 간격, 별지7/별지2-절연 각각 측정한 좌표로 보정)
-  const isHalf = d.inspection_type === '반기';
+  //  · 양식 종별과 점검 종별이 다르면 동그라미를 점검 종별 위치로 이동 (예: 분기 양식→반기, 연차 양식→분기/반기)
+  const ELLIPSE_POS: Record<string, Record<'b7' | 'b2', [{ col: number; colOff: number }, { col: number; colOff: number }] | null>> = {
+    '분기': { b7: [{ col: 24, colOff: 38100 }, { col: 27, colOff: 76200 }], b2: [{ col: 6, colOff: 504825 }, { col: 6, colOff: 1000125 }] },
+    '반기': { b7: [{ col: 27, colOff: 133350 }, { col: 31, colOff: 19050 }], b2: [{ col: 6, colOff: 926306 }, { col: 7, colOff: 450056 }] },
+    '연차': { b7: [{ col: 31, colOff: 66675 }, { col: 34, colOff: 104775 }], b2: [{ col: 7, colOff: 457200 }, { col: 8, colOff: 266700 }] },
+  };
+  const moveTo = d.inspection_type !== tplGroup ? ELLIPSE_POS[d.inspection_type] : undefined;
   for (const { path, kind } of drawingTargets) {
     const sx = await zip.file(path)?.async('string'); if (!sx) continue;
     const dm = sx.match(/<drawing r:id="([^"]+)"/); if (!dm) continue;
@@ -802,8 +815,8 @@ export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: 
     let dx = await df.async('string');
     const before = dx;
     if (kind === 'b7') dx = removeDrawingPics(dx);
-    if (isHalf && kind === 'b7') dx = moveTitleEllipse(dx, { col: 27, colOff: 133350 }, { col: 31, colOff: 19050 });
-    if (isHalf && kind === 'b2') dx = moveTitleEllipse(dx, { col: 6, colOff: 926306 }, { col: 7, colOff: 450056 });
+    const pos = moveTo?.[kind];
+    if (pos) dx = moveTitleEllipse(dx, pos[0], pos[1]);
     if (dx !== before) zip.file(dp, dx);
   }
 

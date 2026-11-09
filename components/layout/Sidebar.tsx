@@ -19,8 +19,8 @@ const workMenus: MenuItem[] = [
 ];
 const setupMenus: MenuItem[] = [
   { href: '/stations/upload', label: '관리구역',        icon: Building2 },
-  { href: '/admin/templates', label: '점검 양식',       icon: FileSpreadsheet },
-  { href: '/annual-builder',  label: '연차 양식 만들기', icon: DraftingCompass },
+  { href: '/admin/templates', label: '양식 직접 올리기', icon: FileSpreadsheet },
+  { href: '/annual-builder',  label: '도면으로 양식 만들기', icon: DraftingCompass },
   { href: '/signature',       label: '서명',            icon: PenLine },
   { href: '/thermal-parts',   label: '열화상 부위',     icon: Thermometer },
   { href: '/guide',           label: '사용설명서',      icon: BookOpen },

@@ -16,7 +16,7 @@ import {
   emptySpec, newTransformer, breakerDefaults, randomGround, randomInsulation,
 } from '@/lib/annual/spec';
 
-type Station = { station_id: string; name: string; annual: boolean };
+type Station = { station_id: string; name: string; annual: boolean; voltage?: number; capacity?: number };
 
 const card: React.CSSProperties = { background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, padding: 20, marginBottom: 12 };
 const inp: React.CSSProperties = { width: '100%', padding: '7px 9px', background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, color: 'var(--text-primary)', fontFamily: 'inherit', boxSizing: 'border-box', minWidth: 0 };
@@ -69,10 +69,15 @@ export default function AnnualBuilderPage() {
 
   useEffect(() => {
     fetch('/api/templates/list').then((r) => r.json()).then((j) => {
-      if (j.success) setStations(j.rows.map((r: any) => ({
-        station_id: r.station_id, name: r.name,
+      if (!j.success) return;
+      const list: Station[] = j.rows.map((r: any) => ({
+        station_id: r.station_id, name: r.name, voltage: Number(r.voltage) || undefined, capacity: Number(r.capacity) || undefined,
         annual: r.templates.some((t: any) => t.inspection_group === '연차'),
-      })));
+      }));
+      setStations(list);
+      // 관리구역에서 넘어온 경우(?station=ID) 그 충전소를 바로 선택
+      const want = new URLSearchParams(window.location.search).get('station');
+      if (want && list.some((s) => s.station_id === want)) setStationId(want);
     });
   }, []);
 
@@ -83,6 +88,11 @@ export default function AnnualBuilderPage() {
   }, [stationId]);
 
   const station = useMemo(() => stations.find((s) => s.station_id === stationId), [stations, stationId]);
+  // 충전소의 수전전압으로 고압/저압 기본 선택 (관리구역에 등록한 값)
+  useEffect(() => {
+    if (station?.voltage) setLowMode(station.voltage < 1000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [station?.station_id]);
   const upd = (fn: (s: AnnualSpec) => void) => setSpec((prev) => { if (!prev) return prev; const n = structuredClone(prev); fn(n); return n; });
 
   // 도면 PDF는 서버로 올리지 않고 브라우저에서만 띄워 본다 (AI·크레딧 사용 없음)
@@ -139,7 +149,7 @@ export default function AnnualBuilderPage() {
   const build = async (save: boolean) => {
     if (!spec) return;
     if (save && checkCount > 0 && !confirm(`노란색으로 표시한 확인할 항목이 ${checkCount}개 남아 있습니다. 그대로 등록할까요?`)) return;
-    if (save && station?.annual && !confirm(`${station.name}에 이미 연차 양식이 등록되어 있습니다. 새 양식으로 바꿀까요?`)) return;
+    if (save && station?.annual && !confirm(`${station.name}에 이미 점검 양식이 있습니다. 새 양식으로 바꿀까요?`)) return;
     setBusy(save ? '양식 등록 중…' : '엑셀 만드는 중…'); setMsg('');
     try {
       const r = await fetch('/api/annual/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ station_id: stationId, spec, save }) });
@@ -148,7 +158,7 @@ export default function AnnualBuilderPage() {
       setWarnings(j.warnings || []);
       download(j.fileBase64, j.fileName);
       if (save) {
-        setMsg('✅ 연차 양식으로 등록했습니다. 이제 연차점검을 만들 때 이 양식이 쓰입니다.');
+        setMsg('✅ 점검 양식으로 등록했습니다. 이제 분기, 반기, 연차 점검표를 만들 때 이 양식이 쓰입니다.');
         setStations((prev) => prev.map((s) => (s.station_id === stationId ? { ...s, annual: true } : s)));
         setSavedSpec(spec);
       } else setMsg('✅ 엑셀을 내려받았습니다. 등록은 하지 않았습니다.');
@@ -175,9 +185,9 @@ export default function AnnualBuilderPage() {
 
   return (
     <div className="page-pad" style={{ maxWidth: 1100, padding: '28px 32px 80px' }}>
-      <h1 style={{ margin: '0 0 4px' }}>연차 양식 만들기</h1>
+      <h1 style={{ margin: '0 0 4px' }}>도면으로 양식 만들기</h1>
       <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
-        설계도면 PDF를 읽어 변압기, 분전반 차단기, 충전기를 채운 뒤 그 충전소의 연차점검 양식으로 등록합니다.
+        설계도면 PDF를 읽어 변압기, 분전반 차단기, 충전기를 채운 뒤 그 충전소의 점검 양식으로 등록합니다. 이 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.
       </p>
 
       <div style={card}>
@@ -186,7 +196,7 @@ export default function AnnualBuilderPage() {
           <label style={{ fontSize: 13 }}>충전소
             <select value={stationId} onChange={(e) => setStationId(e.target.value)} style={{ ...inp, marginTop: 4 }} disabled={!!busy}>
               <option value="">충전소 선택</option>
-              {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (연차 양식 있음)' : ''}</option>)}
+              {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (양식 있음)' : ''}</option>)}
             </select>
           </label>
           <label style={{ fontSize: 13 }}>설계도면 PDF (여러 개 가능)
@@ -442,7 +452,7 @@ export default function AnnualBuilderPage() {
           </div>
 
           <div style={{ ...card, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', position: 'sticky', bottom: 12, boxShadow: 'var(--shadow-lg)' }}>
-            <button style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => build(true)}><Upload size={15} /> 이 충전소 연차 양식으로 등록</button>
+            <button style={{ ...primary, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => build(true)}><Upload size={15} /> 이 충전소 점검 양식으로 등록</button>
             <button style={btn} disabled={!!busy} onClick={() => build(false)}><Download size={15} /> 엑셀만 내려받기</button>
             {checkCount > 0
               ? <button style={{ ...btn, borderColor: 'rgba(183,121,31,.55)', color: 'var(--warning)' }} onClick={goFirstCheck}><AlertTriangle size={15} /> 확인할 칸 {checkCount}개</button>

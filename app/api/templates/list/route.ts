@@ -27,7 +27,7 @@ export async function GET() {
       isAdmin = p?.role === 'admin';
     }
 
-    let sq = sb.from('stations').select('id, name, base_name').eq('is_active', true).order('name');
+    let sq = sb.from('stations').select('id, name, base_name, voltage, capacity').eq('is_active', true).order('name');
     if (!isAdmin && user) sq = sq.eq('user_id', user.id); // 비관리자: 본인 등록 충전소만
     const { data: stations } = await sq;
 
@@ -44,6 +44,8 @@ export async function GET() {
       station_id: s.id,
       name: s.name,
       base_name: s.base_name,
+      voltage: s.voltage,
+      capacity: s.capacity,
       templates: (tplByStation.get(s.id) || []).map((t) => ({
         inspection_group: t.inspection_group,
         original_name: t.original_name,

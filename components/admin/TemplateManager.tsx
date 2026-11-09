@@ -118,9 +118,9 @@ export default function TemplateManager() {
 
   return (
     <div className="page-pad" style={{ maxWidth: 1000, padding: '28px 32px 60px' }}>
-      <h1 style={{ margin: '0 0 4px' }}>점검 양식</h1>
+      <h1 style={{ margin: '0 0 4px' }}>양식 직접 올리기</h1>
       <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14 }}>
-        충전소마다 분기, 반기, 연차 점검표 양식을 등록합니다. 등록 {registered}곳, 전체 {stations.length}곳.
+        가지고 있는 엑셀 양식을 충전소에 직접 올립니다. 연차 양식 하나만 있어도 분기, 반기 점검표를 만들 수 있고, 양식이 없으면 <a href="/annual-builder" style={{ color: 'var(--accent)' }}>도면으로 만들 수</a> 있습니다. 등록 {registered}곳, 전체 {stations.length}곳.
       </p>
 
       <div style={card}>

@@ -6,7 +6,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle, DraftingCompass } from 'lucide-react';
+import Link from 'next/link';
 
 export default function StationUploadPage() {
   const { profile } = useAuth();
@@ -33,6 +34,9 @@ export default function StationUploadPage() {
 
   // 직접 추가 폼 + 목록
   const [stations, setStations] = useState<any[]>([]);
+  // 점검 양식(연차 양식 = 분기·반기·연차 공용 기준 양식)이 있는 충전소
+  const [formIds, setFormIds] = useState<Set<string>>(new Set());
+  const [justAdded, setJustAdded] = useState<{ id: string; name: string } | null>(null);
   const [listLoading, setListLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState('');
@@ -76,6 +80,10 @@ export default function StationUploadPage() {
       if (res.ok && data.success) setStations(data.stations || []);
       else setStations([]);
     } catch (e) { setStations([]); } finally { setListLoading(false); }
+    try {
+      const t = await (await fetch('/api/templates/list')).json();
+      if (t.success) setFormIds(new Set(t.rows.filter((r: any) => r.templates.some((x: any) => x.inspection_group === '연차')).map((r: any) => r.station_id)));
+    } catch { /* 양식 표시는 없어도 됨 */ }
   };
 
   useEffect(() => {
@@ -105,6 +113,7 @@ export default function StationUploadPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '추가 실패');
       setForm({ ...emptyForm });
+      if (data.station?.id) setJustAdded({ id: data.station.id, name: data.station.name });
       await loadStations();
     } catch (e: any) { setAddErr(e.message); } finally { setAdding(false); }
   };
@@ -391,6 +400,13 @@ export default function StationUploadPage() {
           </div>
         </div>
         {addErr && (<div className="status err" style={{ marginTop: 12, fontSize: 13 }}><XCircle size={15} /> {addErr}</div>)}
+        {justAdded && (
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 8, background: 'var(--positive-soft)', border: '1px solid rgba(31,138,91,.25)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <CheckCircle2 size={16} color="var(--positive)" style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 200 }}><b>{justAdded.name}</b>을(를) 추가했습니다. 이어서 설계도면으로 점검 양식을 만드세요. 양식 하나로 분기, 반기, 연차 점검표를 모두 만듭니다.</span>
+            <Link href={`/annual-builder?station=${justAdded.id}`} className="btn-primary" style={{ textDecoration: 'none', padding: '7px 12px', fontSize: 13 }}><DraftingCompass size={15} /> 점검 양식 만들기</Link>
+          </div>
+        )}
         <button onClick={handleAddOne} disabled={adding} style={{ width: '100%', marginTop: 18, padding: '14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 600, cursor: adding ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>{adding ? <><Loader2 size={16} className="spin" /> 추가하는 중</> : <><Plus size={16} /> 추가</>}</button>
       </div>
 
@@ -422,9 +438,13 @@ export default function StationUploadPage() {
                 <div key={st.id}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.name}</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {st.name}
+                        <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : 'var(--warning-soft)', color: formIds.has(st.id) ? 'var(--positive)' : 'var(--warning)' }}>{formIds.has(st.id) ? '점검 양식 있음' : '점검 양식 없음'}</span>
+                      </div>
                       <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, st.custom_values?.default_type].filter(Boolean).join(', ')}</div>
                     </div>
+                    <Link href={`/annual-builder?station=${st.id}`} title={formIds.has(st.id) ? '도면으로 점검 양식 다시 만들기' : '도면으로 점검 양식 만들기'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 7, background: formIds.has(st.id) ? 'var(--bg-card)' : 'var(--accent)', color: formIds.has(st.id) ? 'var(--text-primary)' : '#fff', border: formIds.has(st.id) ? '1px solid var(--border-hover)' : '1px solid var(--accent)', fontSize: 12, fontWeight: 600, flexShrink: 0, textDecoration: 'none' }}><DraftingCompass size={13} /> {formIds.has(st.id) ? '양식' : '양식 만들기'}</Link>
                     <button onClick={() => (editing?.id === st.id ? cancelEdit() : startEdit(st))} title="수정" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 7, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}><Pencil size={13} /> 수정</button>
                     <button onClick={() => handleDeleteStation(st)} title="삭제" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 7, background: 'var(--bg-card)', color: 'var(--negative)', border: '1px solid rgba(201,54,54,.3)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}><Trash2 size={13} /> 삭제</button>
                   </div>

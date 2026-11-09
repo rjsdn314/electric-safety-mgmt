@@ -110,13 +110,15 @@ export async function POST(req: NextRequest) {
     // 점검종별 → 양식 그룹 매핑. 분기는 분기 전용 양식, 반기는 반기 전용 양식(별지2 포함)을 사용.
     let tplBuffer: ArrayBuffer | null = null;
     let usedRegistered = false;
+    let tplGroup: '분기' | '반기' | '연차' | undefined;
 
     if (inspection_type === '분기' || inspection_type === '반기' || inspection_type === '연차') {
       // 1순위: 해당 종별 전용 그룹 양식 → 2순위(구버전 호환): '분기' 그룹 양식
-      // 연차는 충전소별 전용 연차 양식(모든 별지 + 별지2 접지저항 포함)만 사용.
+      // 3순위: 이 충전소의 연차 양식(모든 별지 포함) — 분기·반기는 엔진이 필요 없는 시트를 빼고 만든다.
+      //  → 충전소마다 연차 양식(도면으로 생성) 하나만 있으면 분기·반기·연차 모두 생성 가능
       const groupCandidates =
-        inspection_type === '반기' ? ['반기', '분기'] :
-        inspection_type === '연차' ? ['연차'] : ['분기'];
+        inspection_type === '반기' ? ['반기', '분기', '연차'] :
+        inspection_type === '연차' ? ['연차'] : ['분기', '연차'];
       for (const grp of groupCandidates) {
         const { data: tpl } = await sb
           .from('station_templates')
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
         if (tpl?.file_path) {
           const { data: dl, error: dlErr } = await sb.storage.from('templates').download(tpl.file_path);
-          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; break; }
+          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; tplGroup = grp as typeof tplGroup; break; }
         }
       }
     }
@@ -152,7 +154,7 @@ export async function POST(req: NextRequest) {
         const pick = sameV || cands[0];
         if (pick?.file_path) {
           const { data: dl, error: dlErr } = await sb.storage.from('templates').download(pick.file_path);
-          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; break; }
+          if (!dlErr && dl) { tplBuffer = await dl.arrayBuffer(); usedRegistered = true; tplGroup = grp as typeof tplGroup; break; }
         }
       }
     }
@@ -191,6 +193,7 @@ export async function POST(req: NextRequest) {
         remarks: remarks || '',   // 종합의견 빈값은 엔진에서 처리(개소 특이사항 있으면 '특이사항없음' 미기재)
         b7_panels: Array.isArray(b7_panels) ? b7_panels : undefined,   // 별지7 열화상 온도·사진
         b7_labels: Array.isArray(b7_labels) && b7_labels.length ? b7_labels.map(String) : undefined,   // 현장별 부위 → 행 순서·라벨 교체
+        template_group: tplGroup,   // 연차 양식으로 분기·반기 생성 시 시트 정리·종별 동그라미 이동
       });
     } else {
       // 공용 폴백: 기존 ExcelJS 경로
