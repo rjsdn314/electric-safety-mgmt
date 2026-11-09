@@ -2,11 +2,11 @@
 // ============================================================
 // app/(dashboard)/annual-builder/page.tsx
 // 도면 → 연차 양식 만들기
-//  1) 충전소 선택  2) 도면 PDF 업로드 → AI가 설비 추출  3) 표에서 검토·수정
+//  1) 충전소 선택  2) 도면 PDF를 화면에 띄우고(업로드·AI 없음) 표준 구성(변압기 종류)을 골라 채움  3) 표에서 검토·수정
 //  4) 이 충전소의 연차 양식으로 등록(이후 '점검 생성 > 연차'에서 자동 사용) 또는 엑셀만 받기
 // ============================================================
 import { useEffect, useMemo, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { HIGH_TYPES, LOW_TYPES, buildPresetSpec } from '@/lib/annual/presets';
 import {
   AnnualSpec, Breaker, Panel, Transformer, HvCircuit, ChargerGroup,
   LOW_ITEMS, HIGH_ITEMS, GROUND_ITEMS, LIMITS,
@@ -33,17 +33,19 @@ function download(b64: string, name: string) {
   const a = document.createElement('a'); a.href = url; a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
-const fileToB64 = (f: File) => new Promise<string>((res, rej) => {
-  const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f);
-});
 
 export default function AnnualBuilderPage() {
-  const sb = createClient();
   const [stations, setStations] = useState<Station[]>([]);
   const [stationId, setStationId] = useState('');
   const [spec, setSpec] = useState<AnnualSpec | null>(null);
   const [savedSpec, setSavedSpec] = useState<AnnualSpec | null>(null);
-  const [pdfs, setPdfs] = useState<File[]>([]);
+  const [pdfs, setPdfs] = useState<{ name: string; url: string }[]>([]);
+  const [pdfIdx, setPdfIdx] = useState(0);
+  const [low, setLow] = useState(false);
+  const [systems, setSystems] = useState<{ typeId: string; spdPoles: 3 | 4 }[]>([{ typeId: 'h850', spdPoles: 4 }]);
+  const [ch200, setCh200] = useState(1);
+  const [ch350, setCh350] = useState(3);
+  const [commBoxes, setCommBoxes] = useState(1);
   const [prefix, setPrefix] = useState('2');
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState('');
@@ -68,32 +70,21 @@ export default function AnnualBuilderPage() {
   const station = useMemo(() => stations.find((s) => s.station_id === stationId), [stations, stationId]);
   const upd = (fn: (s: AnnualSpec) => void) => setSpec((prev) => { if (!prev) return prev; const n = structuredClone(prev); fn(n); return n; });
 
-  const analyze = async () => {
-    if (!stationId || !pdfs.length) return;
-    const totalSize = pdfs.reduce((n, f) => n + f.size, 0);
-    if (totalSize > 25 * 1024 * 1024) { setMsg('❌ 도면 PDF는 합쳐서 25MB 이하로 올려 주세요'); return; }
-    setBusy('도면 업로드 중…'); setMsg(''); setWarnings([]);
-    try {
-      const body: Record<string, unknown> = { station_id: stationId, breaker_prefix: prefix };
-      const paths: string[] = [];
-      let upFail = '';
-      for (let i = 0; i < pdfs.length; i++) {
-        const path = `${stationId}/drawing_${i + 1}.pdf`;
-        const { error: upErr } = await sb.storage.from('templates').upload(path, pdfs[i], { upsert: true, contentType: 'application/pdf' });
-        if (upErr) { upFail = upErr.message; break; }
-        paths.push(path);
-      }
-      if (!upFail) body.storage_paths = paths;
-      else if (totalSize <= 3 * 1024 * 1024) body.pdf_base64s = await Promise.all(pdfs.map(fileToB64));
-      else throw new Error(`도면 업로드 실패: ${upFail}`);
-      setBusy('AI가 도면을 읽는 중… (1~3분 걸릴 수 있어요)');
-      const r = await fetch('/api/annual/extract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await r.json().catch(() => ({ error: `서버 응답 오류 (${r.status})` }));
-      if (!r.ok) throw new Error(j.error || '분석 실패');
-      setSpec(j.spec);
-      setMsg('✅ 도면 분석 완료 — 아래 내용을 확인·수정한 뒤 등록하세요.');
-    } catch (e: any) { setMsg('❌ ' + e.message); }
-    finally { setBusy(''); }
+  // 도면 PDF는 서버로 올리지 않고 브라우저에서만 띄워 본다 (AI·크레딧 사용 없음)
+  const pickPdfs = (files: File[]) => {
+    pdfs.forEach((f) => URL.revokeObjectURL(f.url));
+    setPdfs(files.map((f) => ({ name: f.name, url: URL.createObjectURL(f) }))); setPdfIdx(0);
+  };
+  const types = low ? LOW_TYPES : HIGH_TYPES;
+  const setLowMode = (v: boolean) => {
+    setLow(v);
+    setSystems([{ typeId: v ? 'l210' : 'h850', spdPoles: 4 }, ...(v ? [{ typeId: 'l367', spdPoles: 4 as const }] : [])]);
+    if (v) { setCh200(1); setCh350(1); } else { setCh200(1); setCh350(3); }
+  };
+  const applyPreset = () => {
+    if (spec && !confirm('지금 입력한 내용을 표준 구성으로 덮어쓸까요?')) return;
+    setSpec(buildPresetSpec({ low, systems, commBoxes, ch200, ch350, prefix, stationLabel: station?.name || '' }));
+    setMsg('✅ 표준 구성으로 채웠습니다. 도면과 비교해 다른 부분만 고친 뒤 등록하세요.'); setWarnings([]);
   };
 
   const startManual = () => {
@@ -137,8 +128,8 @@ export default function AnnualBuilderPage() {
     <div style={{ maxWidth: 1100, padding: '32px 28px 80px' }}>
       <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>도면으로 연차 양식 만들기</h1>
       <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 20, lineHeight: 1.6 }}>
-        충전소 도면(PDF)을 올리면 AI가 변압기·분전반·차단기·충전기를 읽어 연차점검 양식(별지1·2·7·14, 전원품질, 변압기, 고압)을 그 현장에 맞게 채웁니다.
-        결과를 확인·수정한 뒤 등록하면 이후 연차점검 생성에 자동으로 쓰입니다. (고압 수전 충전소용)
+        도면(PDF)을 화면에 띄워 놓고 변압기(수전 계통) 종류를 고르면 분전반·차단기·충전기가 표준 구성으로 채워집니다.
+        도면과 다른 부분만 고쳐 등록하면 이후 연차점검 생성에 자동으로 쓰입니다. (AI를 쓰지 않아 크레딧이 들지 않아요 · 고압/저압 수전 모두 지원)
       </p>
 
       <div style={card}>
@@ -150,16 +141,61 @@ export default function AnnualBuilderPage() {
               {stations.map((s) => <option key={s.station_id} value={s.station_id}>{s.name}{s.annual ? ' (연차양식 있음)' : ''}</option>)}
             </select>
           </label>
-          <label style={{ fontSize: 13 }}>도면 PDF (여러 개 선택 가능 — 변압기별 도면 등)
-            <input type="file" multiple accept="application/pdf,.pdf" disabled={!!busy || !stationId} onChange={(e) => setPdfs(Array.from(e.target.files || []))} style={{ ...inp, marginTop: 4 }} />
+          <label style={{ fontSize: 13 }}>도면 PDF 보기 (서버로 올리지 않음 · 여러 개 가능)
+            <input type="file" multiple accept="application/pdf,.pdf" disabled={!!busy} onChange={(e) => pickPdfs(Array.from(e.target.files || []))} style={{ ...inp, marginTop: 4 }} />
           </label>
           <label style={{ fontSize: 13 }}>차단기 표기 앞 번호
             <input value={prefix} onChange={(e) => setPrefix(e.target.value)} style={{ ...inp, marginTop: 4 }} placeholder="예: 2 → 2MCCB4P350A" disabled={!!busy} />
           </label>
         </div>
+
+        {pdfs.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            {pdfs.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                {pdfs.map((f, i) => <button key={f.url} style={{ ...mini, borderColor: i === pdfIdx ? 'var(--accent)' : 'var(--border)', color: i === pdfIdx ? 'var(--accent)' : 'var(--text-primary)' }} onClick={() => setPdfIdx(i)}>{f.name}</button>)}
+              </div>
+            )}
+            <div style={hint}>단선결선도(고압은 보통 3쪽, 저압은 수전 분전함 결선도)에서 변압기 용량과 저압 간선을 확인하세요.</div>
+            <iframe src={pdfs[pdfIdx]?.url} title="도면" style={{ width: '100%', height: 560, border: '1px solid var(--border)', borderRadius: 10, background: '#fff' }} />
+          </div>
+        )}
+
+        <div style={{ marginTop: 16, padding: 14, border: '1px dashed var(--border)', borderRadius: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>표준 구성 고르기</div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, marginBottom: 10 }}>
+            <label><input type="radio" checked={!low} onChange={() => setLowMode(false)} /> 고압 수전 (22.9kV, 변압기)</label>
+            <label><input type="radio" checked={low} onChange={() => setLowMode(true)} /> 저압 수전 (380V, 한전 공급 계통)</label>
+          </div>
+          {systems.map((sys, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, width: 44 }}>SS-{i + 1}</span>
+              <select style={{ ...inp, flex: 1, minWidth: 260 }} value={sys.typeId} onChange={(e) => setSystems((p) => p.map((x, j) => (j === i ? { ...x, typeId: e.target.value } : x)))}>
+                {types.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              {!low && (
+                <label style={{ fontSize: 12 }}>SPD 차단기
+                  <select style={{ ...inp, width: 70, display: 'inline-block', marginLeft: 4 }} value={sys.spdPoles} onChange={(e) => setSystems((p) => p.map((x, j) => (j === i ? { ...x, spdPoles: +e.target.value as 3 | 4 } : x)))}>
+                    <option value={4}>4P</option><option value={3}>3P</option>
+                  </select>
+                </label>
+              )}
+              {systems.length > 1 && <button style={mini} onClick={() => setSystems((p) => p.filter((_, j) => j !== i))}>✕</button>}
+            </div>
+          ))}
+          {systems.length < LIMITS.transformers && (
+            <button style={{ ...mini, marginBottom: 10 }} onClick={() => setSystems((p) => [...p, { typeId: types[0].id, spdPoles: 4 }])}>+ {low ? '수전 계통' : '변압기'} 추가</button>
+          )}
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', fontSize: 13, alignItems: 'center' }}>
+            <label>200kW 충전기 <input type="number" min={0} style={{ ...inp, width: 64, display: 'inline-block' }} value={ch200} onChange={(e) => setCh200(+e.target.value)} />대</label>
+            <label>350kW 충전기 <input type="number" min={0} style={{ ...inp, width: 64, display: 'inline-block' }} value={ch350} onChange={(e) => setCh350(+e.target.value)} />대</label>
+            <label>통신함 <input type="number" min={0} style={{ ...inp, width: 64, display: 'inline-block' }} value={commBoxes} onChange={(e) => setCommBoxes(+e.target.value)} />개</label>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-          <button style={{ ...primary, opacity: !stationId || !pdfs.length || busy ? 0.5 : 1 }} disabled={!stationId || !pdfs.length || !!busy} onClick={analyze}>🤖 도면 분석{pdfs.length > 1 ? ` (${pdfs.length}개)` : ''}</button>
-          <button style={btn} disabled={!stationId || !!busy} onClick={startManual}>✏️ 도면 없이 직접 입력</button>
+          <button style={{ ...primary, opacity: !stationId || busy ? 0.5 : 1 }} disabled={!stationId || !!busy} onClick={applyPreset}>⚡ 표준 구성으로 채우기</button>
+          <button style={btn} disabled={!stationId || !!busy} onClick={startManual}>✏️ 빈 양식부터 직접 입력</button>
           {savedSpec && <button style={btn} disabled={!!busy} onClick={() => { setSpec(structuredClone(savedSpec)); setMsg('이전에 등록한 설비 내용을 불러왔습니다.'); }}>📂 이전 등록 내용 불러오기</button>}
         </div>
         {busy && <div style={{ marginTop: 12, fontSize: 14 }}>⏳ {busy}</div>}
@@ -173,7 +209,7 @@ export default function AnnualBuilderPage() {
         <>
           {spec.notes.length > 0 && (
             <div style={{ ...card, borderColor: '#f59e0b' }}>
-              <div style={h2}>🔎 AI가 확인을 요청한 부분</div>
+              <div style={h2}>🔎 확인할 부분</div>
               <ul style={{ paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{spec.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
             </div>
           )}
