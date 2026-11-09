@@ -1,7 +1,7 @@
 'use client';
 // 별지7 열화상 사진 선택·분류 UI (점검 생성 화면 + 점검 이력 '열화상 추가'에서 공용)
 //  · 부위 목록 우선순위: 현장별 설정(양식·설비가 다른 현장) → 계정 설정(/thermal-parts) → 기본 PF/PT/CH
-//  · 고압: AI 분류 → 실패 시 무료 분류(내 예시 비교)
+//  · 고압: 내 예시 사진과 비교해 분류(무료, 브라우저)
 //  · 저압(현장별 설정 없을 때): 촬영 순서(전경 1장 + 상별 3장)로 자동 지정, 분류 없음
 //  · 반영 후 learn()으로 확정 분류(특히 사용자가 고친 사진)를 계정별 예시로 저장 → 다음 분류에 참고
 //  · 저장 후 archivePhotos()로 선택한 사진 전부를 점검 폴더(YYYYMMDD_현장_종류\약칭\[수배전반번호])에 저장.
@@ -108,35 +108,20 @@ export function useThermalPanels() {
     setThermal([]);   // 규칙(계정 부위/저압 순서)이 바뀌므로 사진은 다시 선택
   };
 
+  // 부위 분류: 내 예시 사진과 비교(브라우저, 무료). 예시가 없으면 직접 고른다.
   const classify = async (idx: number, shots: UIShot[]) => {
-    patch(idx, { busy: true, status: '⏳ 부위를 분류하는 중입니다.' });
+    patch(idx, { busy: true, status: '⏳ 내 예시 사진과 비교해 분류하는 중입니다. 처음 한 번은 조금 걸립니다.' });
     try {
-      const images = await Promise.all(shots.map(s => downscaleToBase64(s.y)));
-      const res = await fetch('/api/thermal/classify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ images, station_id: stationRef.current }) });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.error || `HTTP ${res.status}`);
-      const valid = new Set(partsRef.current.map(p => p.name));
-      const labels = smoothByTriplets((j.parts as (Part | null)[]).map(p => (p && valid.has(p) ? p : null)));
+      const r = await classifyLocally(shots.map(s => s.y), partsRef.current.map(p => p.name));
+      if (!r.examplesUsed) throw new Error('아직 저장된 내 예시가 없습니다. 이번엔 직접 골라 반영하면 다음부터 자동으로 추천됩니다');
+      const labels = smoothByTriplets(r.parts);
       patch(idx, {
         shots: shots.map((s, i) => ({ ...s, part: labels[i] ?? null, ai: labels[i] ?? null })),
         busy: false,
-        status: `✅ AI 분류 완료${j.examples_used ? ` (내 예시 ${j.examples_used}장 참고)` : ''}. 틀린 부위는 아래에서 고치면 다음 분류부터 반영됩니다.`,
+        status: `⚠️ 내 예시 ${r.examplesUsed}장과 비교해 분류했습니다${r.missing.length ? ` (예시 없는 부위: ${r.missing.join(', ')})` : ''}. 틀릴 수 있으니 확인하고 고쳐 주세요.`,
       });
-    } catch (e: any) {
-      // AI 불가(키·크레딧 없음 등) → 무료 분류: 내 예시 사진과 비교(브라우저)
-      patch(idx, { status: '⏳ 내 예시 사진과 비교해 분류하는 중입니다. 처음 한 번은 조금 걸립니다.' });
-      try {
-        const r = await classifyLocally(shots.map(s => s.y), partsRef.current.map(p => p.name));
-        if (!r.examplesUsed) throw new Error('아직 저장된 내 예시가 없습니다 — 이번엔 직접 골라 반영하면 다음부터 자동으로 추천됩니다');
-        const labels = smoothByTriplets(r.parts);
-        patch(idx, {
-          shots: shots.map((s, i) => ({ ...s, part: labels[i] ?? null, ai: labels[i] ?? null })),
-          busy: false,
-          status: `⚠️ 내 예시 ${r.examplesUsed}장과 비교해 분류했습니다${r.missing.length ? ` (예시 없는 부위: ${r.missing.join(', ')})` : ''}. 틀릴 수 있으니 확인하고 고쳐 주세요.`,
-        });
-      } catch (e2: any) {
-        patch(idx, { shots, busy: false, status: `⚠️ 자동 분류를 못 했습니다. 부위를 직접 골라 주세요. (${e2.message})` });
-      }
+    } catch (e2: any) {
+      patch(idx, { shots, busy: false, status: `⚠️ 자동 분류를 못 했습니다. 부위를 직접 골라 주세요. (${e2.message})` });
     }
   };
 

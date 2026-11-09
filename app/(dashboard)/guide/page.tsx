@@ -1,7 +1,7 @@
 'use client';
 // 사용설명서 — 화면에서 뺀 설명을 한곳에 모아둔 페이지
 import { useState } from 'react';
-import { ClipboardList, Thermometer, FolderOpen, SlidersHorizontal, Plug, Bot, HelpCircle, ChevronDown, type LucideIcon } from 'lucide-react';
+import { ClipboardList, Thermometer, FolderOpen, SlidersHorizontal, Plug, HelpCircle, ChevronDown, type LucideIcon } from 'lucide-react';
 
 type Section = { id: string; icon: LucideIcon; title: string; body: React.ReactNode };
 
@@ -82,24 +82,10 @@ export default function GuidePage() {
       ),
     },
     {
-      id: 'ai', icon: Bot, title: 'AI 자동 분류 (선택)',
-      body: (
-        <>
-          <p>AI 키가 없어도 온도 기입과 사진 삽입은 모두 됩니다. 부위 분류만 차이가 납니다.</p>
-          <ul>
-            <li><b>키가 없을 때:</b> 쌓인 내 예시 사진과 비교해 부위를 추천합니다(무료). 예시가 없으면 직접 고릅니다.</li>
-            <li><b>키가 있을 때:</b> AI가 사진을 보고 분류합니다. 점검 1건에 100원 안팎입니다.</li>
-          </ul>
-          <p>키를 넣으려면 console.anthropic.com에서 API 키를 발급받아 크레딧을 충전한 뒤, Vercel 프로젝트의 Settings, Environment Variables에 <code>ANTHROPIC_API_KEY</code>로 저장하고 <b>Redeploy</b>를 누릅니다.</p>
-        </>
-      ),
-    },
-    {
       id: 'trouble', icon: HelpCircle, title: '자주 겪는 문제',
       body: (
         <ul>
           <li><b>“온도 데이터가 있는 사진을 찾지 못했습니다”</b>: 카메라 원본(RB…X.JPG, RB…Y.JPG)이 아니거나, 다른 프로그램에서 편집·압축된 사진입니다. 원본을 넣어주세요.</li>
-          <li><b>“AI 키가 설정되지 않았습니다”</b>: 키를 넣었다면 Vercel에서 Redeploy를 눌렀는지 확인하세요.</li>
           <li><b>사진이 폴더에 안 들어갔을 때</b>: 저장 폴더를 지정했는지, 휴대폰이 아닌 PC의 Chrome이나 Edge인지 확인하세요.</li>
           <li><b>온도가 엉뚱한 줄에 들어갈 때</b>: 부위 순서가 양식과 다를 수 있습니다. 현장별 부위 설정에서 순서를 맞춰주세요.</li>
           <li><b>양식이 등록되지 않는 파일</b>: 확장자만 .xlsx이고 실제로는 옛 .xls인 경우가 있습니다. 엑셀에서 “Excel 통합 문서(.xlsx)”로 다시 저장해 올리세요.</li>

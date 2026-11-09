@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from '@/components/inspection/ThermalPhotos';
-import { Thermometer, Download, HardDriveDownload, Trash2, X, Save, Loader2, Smartphone, FileCheck2 } from 'lucide-react';
+import { Thermometer, Download, Trash2, X, Save, Loader2, Smartphone, FileCheck2 } from 'lucide-react';
 
 // 열화상 기능 도입일 — 이전에 생성된 점검은 '열화상 대기' 표시를 하지 않음
 const THERMAL_SINCE = '2026-09-15';
@@ -16,8 +16,6 @@ export default function HistoryPage() {
     const [filterInspector, setFilterInspector] = useState('전체');
     const [inspectors, setInspectors] = useState<string[]>([]);
     const [search, setSearch] = useState('');
-    const [syncing, setSyncing] = useState(false);
-    const [syncProgress, setSyncProgress] = useState('');
     const [savingId, setSavingId] = useState<string | null>(null);
     const [isDesktop, setIsDesktop] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -196,65 +194,6 @@ export default function HistoryPage() {
           } finally { setBulkDeleting(false); }
     };
 
-  const normalize = (s: string) => s.replace(/[\s()\-_.]/g, '').toLowerCase();
-
-  const findOrCreateDir = async (parent: any, targetName: string) => {
-        const normTarget = normalize(targetName);
-        for await (const entry of parent.values()) {
-                if (entry.kind === 'directory' && normalize(entry.name).includes(normTarget)) {
-                          return await parent.getDirectoryHandle(entry.name);
-                }
-        }
-        return await parent.getDirectoryHandle(targetName, { create: true });
-  };
-
-  const handleSync = async () => {
-        if (!('showDirectoryPicker' in window)) { alert('이 기능은 데스크톱 Chrome/Edge에서만 작동합니다.'); return; }
-        if (items.length === 0) { alert('동기화할 점검 이력이 없습니다.'); return; }
-        try {
-                setSyncing(true);
-                setSyncProgress('폴더 선택 중...');
-                // @ts-ignore
-          const folderHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                let successCount = 0; let failCount = 0;
-                for (let i = 0; i < items.length; i++) {
-                          const item = items[i];
-                          setSyncProgress(`${i + 1}/${items.length}: ${item.file_name}`);
-                          try {
-                                      const res = await fetch(item.file_path);
-                                      if (!res.ok) throw new Error('다운로드 실패');
-                                      const blob = await res.blob();
-                                      const arrayBuffer = await blob.arrayBuffer();
-                                      const date = item.inspection_date;
-                                      const [yyyy, mm] = date.split('-');
-                                      const periodFolder = `${yyyy}${mm}${item.inspection_type}점검`;
-                                      const baseName = item.station?.base_name || item.station?.name || 'unknown';
-                                      const isKintex = baseName.includes('KINTEX') || baseName.includes('킨텍스');
-                                      const isHighV = (item.station?.voltage || 0) >= 3000;
-                                      let current = folderHandle;
-                                      if (isKintex) {
-                                                    current = await findOrCreateDir(current, baseName);
-                                                    current = await current.getDirectoryHandle(isHighV ? '고압' : '저압', { create: true });
-                                                    current = await current.getDirectoryHandle(periodFolder, { create: true });
-                                      } else {
-                                                    current = await findOrCreateDir(current, baseName);
-                                                    current = await current.getDirectoryHandle(periodFolder, { create: true });
-                                      }
-                                      const dateNum = date.replace(/-/g, '');
-                                      const fileName = `${item.station?.name || baseName}_${item.inspection_type}점검_${dateNum}.xlsx`;
-                                      const fileHandle = await current.getFileHandle(fileName, { create: true });
-                                      const writable = await fileHandle.createWritable();
-                                      await writable.write(arrayBuffer);
-                                      await writable.close();
-                                      successCount++;
-                          } catch (e: any) { console.error(`동기화 실패: ${item.file_name}`, e); failCount++; }
-                }
-                setSyncProgress('');
-                alert(`PC 폴더 동기화를 마쳤습니다.\n\n성공 ${successCount}개, 실패 ${failCount}개`);
-        } catch (e: any) {
-                if (e.name !== 'AbortError') alert('동기화 오류: ' + e.message);
-        } finally { setSyncing(false); setSyncProgress(''); }
-  };
 
   const openFolderDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
         const req = indexedDB.open('inspection-app', 1);
@@ -537,10 +476,6 @@ export default function HistoryPage() {
                                     <h1 style={{margin: '0 0 4px'}}>점검 이력</h1>
                                     <p style={{margin: 0, fontSize: 14, color: 'var(--text-secondary)'}}>만든 점검표 파일 목록입니다.</p>
                           </div>
-                  {isDesktop && (<button onClick={handleSync} disabled={syncing}
-                                             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', borderRadius: 8, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: syncing ? 'wait' : 'pointer', opacity: syncing ? 0.6 : 1, whiteSpace: 'nowrap' }}>
-                    {syncing ? <><Loader2 size={15} className="spin" /> {syncProgress || '동기화 중'}</> : <><HardDriveDownload size={15} /> PC 폴더로 모두 저장</>}
-                  </button>)}
                 </div>
         
               <div style={{display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap'}}>

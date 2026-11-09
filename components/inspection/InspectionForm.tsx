@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from './ThermalPhotos';
 import { Status, plain } from '@/components/ui/Status';
-import { CheckCircle2, FileText, FolderOpen, Folder, Download, FileDown, Plus, X, Loader2 } from 'lucide-react';
+import { CheckCircle2, FileText, FolderOpen, Folder, Download, Plus, X, Loader2 } from 'lucide-react';
 
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,10,12월' },
@@ -520,45 +520,8 @@ export function InspectionForm() {
     } finally { setLoading(false); }
   };
 
-  const handlePrintPdf = () => { window.print(); };
-
-  // ── PDF 변환 도우미 연동 (데스크톱 + 저장폴더 지정 시) ──
-  // 저장 폴더에 마커(.pdfonly/.pdfboth)를 만들면 PC의 "PDF 변환 도우미"
-  // (바탕화면 PDF변환도우미.bat)가 감지해 실제 엑셀 모양 그대로 PDF 생성.
+  // 저장 결과 안내(열화상 사진 폴더 저장 등)
   const [saveMsg, setSaveMsg] = useState('');
-  const writeMarker = async (kind: 'pdfonly' | 'pdfboth') => {
-    if (!folderHandle || !result?.fileBase64) return false;
-    const dateNum = (result.date || date).replace(/-/g, '');
-    const sub = `${dateNum}_${(result.station || selected)?.name}_${result.inspType || inspType}`;
-    const okx = await saveToLocal(result.fileBase64, result.fileName || savedFile, sub); // 변환 원본 보장
-    if (!okx) return false;
-    const dir = await folderHandle.getDirectoryHandle(sub, { create: true });
-    const fh = await dir.getFileHandle(`${result.fileName || savedFile}.${kind}`, { create: true });
-    const w = await fh.createWritable(); await w.write(kind); await w.close();
-    return true;
-  };
-  const savePdf = async () => {
-    if (folderHandle && result?.fileBase64) {
-      try {
-        const ok = await writeMarker('pdfonly');
-        setSaveMsg(ok ? 'PDF 변환을 요청했습니다. PDF 변환 도우미가 켜져 있으면 잠시 후 폴더에 PDF만 남습니다.' : '');
-      } catch (e: any) { setSaveMsg('❌ ' + e.message); }
-    } else {
-      handlePrintPdf(); // 폴더 미지정/모바일: 브라우저 인쇄로 대체
-    }
-  };
-  const saveBoth = async () => {
-    if (folderHandle && result?.fileBase64) {
-      try {
-        const ok = await writeMarker('pdfboth');
-        setSaveMsg(ok ? '엑셀을 저장하고 PDF 변환을 요청했습니다. 도우미가 켜져 있으면 잠시 후 PDF도 생깁니다.' : '');
-      } catch (e: any) { setSaveMsg('❌ ' + e.message); }
-    } else {
-      const a = document.createElement('a'); a.href = downloadUrl; a.download = savedFile;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(handlePrintPdf, 600);
-    }
-  };
 
   const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 8, color: 'var(--text-secondary)' };
@@ -575,32 +538,11 @@ export function InspectionForm() {
             {downloadUrl && (
               <a href={downloadUrl} download={savedFile} className="btn-primary" style={{ textDecoration: 'none' }}><Download size={17} /> 엑셀 내려받기</a>
             )}
-            <button onClick={savePdf} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)', borderRadius: 8, padding: '12px 20px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}><FileDown size={17} /> PDF로 저장{folderHandle && result?.fileBase64 ? '' : ' (인쇄 화면)'}</button>
-            {downloadUrl && (
-              <button onClick={saveBoth} style={{ width: '100%', background: 'transparent', color: 'var(--accent)', border: 'none', borderRadius: 8, padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>엑셀과 PDF 함께 저장</button>
-            )}
             {saveMsg && <Status msg={saveMsg} style={{ fontSize: 13, textAlign: 'left' }} />}
-            {folderHandle && result?.fileBase64 && (
-              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
-                PDF는 PC에서 PDF 변환 도우미가 켜져 있을 때 엑셀 모양 그대로 만들어집니다.
-              </div>
-            )}
           </div>
           <button onClick={() => { setDone(false); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); setResult(null); thermalApi.reset(); }} style={{ marginTop: 18, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>새 점검 생성</button>
         </div>
       </div>
-      {result && <PrintableSheet data={result} />}
-      <style jsx global>{`
-        @media print {
-          body * { visibility: hidden; }
-          #print-sheet, #print-sheet * { visibility: visible; }
-          #print-sheet { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-          @page { size: A4 portrait; margin: 14mm 12mm; }
-        }
-        #print-sheet { display: none; }
-        @media print { #print-sheet { display: block; } }
-      `}</style>
     </>
   );
 
@@ -766,72 +708,6 @@ export function InspectionForm() {
           .measure-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>
-    </div>
-  );
-}
-
-// ── 인쇄용 점검표 (PDF 저장 시 사용): 화면에서는 숨김, 인쇄 시에만 표시 ──
-function PrintableSheet({ data }: { data: any }) {
-  const st = data.station || {};
-  const sets: any[] = data.measureSets || [];
-  const isHighV = (st.voltage || 0) >= 3000;
-  const td: React.CSSProperties = { border: '1px solid #000', padding: '4px 6px', fontSize: 12, textAlign: 'center' };
-  const th: React.CSSProperties = { ...td, fontWeight: 700, background: '#f0f0f0' };
-  const labelTd: React.CSSProperties = { ...td, fontWeight: 700, background: '#f7f7f7', whiteSpace: 'nowrap' };
-  return (
-    <div id="print-sheet" style={{ color: '#000', background: '#fff', fontFamily: 'sans-serif' }}>
-      <h2 style={{ textAlign: 'center', fontSize: 20, fontWeight: 800, margin: '0 0 4px' }}>전기설비 점검표</h2>
-      <div style={{ textAlign: 'center', fontSize: 13, marginBottom: 14 }}>{data.inspType}점검</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
-        <tbody>
-          <tr><td style={labelTd}>충전소명</td><td style={td} colSpan={3}>{st.name || '-'}</td></tr>
-          <tr>
-            <td style={labelTd}>수전전압</td><td style={td}>{st.voltage}V ({isHighV ? '고압' : '저압'})</td>
-            <td style={labelTd}>수전용량</td><td style={td}>{st.capacity}kW</td>
-          </tr>
-          <tr>
-            <td style={labelTd}>점검일자</td><td style={td}>{data.date}</td>
-            <td style={labelTd}>점검자</td><td style={td}>{data.inspector}</td>
-          </tr>
-          <tr>
-            <td style={labelTd}>점검횟수</td><td style={td}>{data.count}</td>
-            <td style={labelTd}>날씨</td><td style={td}>{data.weather}</td>
-          </tr>
-        </tbody>
-      </table>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
-        <thead>
-          <tr>
-            <th style={th} rowSpan={2}>수배전반</th>
-            <th style={th} colSpan={4}>전압 (V)</th>
-            <th style={th} colSpan={3}>전류 (A)</th>
-            {(data.inspType === '반기' || data.inspType === '연차') && <th style={th} rowSpan={2}>접지저항 (Ω)</th>}
-          </tr>
-          <tr>
-            <th style={th}>A</th><th style={th}>B</th><th style={th}>C</th><th style={th}>N</th>
-            <th style={th}>A</th><th style={th}>B</th><th style={th}>C</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sets.map((s, i) => (
-            <tr key={i}>
-              <td style={labelTd}>#{i + 1}</td>
-              <td style={td}>{s.voltage_A}</td><td style={td}>{s.voltage_B}</td><td style={td}>{s.voltage_C}</td><td style={td}>{s.voltage_N}</td>
-              <td style={td}>{s.current_A}</td><td style={td}>{s.current_B}</td><td style={td}>{s.current_C}</td>
-              {(data.inspType === '반기' || data.inspType === '연차') && <td style={td}>{s.ground}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <tbody>
-          {sets.map((s, i) => (
-            <tr key={i}><td style={labelTd}>특이사항 #{i + 1}</td><td style={{ ...td, textAlign: 'left' }}>{s.remarks || '특이사항 없음'}</td></tr>
-          ))}
-          <tr><td style={labelTd}>종합의견</td><td style={{ ...td, textAlign: 'left', height: 50, verticalAlign: 'top' }}>{data.remarks || '특이사항 없음'}</td></tr>
-        </tbody>
-      </table>
-      <div style={{ textAlign: 'right', marginTop: 24, fontSize: 13 }}>점검자: {data.inspector} (인)</div>
     </div>
   );
 }
