@@ -59,6 +59,7 @@ export interface AnnualSpec {
   charger_types: { chademo: boolean; combo: boolean; ac3: boolean };
   notes: string[];               // 확인할 부분 안내
   check_hv?: string;             // 화면용: 고압 측정 구간 확인 필요 이유
+  ground_value?: string;         // 별지2-접지저항 측정치(전 분전반 같은 값, 1.0~9.9)
 }
 
 // 별지1 판정 셀 위치 (병합 앵커). 라벨 = 양식 표기
@@ -113,11 +114,21 @@ export function defaultHvCircuits(): HvCircuit[] {
   ];
 }
 
+// 측정치 기본값(랜덤) — 절연저항: 단상(1·2극) 10~14 / 3상(3·4극) 400~999 · 접지저항: 1.0~9.9 (전 분전반 같은 값)
+const randInt = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
+export const isSinglePhase = (spec: string) => {
+  const m = spec.match(/(\d)\s*P/i);
+  return m ? +m[1] <= 2 : false;
+};
+export const randomInsulation = (spec: string) => String(isSinglePhase(spec) ? randInt(10, 14) : randInt(400, 999));
+export const randomGround = () => (randInt(10, 99) / 10).toFixed(1);
+
 // 차단기 종류 → 기본 사용전압/측정치
 export function breakerDefaults(spec: string): { voltage: string; value: string } {
-  if (!/ELB/i.test(spec)) return { voltage: '380/220', value: '999' };
+  const value = randomInsulation(spec);
+  if (!/ELB/i.test(spec)) return { voltage: isSinglePhase(spec) ? '220' : '380/220', value };
   // 3·4극 누전차단기(저압 수전 현장의 디스펜서·파워뱅크 간선)는 3상 380/220
-  return { voltage: /ELB\D*[34]P/i.test(spec) ? '380/220' : '220', value: '11' };
+  return { voltage: /ELB\D*[34]P/i.test(spec) ? '380/220' : '220', value };
 }
 
 // 저압 수전(380V) 현장: 변압기가 없고 한전 공급 계통(수전 분전함)별로 측정한다.
@@ -131,7 +142,7 @@ export function emptySpec(): AnnualSpec {
     transformers: [], panels: [], hv_circuits: defaultHvCircuits(),
     chargers: [], charger_maker: 'SK시그넷', charger_location: '옥외',
     charger_types: { chademo: false, combo: true, ac3: false },
-    notes: [],
+    notes: [], ground_value: randomGround(),
   };
 }
 

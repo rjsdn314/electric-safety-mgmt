@@ -269,7 +269,7 @@ function fillInsulation(xml: string, shared: string[], panels: Panel[], warnings
   return xml;
 }
 
-function fillGround(xml: string, panels: Panel[], warnings: string[]): string {
+function fillGround(xml: string, panels: Panel[], warnings: string[], groundValue?: string): string {
   xml = clearRange(xml, 'A', 'L', 5, 22);
   const gp = panels.filter((p) => p.ground);
   if (gp.length > 18) warnings.push('접지저항 표는 18개 분전반까지만 들어갑니다');
@@ -278,6 +278,7 @@ function fillGround(xml: string, panels: Panel[], warnings: string[]): string {
     xml = put(xml, `A${r}`, `<${p.name} >`);
     xml = put(xml, `B${r}`, p.voltage || '380/220');
     xml = put(xml, `C${r}`, '100 이하');
+    if (groundValue) xml = put(xml, `D${r}`, groundValue);   // 측정치(전 분전반 같은 값)
     xml = put(xml, `E${r}`, '적 합');
     xml = put(xml, `F${r}`, ' 부하측 ');
   });
@@ -413,7 +414,7 @@ export async function buildAnnualXlsx(baseBuf: ArrayBuffer | Buffer, spec: Annua
     else if (n.includes('별지1')) xml = fillB1(xml, sp);
     else if (n.includes('별지7')) xml = fillB7(xml, sp);
     else if (n.includes('절연')) xml = fillInsulation(xml, shared, sp.panels, warnings);
-    else if (n.includes('접지')) xml = fillGround(xml, sp.panels, warnings);
+    else if (n.includes('접지')) xml = fillGround(xml, sp.panels, warnings, sp.ground_value);
     else if (n.includes('전원품질')) xml = fillPowerQualityBase(xml, sp);
     else if (n.includes('변압기')) xml = fillTransformers(xml, sp);
     else if (n.includes('고압')) xml = fillHighVoltage(xml, sp, warnings);

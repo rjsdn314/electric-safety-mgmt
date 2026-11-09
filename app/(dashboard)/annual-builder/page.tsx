@@ -11,7 +11,7 @@ import { readDrawingPdf, reconcile } from '@/lib/annual/drawingRead';
 import {
   AnnualSpec, Breaker, Panel, Transformer, HvCircuit, ChargerGroup,
   LOW_ITEMS, HIGH_ITEMS, GROUND_ITEMS, LIMITS,
-  emptySpec, newTransformer, breakerDefaults,
+  emptySpec, newTransformer, breakerDefaults, randomGround, randomInsulation,
 } from '@/lib/annual/spec';
 
 type Station = { station_id: string; name: string; annual: boolean };
@@ -348,7 +348,14 @@ export default function AnnualBuilderPage() {
           <div style={card}>
             <div style={h2}>5. 저압 분전반 · 차단기 ({spec.panels.length}개 반 / 차단기 {breakerCount}개)</div>
             <div style={hint}>별지2 절연저항 표에 반 이름 → 차단기 순으로 들어가고(좌·우 2열, 넘치면 다음 페이지), 접지저항 표에는 반마다 한 줄이 생깁니다.
-              측정치 기본값: MCCB 999 · ELB 11 (차단기 표기를 바꾸면 자동으로 맞춰짐).</div>
+              절연저항 측정치는 랜덤: 단상(1·2극) 10~14 · 3상(3·4극) 400~999 (차단기 표기를 바꾸면 다시 뽑힘).</div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12, fontSize: 13 }}>
+              <label>접지저항 측정치(전 분전반 같은 값)
+                <input style={{ ...inp, width: 80, display: 'inline-block', marginLeft: 6 }} value={spec.ground_value || ''} onChange={(e) => upd((s) => { s.ground_value = e.target.value; })} /> Ω
+              </label>
+              <button style={mini} onClick={() => upd((s) => { s.ground_value = randomGround(); })}>🎲 접지저항 다시 뽑기</button>
+              <button style={mini} onClick={() => upd((s) => { s.panels.forEach((p) => p.breakers.forEach((b) => { b.value = randomInsulation(b.spec); })); })}>🎲 절연저항 전체 다시 뽑기</button>
+            </div>
             {spec.panels.map((p, pi) => (
               <div key={pi} {...flag(p.check)} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 12, marginBottom: 10, ...(p.check ? warnBox : {}) }}>
                 {p.check && <div style={{ marginBottom: 8 }}><CheckTag text={p.check} onOk={() => upd((s) => { delete s.panels[pi].check; })} /></div>}
@@ -379,7 +386,7 @@ export default function AnnualBuilderPage() {
                     ))}
                   </tbody>
                 </table>
-                <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { s.panels[pi].breakers.push({ spec: `${prefix}MCCB4P50A`, voltage: '380/220', value: '999', remark: '' }); })}>+ 차단기</button>
+                <button style={{ ...mini, marginTop: 6 }} onClick={() => upd((s) => { { const sp = `${prefix}MCCB4P50A`; s.panels[pi].breakers.push({ spec: sp, ...breakerDefaults(sp), remark: '' }); } })}>+ 차단기</button>
               </div>
             ))}
             <button style={mini} onClick={() => upd((s) => { s.panels.push({ name: `SS-${s.panels.length + 1}`, voltage: '380/220', ground: true, breakers: [] }); })}>+ 분전반 추가</button>
