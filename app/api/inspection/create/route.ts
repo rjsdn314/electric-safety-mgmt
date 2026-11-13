@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
         b7_panels: Array.isArray(b7_panels) ? b7_panels : undefined,   // 별지7 열화상 온도·사진
         b7_labels: Array.isArray(b7_labels) && b7_labels.length ? b7_labels.map(String) : undefined,   // 현장별 부위 → 행 순서·라벨 교체
         template_group: tplGroup,   // 연차 양식으로 분기·반기 생성 시 시트 정리·종별 동그라미 이동
+        auto_power: inspection_type === '연차' && !isHighV,   // 저압: 최대전력·역률 임의값(한전ON에 없음)
       });
     } else {
       // 공용 폴백: 기존 ExcelJS 경로

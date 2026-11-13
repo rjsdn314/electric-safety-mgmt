@@ -34,6 +34,8 @@ export interface FillData {
   // 이 생성에 쓴 양식의 종별(분기/반기/연차). 연차 양식 하나로 분기·반기도 만들 때
   //  연차 전용 시트(전원품질·변압기점검·고압) 삭제 + 점검종별 동그라미 위치 이동에 쓴다. 미지정 = '분기'(구버전 동작)
   template_group?: '분기' | '반기' | '연차';
+  // 저압 수전 현장: 한전ON에 최대수요전력·역률이 나오지 않아 전원품질 최대전력(E)·역률(I)을 임의값으로 채움
+  auto_power?: boolean;
 }
 
 // 별지1 수배전반별 측정값 셀(병합셀 앵커). 개소마다 병합 행높이가 달라
@@ -540,6 +542,18 @@ function fillPowerQuality(xml: string, shared: string[], d: FillData): string {
     if ((/KVA|KVＡ|TR/i.test(txt) || /^저압/.test(txt.trim())) && !trRows.includes(+m[1])) trRows.push(+m[1]);
   }
   trRows.sort((a, b) => a - b);
+  // 라벨 없는 양식(예: 농수산물): 6·9·12… 행 중 전압 칸이 있는 행을 블록으로
+  if (!trRows.length) for (let r = 6; r <= 15; r += 3) if (new RegExp(`<c r="L${r}"`).test(xml)) trRows.push(r);
+  if (d.auto_power && trRows.length) {
+    // 블록당 용량 = 수전용량 ÷ 블록 수, 최대전력 = 그 15~35%, 역률 95~99%
+    const cap = Number(String(d.capacity || '').replace(/[^\d.]/g, '')) || 0;
+    const per = cap ? cap / trRows.length : 300;
+    // 양식에 남아 있는 작년 값도 매번 새 값으로 바꾼다
+    for (const r of trRows) {
+      xml = setCell(xml, `E${r}`, Math.max(1, Math.round(per * (0.15 + Math.random() * 0.2))), true);
+      xml = setCell(xml, `I${r}`, 95 + Math.floor(Math.random() * 5), true);
+    }
+  }
   (d.measure_sets || []).forEach((set, k) => {
     const base = trRows[k]; if (!base) return;
     const map: [string, any][] = [

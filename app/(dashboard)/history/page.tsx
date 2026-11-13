@@ -467,6 +467,13 @@ export default function HistoryPage() {
                   {kepcoOf(powerItem.station).length > 0 && <> 고객번호: <b>{kepcoOf(powerItem.station).join(', ')}</b></>}
                   {' '}<a href={KEPCO_ON_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>한전ON <ExternalLink size={12} /></a>
                 </div>
+                {powerBlocks.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+                    <button type="button" title="한전ON에 값이 없는 저압 현장용: 빈 칸에 최대전력(수전용량의 15~35%)·역률(95~99%)을 넣습니다"
+                      onClick={() => { const per = (Number(powerItem.station?.capacity) || 0) / powerBlocks.length || 300; setPowerVals(p => p.map(v => ({ max_kw: v.max_kw || String(Math.max(1, Math.round(per * (0.15 + Math.random() * 0.2)))), pf: v.pf || String(95 + Math.floor(Math.random() * 5)) }))); }}
+                      style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>빈 칸 임의값 넣기</button>
+                  </div>
+                )}
                 {powerBusy && !powerBlocks.length ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>불러오는 중</div> : powerBlocks.length === 0 ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>이 점검표에는 전원품질측정기록표가 없습니다.</div> : (
                   <div style={{ display: 'grid', gap: 8 }}>
                     {powerBlocks.map((label, i) => (
