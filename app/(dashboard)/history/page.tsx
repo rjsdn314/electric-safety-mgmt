@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from '@/components/inspection/ThermalPhotos';
-import { Thermometer, Download, Trash2, X, Save, Loader2, Smartphone, FileCheck2 } from 'lucide-react';
+import { Thermometer, Download, Trash2, X, Save, Loader2, Smartphone, FileCheck2, Gauge, ExternalLink } from 'lucide-react';
+import { kepcoOf, KEPCO_ON_URL } from '@/lib/utils/kepco';
 
 // 열화상 기능 도입일 — 이전에 생성된 점검은 '열화상 대기' 표시를 하지 않음
 const THERMAL_SINCE = '2026-09-15';
@@ -29,6 +30,11 @@ export default function HistoryPage() {
     const PAGE_SIZE = 50;
     // 별지7 열화상 나중에 추가 (현장에선 사진 없이 생성 → 노트북에서 반영)
     const [thermalItem, setThermalItem] = useState<any>(null);
+    // 연차 전원품질 최대전력·역률 (한전ON 조회값 기입)
+    const [powerItem, setPowerItem] = useState<any>(null);
+    const [powerBlocks, setPowerBlocks] = useState<string[]>([]);
+    const [powerVals, setPowerVals] = useState<{ max_kw: string; pf: string }[]>([]);
+    const [powerBusy, setPowerBusy] = useState(false);
     // 필증 대체(정기검사·사용전검사를 받은 개소)
     const [certItem, setCertItem] = useState<any>(null);
     const [certKind, setCertKind] = useState<'정기검사' | '사용전검사'>('정기검사');   // 대체는 정기검사만 허용
@@ -116,7 +122,7 @@ export default function HistoryPage() {
                 const stationIds = [...new Set(insps.map(i => i.station_id))];
                 const { data: stations } = await sb
                   .from('stations')
-                  .select('id, base_name, name, voltage, capacity, panel_count')
+                  .select('id, base_name, name, voltage, capacity, panel_count, custom_values')
                   .in('id', stationIds);
                 const stationMap = new Map(stations?.map(s => [s.id, s]) || []);
                 merged = insps.map(i => ({ ...i, station: stationMap.get(i.station_id) }));
@@ -309,6 +315,34 @@ export default function HistoryPage() {
         } finally { setSavingId(null); }
   };
 
+    // ── 최대전력·역률 ──
+    const openPower = async (item: any) => {
+      setPowerItem(item); setPowerBlocks([]); setPowerVals([]); setPowerBusy(true);
+      try {
+        const r = await (await fetch(`/api/inspection/power?inspection_id=${item.id}`)).json();
+        if (r.error) throw new Error(r.error);
+        const saved: any[] = r.power?.values || [];
+        setPowerBlocks(r.blocks || []);
+        setPowerVals((r.blocks || []).map((_: string, i: number) => ({ max_kw: saved[i]?.max_kw != null ? String(saved[i].max_kw) : '', pf: saved[i]?.pf != null ? String(saved[i].pf) : '' })));
+      } catch (e: any) { alert('불러오지 못했습니다.\n' + e.message); setPowerItem(null); }
+      finally { setPowerBusy(false); }
+    };
+    const submitPower = async () => {
+      const item = powerItem; if (!item) return;
+      setPowerBusy(true);
+      try {
+        const res = await fetch('/api/inspection/power', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inspection_id: item.id, values: powerVals }) });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(r.error || `HTTP ${res.status}`);
+        const updated = { ...item, file_path: r.downloadUrl, measure_values: r.measure_values };
+        setItems(prev => prev.map(it => it.id === item.id ? updated : it));
+        if (isDesktop) await saveOneToPc(updated);
+        else alert('최대전력·역률을 넣었습니다. 목록의 내려받기 버튼으로 새 파일을 받을 수 있습니다.');
+        setPowerItem(null);
+      } catch (e: any) { alert('넣지 못했습니다.\n' + e.message); }
+      finally { setPowerBusy(false); }
+    };
+
     // ── 필증 대체 ──
     const openCert = (item: any) => {
       const c = item.measure_values?.certificate;
@@ -418,6 +452,39 @@ export default function HistoryPage() {
 
   return (
         <div className="page-pad" style={{padding: '28px 32px 60px'}}>
+          {powerItem && (
+            <div onClick={() => !powerBusy && setPowerItem(null)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '60px 16px' }}>
+              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>최대전력·역률</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{powerItem.station?.name}, {powerItem.inspection_type}점검, {powerItem.inspection_date}</div>
+                  </div>
+                  <button onClick={() => setPowerItem(null)} disabled={powerBusy} aria-label="닫기" style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><X size={16} /></button>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '12px 0 14px', lineHeight: 1.6 }}>
+                  한전ON 요금조회에서 고객번호별 최대수요전력(kW)과 지상역률(%)을 확인해 넣으면 전원품질측정기록표에 들어갑니다.
+                  {kepcoOf(powerItem.station).length > 0 && <> 고객번호: <b>{kepcoOf(powerItem.station).join(', ')}</b></>}
+                  {' '}<a href={KEPCO_ON_URL} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>한전ON <ExternalLink size={12} /></a>
+                </div>
+                {powerBusy && !powerBlocks.length ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>불러오는 중</div> : powerBlocks.length === 0 ? <div style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>이 점검표에는 전원품질측정기록표가 없습니다.</div> : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {powerBlocks.map((label, i) => (
+                      <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 110px 90px', gap: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{label}</span>
+                        <input className="toss-input" inputMode="decimal" placeholder="최대전력 kW" value={powerVals[i]?.max_kw || ''} onChange={e => setPowerVals(p => p.map((v, j) => j === i ? { ...v, max_kw: e.target.value } : v))} style={{ padding: '9px 10px', fontSize: 14 }} />
+                        <input className="toss-input" inputMode="decimal" placeholder="역률 %" value={powerVals[i]?.pf || ''} onChange={e => setPowerVals(p => p.map((v, j) => j === i ? { ...v, pf: e.target.value } : v))} style={{ padding: '9px 10px', fontSize: 14 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+                  <button onClick={() => setPowerItem(null)} disabled={powerBusy} style={{ flex: 1, padding: 12, borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>취소</button>
+                  <button onClick={submitPower} disabled={powerBusy || !powerBlocks.length} className="btn-primary" style={{ flex: 2, padding: 12, fontSize: 14 }}>{powerBusy && powerBlocks.length ? <><Loader2 size={16} className="spin" /> 넣는 중</> : '점검표에 넣기'}</button>
+                </div>
+              </div>
+            </div>
+          )}
           {certItem && (
             <div onClick={() => !certBusy && setCertItem(null)} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '60px 16px' }}>
               <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: 'var(--bg-card)', borderRadius: 12, padding: 24, boxShadow: 'var(--shadow-lg)' }}>
@@ -510,7 +577,7 @@ export default function HistoryPage() {
               )}
         
               <div className="toss-card" style={{padding: 0, overflow: 'hidden'}}>
-                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 256px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
+                      <div style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 292px', gap: 12, padding: '12px 20px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 600, color: 'var(--text-tertiary)', background: 'var(--bg-elevated)', alignItems: 'center'}}>
                                 <div style={{textAlign: 'center'}}><input type="checkbox" checked={allVisibleSelected} onChange={() => toggleSelectAll(visibleIds)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                 <div>충전소</div><div>종류</div><div>점검일</div><div>점검자</div><div>파일</div><div></div>
                       </div>
@@ -521,7 +588,7 @@ export default function HistoryPage() {
                     <div style={{padding: 40, textAlign: 'center', color: 'var(--text-tertiary)'}}>점검 기록이 없습니다.</div>
                   ) : (
                     visibleItems.map((item, _i, _a) => (<div key={'g'+item.id}>{(_i === 0 || (_a[_i-1].created_at||'').slice(0,7) !== (item.created_at||'').slice(0,7)) && (<div style={{padding:'8px 20px',fontWeight:600,fontSize:12,color:'var(--text-tertiary)',borderBottom:'1px solid var(--border)'}}>{(item.created_at||'').slice(0,4)}년 {Number((item.created_at||'').slice(5,7))}월에 만듦</div>)}
-                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 256px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
+                                <div key={item.id} style={{display: 'grid', gridTemplateColumns: '36px 2fr 0.8fr 1fr 0.8fr 2fr 292px', gap: 12, padding: '14px 20px', borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center', background: selectedIds.has(item.id) ? 'var(--accent-soft)' : 'transparent'}}>
                                               <div style={{textAlign: 'center'}}><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelect(item.id)} style={{cursor: 'pointer', width: 16, height: 16}}/></div>
                                               <div style={{fontWeight: 600}}>
                                                 {item.station?.name || '-'}
@@ -553,6 +620,9 @@ export default function HistoryPage() {
                                                               )}
                                                 {item.inspection_type !== '월차' && item.file_path && (
                                         <button onClick={() => openThermal(item)} title={item.measure_values?.thermal ? '열화상 사진 교체' : '열화상 사진 추가 (별지7)'} style={{ width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--text-secondary)' : 'var(--warning)', border: `1px solid ${item.measure_values?.thermal || item.measure_values?.certificate ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Thermometer size={15} /></button>
+                                                              )}
+                                                {item.inspection_type === '연차' && item.file_path && (
+                                        <button onClick={() => openPower(item)} title={item.measure_values?.power ? '최대전력·역률 고치기' : '최대전력·역률 넣기 (한전ON 조회값)'} style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.power ? 'var(--positive)' : 'var(--warning)', border: `1px solid ${item.measure_values?.power ? 'var(--border)' : 'rgba(183,121,31,0.45)'}`, cursor: 'pointer', lineHeight: 0 }}><Gauge size={15} /></button>
                                                               )}
                                                 {item.inspection_type !== '월차' && item.file_path && (
                                         <button onClick={() => openCert(item)} title={item.measure_values?.certificate ? '필증 대체 고치기' : '정기검사 필증으로 대체'} style={{ width: 30, height: 30, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: 'var(--bg-card)', color: item.measure_values?.certificate ? 'var(--positive)' : 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', lineHeight: 0 }}><FileCheck2 size={15} /></button>
