@@ -543,7 +543,7 @@ function fillPowerQuality(xml: string, shared: string[], d: FillData): string {
   }
   trRows.sort((a, b) => a - b);
   // 라벨 없는 양식(예: 농수산물): 6·9·12… 행 중 전압 칸이 있는 행을 블록으로
-  if (!trRows.length) for (let r = 6; r <= 15; r += 3) if (new RegExp(`<c r="L${r}"`).test(xml)) trRows.push(r);
+  if (!trRows.length) for (let r = 6; r <= 15; r += 3) if (cellText(xml, shared, `L${r}`) || cellText(xml, shared, `AK${r}`)) trRows.push(r);
   if (d.auto_power && trRows.length) {
     // 블록당 용량 = 수전용량 ÷ 블록 수, 최대전력 = 그 15~35%, 역률 95~99%
     const cap = Number(String(d.capacity || '').replace(/[^\d.]/g, '')) || 0;

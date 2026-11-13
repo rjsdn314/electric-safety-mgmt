@@ -50,19 +50,26 @@ async function locate(zip: JSZip) {
       const s = cellText(xml, `A${r}`, shared);
       if (/KVA|KVＡ|TR|^저압|KW/i.test(s)) blocks.push({ row: r, label: s });
     }
-    // 라벨 없는 양식(예: 농수산물): 6·9·12… 행 중 E/I 칸이 있는 행
-    if (!blocks.length) for (let r = 6; r <= 15; r += 3) if (new RegExp(`<c r="L${r}"`).test(xml)) blocks.push({ row: r, label: `#${blocks.length + 1}` });
+    // 라벨 없는 양식(예: 농수산물): 6·9·12·15행 중 전압(L)이나 결과(AK) 칸에 값이 있는 행만 블록
+    const unlabeled = !blocks.length;
+    const empties: number[] = [];
+    if (unlabeled) for (let r = 6; r <= 15; r += 3) {
+      if (cellText(xml, `L${r}`, shared) || cellText(xml, `AK${r}`, shared)) blocks.push({ row: r, label: `#${blocks.length + 1}` });
+      else empties.push(r);
+    }
     blocks.sort((a, b) => a.row - b.row);
-    return { path, xml, blocks };
+    return { path, xml, blocks, empties };
   }
-  return { path: '', xml: '', blocks: [] as { row: number; label: string }[] };
+  return { path: '', xml: '', blocks: [] as { row: number; label: string }[], empties: [] as number[] };
 }
 
 export async function applyPower(buf: ArrayBuffer | Buffer, values: PowerValue[]): Promise<{ buffer: Buffer; filled: number; blocks: string[] }> {
   const zip = await JSZip.loadAsync(buf);
-  const { path, blocks, xml: xml0 } = await locate(zip);
+  const { path, blocks, empties, xml: xml0 } = await locate(zip);
   let xml = xml0;
   if (!path) throw new Error('이 점검표에는 전원품질측정기록표가 없습니다');
+  // 쓰지 않는 블록 행에 잘못 들어간 최대전력·역률은 지움
+  for (const r of empties) for (const c of ['E', 'I']) xml = xml.replace(new RegExp(`<c r="${c}${r}"([^>]*?)(?:/>|>[\\s\\S]*?</c>)`), (_m, attrs) => `<c r="${c}${r}"${(attrs.match(/\ss="\d+"/) || [''])[0]}/>`);
   let filled = 0;
   values.forEach((v, i) => {
     const b = blocks[i]; if (!b || !v) return;
