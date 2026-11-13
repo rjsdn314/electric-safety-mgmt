@@ -1,3 +1,4 @@
+import { parseKepcoList } from '@/lib/utils/kepco';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
     const cv = { ...(target.custom_values || {}) };
     if (body.sector_label !== undefined) cv.sector_label = String(body.sector_label).trim();
     if (body.notes !== undefined) cv.notes = String(body.notes);
+    if (body.kepco_nos !== undefined) cv.kepco_nos = parseKepcoList(body.kepco_nos);   // 한전 고객번호(여러 개)
     if (panelNames !== undefined) cv.panel_names = panelNames;
     patch.custom_values = cv;
 

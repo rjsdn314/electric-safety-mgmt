@@ -1,3 +1,4 @@
+import { parseKepcoList } from '@/lib/utils/kepco';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
         inspector_name: String(body.inspector_name || '').trim(),
         sector_label: sectorName,
         default_type: String(body.default_type || '월차').trim(),
+        kepco_nos: parseKepcoList(body.kepco_nos),   // 한전 고객번호(여러 개)
         created_by: user.id,
         notes: '',
       },

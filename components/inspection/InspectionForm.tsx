@@ -3,7 +3,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from './ThermalPhotos';
 import { Status, plain } from '@/components/ui/Status';
-import { CheckCircle2, FileText, FolderOpen, Folder, Download, Plus, X, Loader2 } from 'lucide-react';
+import { CheckCircle2, FileText, FolderOpen, Folder, Download, Plus, X, Loader2, Copy, ExternalLink } from 'lucide-react';
+import { kepcoOf, KEPCO_ON_URL } from '@/lib/utils/kepco';
 
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,10,12월' },
@@ -522,6 +523,7 @@ export function InspectionForm() {
 
   // 저장 결과 안내(열화상 사진 폴더 저장 등)
   const [saveMsg, setSaveMsg] = useState('');
+  const [copiedKepco, setCopiedKepco] = useState('');   // 방금 복사한 한전 고객번호
 
   const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: 13, fontWeight: 500, marginBottom: 8, color: 'var(--text-secondary)' };
@@ -603,6 +605,18 @@ export function InspectionForm() {
               <div><span style={{ opacity: 0.7 }}>수전전압</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.voltage}V</strong></div>
               <div><span style={{ opacity: 0.7 }}>수전용량</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.capacity}kW</strong></div>
               {selected.panel_count > 1 && (<div><span style={{ opacity: 0.7 }}>수배전반</span> <strong style={{ color: 'var(--text-primary)', marginLeft: 6 }}>{selected.panel_count}개</strong></div>)}
+            </div>
+            {/* 한전 고객번호: 연차점검 최대전력·역률을 한전ON에서 조회할 때 사용 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10, fontSize: 13, color: 'var(--text-secondary)' }}>
+              <span style={{ opacity: 0.7 }}>한전 고객번호</span>
+              {kepcoOf(selected).length ? kepcoOf(selected).map((no) => (
+                <button key={no} type="button" title="눌러서 복사" onClick={() => { navigator.clipboard?.writeText(no.replace(/-/g, '')); setCopiedKepco(no); setTimeout(() => setCopiedKepco(''), 1500); }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}>
+                  {copiedKepco === no ? <CheckCircle2 size={13} color="var(--positive)" /> : <Copy size={12} color="var(--text-tertiary)" />}{no}
+                </button>
+              )) : <span style={{ color: 'var(--text-tertiary)' }}>없음 (관리구역에서 넣을 수 있어요)</span>}
+              <a href={KEPCO_ON_URL} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 4, color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>한전ON <ExternalLink size={12} /></a>
+              {inspType === '연차' && <span style={{ width: '100%', fontSize: 12, color: 'var(--text-tertiary)' }}>연차점검 전원품질의 최대전력·역률은 한전ON 다계약 관리에서 이 고객번호로 확인하세요.</span>}
             </div>
           </div>
         )}

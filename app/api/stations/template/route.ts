@@ -16,18 +16,19 @@ export async function GET() {
 
   ws.addRow([
     '담당자명', '현장명', '관리구역명', '수전전압', '계약용량',
-    '수배전반 개수', '측정개소명(쉼표구분)', '기본점검양식(월차/분기/반기/연차)', '비고',
+    '수배전반 개수', '측정개소명(쉼표구분)', '기본점검양식(월차/분기/반기/연차)', '비고', '한전 고객번호(쉼표구분)',
   ]);
   ws.addRow([
     '홍길동', '횡성휴게소(강릉방향)', '강원권', 22900, 1849,
-    2, '수배전반 #1,수배전반 #2', '월차', '(2행은 예시 — 3행부터 입력)',
+    2, '수배전반 #1,수배전반 #2', '월차', '(2행은 예시 — 3행부터 입력)', '17-1983-8244,17-1983-8253',
   ]);
 
   // 서식: 헤더 강조 + 컬럼 폭
   ws.getRow(1).font = { bold: true };
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8F0FE' } };
   ws.getRow(2).font = { italic: true, color: { argb: 'FF888888' } };
-  const widths = [12, 26, 14, 10, 10, 14, 28, 30, 24];
+  const widths = [12, 26, 14, 10, 10, 14, 28, 30, 24, 30];
+  ws.getColumn(10).numFmt = '@';   // 고객번호 앞자리 0 보존
   widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
 
   const buf = await wb.xlsx.writeBuffer();

@@ -1,3 +1,4 @@
+import { parseKepcoList } from '@/lib/utils/kepco';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import ExcelJS from 'exceljs';
@@ -87,9 +88,10 @@ export async function POST(req: NextRequest) {
       if (rowNum <= 2) return; // 헤더 2행 스킵
 
       const cells = row.values as any[];
-      // 컬럼 순서(A~I): [담당자명, 현장명, 관리구역명, 수전전압, 계약용량, 수배전반개수, 측정개소명, 기본점검양식, 비고]
+      // 컬럼 순서(A~J): [담당자명, 현장명, 관리구역명, 수전전압, 계약용량, 수배전반개수, 측정개소명, 기본점검양식, 비고, 한전 고객번호]
       // row.values 는 1-based (index 0 은 비어있음) → 첫 항목만 건너뜀
-      const [, inspectorName, stationName, sectorLabel, voltage, capacity, panelCount, panelNamesRaw, defaultType, notes] = cells;
+      const [, inspectorName, stationName, sectorLabel, voltage, capacity, panelCount, panelNamesRaw, defaultType, notes, kepcoRaw] = cells;
+      const kepco = parseKepcoList(kepcoRaw);
 
       if (!stationName) return; // 빈 행 스킵
 
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
           notes:          String(notes || '').trim(),
           panel_names:    panelNames.length > 0 ? panelNames : null,
           default_type:   String(defaultType || '월차').trim(),
+          ...(kepco.length ? { kepco_nos: kepco } : {}),   // 비워 두면 기존 고객번호 유지
         },
       });
     });
@@ -124,7 +127,7 @@ export async function POST(req: NextRequest) {
     let inserted = 0, updated = 0;
     for (const r of rows) {
       const { data: existing } = await supabase
-        .from('stations').select('id').eq('name', r.name).eq('user_id', user.id).limit(1);
+        .from('stations').select('id, custom_values').eq('name', r.name).eq('user_id', user.id).limit(1);
 
       if (existing && existing.length > 0) {
         // 본인 소유의 동일명 충전소만 제자리 업데이트(id 보존 → CASCADE 미발생)
@@ -132,7 +135,7 @@ export async function POST(req: NextRequest) {
           voltage:       r.voltage,
           capacity:      r.capacity,
           panel_count:   r.panel_count,
-          custom_values: r.custom_values,
+          custom_values: { ...((existing[0] as any).custom_values || {}), ...r.custom_values },
           updated_at:    new Date().toISOString(),
         }).eq('name', r.name).eq('user_id', user.id);
         if (upErr) throw new Error(`업데이트 실패(${r.name}): ${upErr.message}`);

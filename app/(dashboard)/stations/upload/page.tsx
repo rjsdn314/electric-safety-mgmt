@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle, DraftingCompass } from 'lucide-react';
 import Link from 'next/link';
+import { kepcoOf, KEPCO_ON_URL } from '@/lib/utils/kepco';
 import TemplateManager from '@/components/admin/TemplateManager';
 import { Search, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -64,7 +65,7 @@ export default function StationUploadPage() {
   const [listLoading, setListLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState('');
-  const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '' };
+  const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '', kepcoNos: '' };
   const [form, setForm] = useState({ ...emptyForm });
   const [stationQuery, setStationQuery] = useState('');
 
@@ -131,6 +132,7 @@ export default function StationUploadPage() {
           name: form.name.trim(),
           sector_name: secName,
           inspector_name: form.inspectorName.trim(),
+          kepco_nos: form.kepcoNos,
           voltage: form.voltage,
           capacity: form.capacity,
           panel_count: form.panelCount,
@@ -164,6 +166,7 @@ export default function StationUploadPage() {
       panel_count: st.panel_count ?? 1,
       panel_names: Array.isArray(pn) ? pn.join(', ') : (pn || ''),
       notes: st.custom_values?.notes || '',
+      kepco_nos: kepcoOf(st).join(', '),
     });
   };
   const cancelEdit = () => { setEditing(null); setEditForm(null); setEditErr(''); };
@@ -304,6 +307,10 @@ export default function StationUploadPage() {
               <option value="연차">연차</option>
             </select>
           </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>한전 고객번호 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(여러 개면 쉼표로 구분, 연차점검 때 한전ON에서 최대전력·역률 조회용)</span></label>
+            <input style={inputStyle} placeholder="예: 17-1983-8244, 17-1983-8253" value={form.kepcoNos} onChange={e => setForm({ ...form, kepcoNos: e.target.value })} />
+          </div>
         </div>
         {addErr && (<div className="status err" style={{ marginTop: 12, fontSize: 13 }}><XCircle size={15} /> {addErr}</div>)}
         {/* 설계도면 (선택): 있으면 저장 후 바로 도면을 읽어 점검 양식을 만든다 */}
@@ -371,6 +378,7 @@ export default function StationUploadPage() {
             ['G', '측정개소명 (쉼표 구분)'],
             ['H', '기본 점검표 양식 (월차/분기/반기/연차)'],
             ['I', '비고'],
+            ['J', '한전 고객번호 (여러 개면 쉼표)'],
           ].map(([col, desc]) => (
             <div key={col} style={{ display: 'flex', gap: 8 }}>
               <span style={{
@@ -536,6 +544,9 @@ export default function StationUploadPage() {
                         <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : partialIds.has(st.id) ? 'var(--warning-soft)' : 'var(--negative-soft)', color: formIds.has(st.id) ? 'var(--positive)' : partialIds.has(st.id) ? 'var(--warning)' : 'var(--negative)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '도면 대기'}</span>
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, st.custom_values?.default_type].filter(Boolean).join(', ')}</div>
+                      <div style={{ fontSize: 12, marginTop: 2, color: kepcoOf(st).length ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}>
+                        한전 고객번호 {kepcoOf(st).length ? <a href={KEPCO_ON_URL} target="_blank" rel="noopener noreferrer" title="한전ON 열기" style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{kepcoOf(st).join(', ')}</a> : '없음'}
+                      </div>
                     </div>
                     <Link href={`/annual-builder?station=${st.id}`} title={formIds.has(st.id) ? '도면으로 점검 양식 다시 만들기' : '도면으로 점검 양식 만들기'} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 7, background: formIds.has(st.id) ? 'var(--bg-card)' : 'var(--accent)', color: formIds.has(st.id) ? 'var(--text-primary)' : '#fff', border: formIds.has(st.id) ? '1px solid var(--border-hover)' : '1px solid var(--accent)', fontSize: 12, fontWeight: 600, flexShrink: 0, textDecoration: 'none' }}><DraftingCompass size={13} /> {formIds.has(st.id) ? '양식' : '양식 만들기'}</Link>
                     <button onClick={() => (editing?.id === st.id ? cancelEdit() : startEdit(st))} title="수정" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 7, background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-hover)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}><Pencil size={13} /> 수정</button>
@@ -573,6 +584,10 @@ export default function StationUploadPage() {
                         <div style={{ gridColumn: '1 / -1' }}>
                           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>비고</label>
                           <input style={inputStyle} value={editForm.notes} onChange={e => setEditForm({ ...editForm, notes: e.target.value })} />
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>한전 고객번호 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(여러 개면 쉼표로 구분)</span></label>
+                          <input style={inputStyle} placeholder="예: 17-1983-8244, 17-1983-8253" value={editForm.kepco_nos} onChange={e => setEditForm({ ...editForm, kepco_nos: e.target.value })} />
                         </div>
                       </div>
                       {editErr && (<div className="status err" style={{ marginTop: 10, fontSize: 12 }}><XCircle size={14} /> {editErr}</div>)}
