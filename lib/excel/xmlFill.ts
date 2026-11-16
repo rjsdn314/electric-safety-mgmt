@@ -669,6 +669,8 @@ export async function gcMedia(zip: JSZip) {
 // 기존 별지7 사진은 교체되고, 다른 시트는 건드리지 않는다.
 export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low' = 'high', labels?: string[] | null): Promise<{ buffer: Buffer; sheets: number; applied: number }> {
   const zip = await JSZip.loadAsync(xlsxBuf);
+  // 고압: 수배전반마다 별지7 시트 1장 → 모자라면 복사해서 맞춤
+  if (mode === 'high') await ensureB7Sheets(zip, lastPanelCount(panels));
   const wbx = await zip.file('xl/workbook.xml')!.async('string');
   const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
   const ssRaw = (await zip.file('xl/sharedStrings.xml')?.async('string')) || '';
@@ -697,9 +699,99 @@ export async function applyByeolji7(xlsxBuf: ArrayBuffer | Buffer, panels: NonNu
   return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), sheets: b7Sheets.length, applied: targets.length };
 }
 
+// ── 워크북 구조 도우미 ──
+export interface SheetRef { name: string; rid: string; path: string }
+export async function listSheets(zip: JSZip): Promise<SheetRef[]> {
+  const wbx = await zip.file('xl/workbook.xml')!.async('string');
+  const rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
+  const rid2t = new Map<string, string>();
+  for (const m of rels.matchAll(/<Relationship\b[^>]*\/>/g)) {
+    const id = (m[0].match(/Id="([^"]+)"/) || [])[1]; const t = (m[0].match(/Target="([^"]+)"/) || [])[1];
+    if (id && t) rid2t.set(id, t);
+  }
+  return [...wbx.matchAll(/<sheet\b[^>]*\/>/g)].map((m) => {
+    const name = (m[0].match(/name="([^"]+)"/) || [])[1];
+    const rid = (m[0].match(/r:id="([^"]+)"/) || [])[1];
+    const t = rid2t.get(rid) || '';
+    return { name, rid, path: 'xl/' + t.replace(/^\//, '').replace(/^xl\//, '') };
+  });
+}
+
+// 시트 복제(별지7 3번째 변압기용). 드로잉은 사진을 뺀 사본(종별 타원 등 도형 유지)
+export async function cloneSheetAfter(zip: JSZip, src: SheetRef, newName: string) {
+  const files = Object.keys(zip.files);
+  const nextIdx = (re: RegExp) => Math.max(0, ...files.map((f) => +(f.match(re)?.[1] || 0))) + 1;
+  const sIdx = nextIdx(/^xl\/worksheets\/sheet(\d+)\.xml$/);
+  const newPath = `xl/worksheets/sheet${sIdx}.xml`;
+  let sx = await zip.file(src.path)!.async('string');
+  sx = sx.replace(/\stabSelected="1"/, '');
+  zip.file(newPath, sx);
+  let ct = await zip.file('[Content_Types].xml')!.async('string');
+  ct = ct.replace('</Types>', `<Override PartName="/${newPath}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+
+  const srcRelsPath = src.path.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels');
+  const srcRels = await zip.file(srcRelsPath)?.async('string');
+  const srcDrawing = await sheetDrawingPath(zip, src.path);
+  if (srcRels) {
+    let nr = srcRels;
+    if (srcDrawing) {
+      const dIdx = nextIdx(/^xl\/drawings\/drawing(\d+)\.xml$/);
+      const newDrawing = `xl/drawings/drawing${dIdx}.xml`;
+      zip.file(newDrawing, removeDrawingPics(await zip.file(srcDrawing)!.async('string')));
+      const sdr = srcDrawing.replace(/drawings\/(drawing\d+)\.xml$/, 'drawings/_rels/$1.xml.rels');
+      const dr = await zip.file(sdr)?.async('string');
+      if (dr) zip.file(`xl/drawings/_rels/drawing${dIdx}.xml.rels`, dr);   // 미사용 이미지 관계는 gcMedia가 정리
+      nr = nr.replace(srcDrawing.replace(/^xl\/drawings\//, ''), `drawing${dIdx}.xml`);
+      ct = ct.replace('</Types>', `<Override PartName="/${newDrawing}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+    }
+    zip.file(`xl/worksheets/_rels/sheet${sIdx}.xml.rels`, nr);
+  }
+  zip.file('[Content_Types].xml', ct);
+
+  let rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
+  const ids = [...rels.matchAll(/Id="rId(\d+)"/g)].map((m) => +m[1]);
+  const newRid = `rId${Math.max(0, ...ids) + 1}`;
+  const srcTag = rels.match(new RegExp(`<Relationship\\b[^>]*Id="${src.rid}"[^>]*/>`))![0];
+  const srcTarget = (srcTag.match(/Target="([^"]+)"/) || [])[1];
+  const newTarget = srcTarget.replace(/sheet\d+\.xml$/, `sheet${sIdx}.xml`);
+  rels = rels.replace('</Relationships>', `<Relationship Id="${newRid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="${newTarget}"/></Relationships>`);
+  zip.file('xl/_rels/workbook.xml.rels', rels);
+
+  let wbx = await zip.file('xl/workbook.xml')!.async('string');
+  const sheetIds = [...wbx.matchAll(/sheetId="(\d+)"/g)].map((m) => +m[1]);
+  const srcSheetTag = wbx.match(new RegExp(`<sheet\\b[^>]*r:id="${src.rid}"[^>]*/>`))![0];
+  wbx = wbx.replace(srcSheetTag, `${srcSheetTag}<sheet name="${xmlEsc(newName)}" sheetId="${Math.max(0, ...sheetIds) + 1}" r:id="${newRid}"/>`);
+  zip.file('xl/workbook.xml', wbx);
+}
+
+
+// 사진이 있는 마지막 수배전반 번호 (= 필요한 별지7 시트 수)
+const lastPanelCount = (panels: any[]) => { let n = 0; panels.forEach((p, i) => { if (p) n = i + 1; }); return n; };
+
+// 별지7 시트가 수배전반 수보다 적으면 마지막 별지7을 복사해 맞춘다 (사진 없는 사본)
+//  예: KINTEX 고압 양식은 별지7이 1장인데 수배전반이 3개 → '별지7-… 2', '… 3' 추가
+export async function ensureB7Sheets(zip: JSZip, count: number): Promise<number> {
+  let sheets = (await listSheets(zip)).filter((s) => s.name.includes('별지7'));
+  if (!sheets.length || sheets.length >= count) return 0;
+  const base = sheets[sheets.length - 1];
+  const stem = base.name.replace(/\s*\d*\s*$/, '').trim().slice(0, 27);
+  let added = 0;
+  const names = new Set((await listSheets(zip)).map((s) => s.name));
+  for (let i = sheets.length + 1; i <= count; i++) {
+    let nm = `${stem} ${i}`; let k = i;
+    while (names.has(nm)) nm = `${stem} ${++k}`;
+    const last = (await listSheets(zip)).filter((s) => s.name.includes('별지7')).pop()!;
+    await cloneSheetAfter(zip, last, nm);
+    names.add(nm); added++;
+  }
+  return added;
+}
+
 // ── 메인 ──
 export async function buildInspectionXlsx(templateBuf: ArrayBuffer | Buffer, d: FillData): Promise<Buffer> {
   const zip = await JSZip.loadAsync(templateBuf);
+  // 고압 열화상: 수배전반 수만큼 별지7 시트 확보 (양식에 별지7이 모자라면 복사)
+  if (d.b7_panels?.length && (d.b7_mode || (d.is_high_voltage ? 'high' : 'low')) === 'high') await ensureB7Sheets(zip, lastPanelCount(d.b7_panels));
 
   // workbook.xml: 시트명 → rId
   const wbx = await zip.file('xl/workbook.xml')!.async('string');
