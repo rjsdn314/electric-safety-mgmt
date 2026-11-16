@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js';
 // ============================================================
 export async function POST(req: NextRequest) {
   try {
-    const { user_id, name, email, company, phone, message } = await req.json();
+    const { user_id, name, email, company, phone, message, signature } = await req.json();
 
     const adminEmail = process.env.ADMIN_EMAIL || 'rjsdn43666211@gmail.com';
     const appUrl     = process.env.NEXT_PUBLIC_APP_URL || 'https://electric-safety-mgmt.vercel.app';
@@ -31,6 +31,22 @@ export async function POST(req: NextRequest) {
           status:  'pending',
         });
       }
+    }
+
+    // 가입 때 받은 서명 저장 (점검자 이름 = 가입 이름)
+    //  · 방금 가입한 계정인지 확인(메일·이름 일치, 10분 이내 생성)하고
+    //  · 같은 이름의 서명이 이미 있으면 덮어쓰지 않는다(다른 사람 서명 보호)
+    if (user_id && typeof signature === 'string' && /^data:image\/png;base64,/.test(signature) && signature.length < 2_800_000) {
+      try {
+        const { data: au } = await supabase.auth.admin.getUserById(user_id);
+        const u = au?.user;
+        const fresh = u && Date.now() - new Date(u.created_at).getTime() < 10 * 60 * 1000;
+        const sigName = String(u?.user_metadata?.name || '').trim();
+        if (u && fresh && u.email === email && sigName && sigName === String(name || '').trim()) {
+          const { data: has } = await supabase.from('inspector_signatures').select('inspector_name').eq('inspector_name', sigName).maybeSingle();
+          if (!has) await supabase.from('inspector_signatures').insert({ inspector_name: sigName, data_url: signature, updated_by: user_id, updated_at: new Date().toISOString() });
+        }
+      } catch (e) { console.error('[notify-admin] 서명 저장 실패', e); }
     }
 
     // Supabase 이메일 발송 (Edge Function 또는 SMTP 미설정 시 콘솔 로그)

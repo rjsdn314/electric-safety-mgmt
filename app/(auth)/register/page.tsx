@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Zap, MailCheck, ShieldCheck, Loader2 } from 'lucide-react';
+import { SignaturePad } from '@/components/ui/SignaturePad';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
   const [done, setDone]       = useState(false);
+  const [signature, setSignature] = useState<string | null>(null);   // 점검표 서명칸에 들어갈 서명(한 번만 받음)
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -70,6 +72,7 @@ export default function RegisterPage() {
           company: form.company,
           phone:   form.phone,
           message: form.message,
+          signature,   // 서명(선택): 이 이름의 서명이 아직 없을 때만 저장
         }),
       });
 
@@ -224,6 +227,15 @@ export default function RegisterPage() {
               />
             </div>
           </div>
+        </div>
+
+        {/* 서명 */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-tertiary)', marginBottom: 6 }}>서명</div>
+          <div style={{ fontSize: 13, color: 'var(--mid)', marginBottom: 8, lineHeight: 1.6 }}>
+            점검표의 점검자 서명칸(별지1, 별지14)에 들어갑니다. 한 번만 받아 두고, 바꾸려면 나중에 [서명] 메뉴에서 고칠 수 있어요.
+          </div>
+          <SignaturePad onChange={setSignature} />
         </div>
 
         {/* 안내 박스 */}
