@@ -246,7 +246,8 @@ const B7_DEFAULT_LAYOUT: B7Layout = {
   photos: [{ r1: 19, r2: 27, labelRef: 'A28' }, { r1: 29, r2: 37, labelRef: 'A38' }, { r1: 39, r2: 47, labelRef: 'A48' }],
 };
 
-function detectB7Layout(xml: string, shared: string[]): B7Layout {
+// 한 시트 안의 페이지들: '종합의견' 행마다 한 페이지가 끝난다 (KINTEX 고압처럼 한 시트에 수배전반 3페이지)
+function detectB7Pages(xml: string, shared: string[]): B7Layout[] {
   const aText = new Map<number, string>();
   for (const m of xml.matchAll(/<c r="A(\d+)"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
     const inner = m[3] || '';
@@ -255,25 +256,29 @@ function detectB7Layout(xml: string, shared: string[]): B7Layout {
     const s = (/t="s"/.test(m[2]) && v) ? (shared[+v[1]] || '') : t ? t[1] : v ? v[1] : '';
     if (s.trim()) aText.set(+m[1], s.trim());
   }
-  const endRows = [...aText].filter(([, s]) => s.includes('종합의견')).map(([r]) => r);
-  const end = endRows.length ? Math.min(...endRows) : 60;
   const compact = (s: string) => s.replace(/\s+/g, '');
-  const rows = [...aText]
-    .filter(([r, s]) => r < end && compact(s) === '온도측정')
-    .map(([r]) => r).sort((a, b) => a - b)
-    .map((r) => {
-      let lr: number | null = null;
-      for (let k = r - 1; k > 0; k--) { const s = aText.get(k); if (s && compact(s) !== '온도측정') { lr = k; break; } }
-      return { row: r, labelRef: lr ? `A${lr}` : null };
-    });
-  const photos = [...xml.matchAll(/<mergeCell ref="A(\d+):S(\d+)"/g)]
-    .map((m) => ({ r1: +m[1], r2: +m[2] }))
-    .filter((p) => p.r2 - p.r1 >= 5 && p.r1 < end)
-    .sort((a, b) => a.r1 - b.r1)
-    .map((p) => ({ ...p, labelRef: `A${p.r2 + 1}` }));
-  if (!rows.length && !photos.length) return B7_DEFAULT_LAYOUT;
-  return { rows, photos };
+  const ends = [...aText].filter(([, s]) => s.includes('종합의견')).map(([r]) => r).sort((a, b) => a - b);
+  if (!ends.length) ends.push(60);
+  const merges = [...xml.matchAll(/<mergeCell ref="A(\d+):S(\d+)"/g)].map((m) => ({ r1: +m[1], r2: +m[2] })).filter((p) => p.r2 - p.r1 >= 5);
+  const pages: B7Layout[] = [];
+  let start = 0;
+  for (const end of ends) {
+    const rows = [...aText]
+      .filter(([r, s]) => r > start && r < end && compact(s) === '온도측정')
+      .map(([r]) => r).sort((a, b) => a - b)
+      .map((r) => {
+        let lr: number | null = null;
+        for (let k = r - 1; k > start; k--) { const s = aText.get(k); if (s && compact(s) !== '온도측정') { lr = k; break; } }
+        return { row: r, labelRef: lr ? `A${lr}` : null };
+      });
+    const photos = merges.filter((p) => p.r1 > start && p.r1 < end).sort((a, b) => a.r1 - b.r1).map((p) => ({ ...p, labelRef: `A${p.r2 + 1}` }));
+    if (rows.length || photos.length) pages.push({ rows, photos });
+    start = end;
+  }
+  return pages.length ? pages : [B7_DEFAULT_LAYOUT];
 }
+// 첫 페이지 (예전 동작)
+function detectB7Layout(xml: string, shared: string[]): B7Layout { return detectB7Pages(xml, shared)[0]; }
 
 // 라벨 셀(A12/A14/A16 = 측정 행 라벨, A28/A38/A48 = 사진 라벨) → 각 행에 들어갈 부위 이름.
 //  · 라벨과 부위 이름이 같으면(공백·대소문자 무시, 포함관계 허용) 그 행에 배치
@@ -309,7 +314,7 @@ function fillByeolji7(xml: string, shared: string[], d: FillData): string {
   // 양식에서 찾은 온도 행(고압 13·15·17 / 저압 13, 13·14, 13·15 등)의 잔존 값 비우기 + 판정 기본값.
   // (예전엔 13·15·17 고정이라 저압 양식의 15행(제목)·17행(사진칸)에 판정이 잘못 들어갔다)
   // 사진에서 뽑은 온도·사진은 미디어 정리 후 planB7/executeB7Plan 에서 기입한다.
-  for (const { row } of detectB7Layout(xml, shared).rows) xml = writeB7Row(xml, row, []);
+  for (const pg of detectB7Pages(xml, shared)) for (const { row } of pg.rows) xml = writeB7Row(xml, row, []);
   return xml;
 }
 
@@ -338,33 +343,34 @@ interface B7SheetPlan {
 //    (행 라벨이 행마다 따로 있을 때만 교체 — 저압처럼 '측정부위' 머리글 하나를 공유하면 행 라벨은 그대로)
 async function planB7(zip: JSZip, sheets: string[], shared: string[], panels: NonNullable<FillData['b7_panels']>, mode: 'high' | 'low', labels?: string[] | null): Promise<B7SheetPlan[]> {
   const plans: B7SheetPlan[] = [];
-  let slot = 0;
+  let slot = 0;      // 고압: 페이지 순번 = 수배전반 순번 / 저압: 온도 행 순번 = 저압반 순번
   for (let s = 0; s < sheets.length; s++) {
     const xml = await zip.file(sheets[s])?.async('string'); if (!xml) continue;
-    const lay = detectB7Layout(xml, shared);
-    if (labels?.length) {
-      const panel = panels[s] || null;
-      const nameAt = (k: number) => (k < labels.length ? labels[k] : null);
-      const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
-      const rowLabelsDistinct = new Set(lay.rows.map((r) => r.labelRef)).size === lay.rows.length;
-      plans.push({
-        path: sheets[s],
-        rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(nameAt(k)), labelRef: rowLabelsDistinct ? r.labelRef : null, name: nameAt(k) })),
-        photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(nameAt(k)), labelRef: p.labelRef, name: nameAt(k) })),
-      });
-    } else if (mode === 'low') {
-      const rows = lay.rows.map((r) => { const p = panels[slot++]; return { row: r.row, data: p ? (Object.values(p)[0] ?? null) : null }; });
-      plans.push({ path: sheets[s], rows, photos: lay.photos.map((ph, k) => ({ r1: ph.r1, r2: ph.r2, data: rows[k]?.data ?? null })) });
-    } else {
-      const panel = panels[s] || null;
-      const rowParts = b7RowParts(xml, shared, lay.rows.map((r) => r.labelRef), panel);
-      const photoParts = b7RowParts(xml, shared, lay.photos.map((p) => p.labelRef), panel);
-      const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
-      plans.push({
-        path: sheets[s],
-        rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(rowParts[k]) })),
-        photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(photoParts[k]) })),
-      });
+    for (const lay of detectB7Pages(xml, shared)) {
+      if (labels?.length) {
+        const panel = panels[slot++] || null;
+        const nameAt = (k: number) => (k < labels.length ? labels[k] : null);
+        const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
+        const rowLabelsDistinct = new Set(lay.rows.map((r) => r.labelRef)).size === lay.rows.length;
+        plans.push({
+          path: sheets[s],
+          rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(nameAt(k)), labelRef: rowLabelsDistinct ? r.labelRef : null, name: nameAt(k) })),
+          photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(nameAt(k)), labelRef: p.labelRef, name: nameAt(k) })),
+        });
+      } else if (mode === 'low') {
+        const rows = lay.rows.map((r) => { const p = panels[slot++]; return { row: r.row, data: p ? (Object.values(p)[0] ?? null) : null }; });
+        plans.push({ path: sheets[s], rows, photos: lay.photos.map((ph, k) => ({ r1: ph.r1, r2: ph.r2, data: rows[k]?.data ?? null })) });
+      } else {
+        const panel = panels[slot++] || null;
+        const rowParts = b7RowParts(xml, shared, lay.rows.map((r) => r.labelRef), panel);
+        const photoParts = b7RowParts(xml, shared, lay.photos.map((p) => p.labelRef), panel);
+        const pick = (k: string | null) => (panel && k ? panel[k] ?? null : null);
+        plans.push({
+          path: sheets[s],
+          rows: lay.rows.map((r, k) => ({ row: r.row, data: pick(rowParts[k]) })),
+          photos: lay.photos.map((p, k) => ({ r1: p.r1, r2: p.r2, data: pick(photoParts[k]) })),
+        });
+      }
     }
   }
   return plans;
@@ -768,21 +774,55 @@ export async function cloneSheetAfter(zip: JSZip, src: SheetRef, newName: string
 // 사진이 있는 마지막 수배전반 번호 (= 필요한 별지7 시트 수)
 const lastPanelCount = (panels: any[]) => { let n = 0; panels.forEach((p, i) => { if (p) n = i + 1; }); return n; };
 
-// 별지7 시트가 수배전반 수보다 적으면 마지막 별지7을 복사해 맞춘다 (사진 없는 사본)
-//  예: KINTEX 고압 양식은 별지7이 1장인데 수배전반이 3개 → '별지7-… 2', '… 3' 추가
+export async function removeSheet(zip: JSZip, s: SheetRef) {
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const drawing = await sheetDrawingPath(zip, s.path);
+  let wbx = await zip.file('xl/workbook.xml')!.async('string');
+  wbx = wbx.replace(new RegExp(`<sheet\\b[^>]*r:id="${esc(s.rid)}"[^>]*/>`), '');
+  // activeTab이 범위를 벗어나지 않게
+  wbx = wbx.replace(/\sactiveTab="\d+"/, ' activeTab="0"');
+  zip.file('xl/workbook.xml', wbx);
+  let rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
+  rels = rels.replace(new RegExp(`<Relationship\\b[^>]*Id="${esc(s.rid)}"[^>]*/>`), '');
+  zip.file('xl/_rels/workbook.xml.rels', rels);
+  let ct = await zip.file('[Content_Types].xml')!.async('string');
+  ct = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(s.path)}"[^>]*/>`), '');
+  zip.remove(s.path);
+  zip.remove(s.path.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels'));
+  if (drawing) {
+    ct = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(drawing)}"[^>]*/>`), '');
+    zip.remove(drawing);
+    zip.remove(drawing.replace(/drawings\/(drawing\d+)\.xml$/, 'drawings/_rels/$1.xml.rels'));
+  }
+  zip.file('[Content_Types].xml', ct);
+}
+
+// 별지7 페이지(시트 × 시트 안 페이지)가 수배전반 수보다 적으면 마지막 별지7을 복사해 맞춘다 (사진 없는 사본)
+//  · KINTEX 고압처럼 한 시트에 3페이지면 복사하지 않는다
+//  · 예전에 복사해 둔 시트('… 2', '… 3')가 이제 필요 없으면 지운다
 export async function ensureB7Sheets(zip: JSZip, count: number): Promise<number> {
-  let sheets = (await listSheets(zip)).filter((s) => s.name.includes('별지7'));
-  if (!sheets.length || sheets.length >= count) return 0;
-  const base = sheets[sheets.length - 1];
-  const stem = base.name.replace(/\s*\d*\s*$/, '').trim().slice(0, 27);
+  const ssRaw = (await zip.file('xl/sharedStrings.xml')?.async('string')) || '';
+  const shared = ssRaw ? parseShared(ssRaw) : [];
+  const b7 = async () => (await listSheets(zip)).filter((s) => s.name.includes('별지7'));
+  const pagesOf = async (s: SheetRef) => detectB7Pages((await zip.file(s.path)?.async('string')) || '', shared).length;
+  let sheets = await b7();
+  if (!sheets.length || count <= 0) return 0;
+  const stem = sheets[0].name.replace(/\s*\d*\s*$/, '').trim().slice(0, 27);
+  // 복사본 정리: 원본 시트들만으로 페이지가 충분하면 '<원래이름> 2~9' 사본 삭제
+  const clones = sheets.filter((s, i) => i > 0 && new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s[2-9]$`).test(s.name));
+  const originals = sheets.filter((s) => !clones.includes(s));
+  let origPages = 0; for (const s of originals) origPages += await pagesOf(s);
+  if (clones.length && origPages >= count) { for (const c of clones) await removeSheet(zip, c); sheets = await b7(); }
+  let pages = 0; for (const s of sheets) pages += await pagesOf(s);
   let added = 0;
   const names = new Set((await listSheets(zip)).map((s) => s.name));
-  for (let i = sheets.length + 1; i <= count; i++) {
-    let nm = `${stem} ${i}`; let k = i;
-    while (names.has(nm)) nm = `${stem} ${++k}`;
-    const last = (await listSheets(zip)).filter((s) => s.name.includes('별지7')).pop()!;
+  let i = sheets.length + 1;
+  while (pages < count) {
+    let nm = `${stem} ${i}`; while (names.has(nm)) nm = `${stem} ${++i}`;
+    const last = (await b7()).pop()!;
     await cloneSheetAfter(zip, last, nm);
-    names.add(nm); added++;
+    names.add(nm); added++; i++;
+    pages += await pagesOf(last);
   }
   return added;
 }

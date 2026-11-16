@@ -19,7 +19,7 @@
 import JSZip from 'jszip';
 import {
   setCell, clearCell, parseShared, xmlEsc, colToNum, numToCol,
-  removeDrawingPics, sheetDrawingPath, gcMedia, listSheets, cloneSheetAfter, type SheetRef } from './xmlFill';
+  removeDrawingPics, sheetDrawingPath, gcMedia, listSheets, cloneSheetAfter, removeSheet, type SheetRef } from './xmlFill';
 import { AnnualSpec, LOW_ITEMS, HIGH_ITEMS, LIMITS, Panel, isLowVoltage } from '@/lib/annual/spec';
 
 // ── 셀 쓰기 도우미 ──
@@ -100,28 +100,6 @@ async function renameSheet(zip: JSZip, oldName: string, newName: string) {
   zip.file(p, wbx.replace(`name="${oldName}"`, `name="${xmlEsc(newName)}"`));
 }
 
-async function removeSheet(zip: JSZip, s: SheetRef) {
-  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const drawing = await sheetDrawingPath(zip, s.path);
-  let wbx = await zip.file('xl/workbook.xml')!.async('string');
-  wbx = wbx.replace(new RegExp(`<sheet\\b[^>]*r:id="${esc(s.rid)}"[^>]*/>`), '');
-  // activeTab이 범위를 벗어나지 않게
-  wbx = wbx.replace(/\sactiveTab="\d+"/, ' activeTab="0"');
-  zip.file('xl/workbook.xml', wbx);
-  let rels = await zip.file('xl/_rels/workbook.xml.rels')!.async('string');
-  rels = rels.replace(new RegExp(`<Relationship\\b[^>]*Id="${esc(s.rid)}"[^>]*/>`), '');
-  zip.file('xl/_rels/workbook.xml.rels', rels);
-  let ct = await zip.file('[Content_Types].xml')!.async('string');
-  ct = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(s.path)}"[^>]*/>`), '');
-  zip.remove(s.path);
-  zip.remove(s.path.replace(/(worksheets)\/(sheet\d+)\.xml$/, '$1/_rels/$2.xml.rels'));
-  if (drawing) {
-    ct = ct.replace(new RegExp(`<Override\\b[^>]*PartName="/${esc(drawing)}"[^>]*/>`), '');
-    zip.remove(drawing);
-    zip.remove(drawing.replace(/drawings\/(drawing\d+)\.xml$/, 'drawings/_rels/$1.xml.rels'));
-  }
-  zip.file('[Content_Types].xml', ct);
-}
 
 // ── 시트별 채우기 ──
 const PANEL_LABEL_ROWS = [13, 23, 32];
