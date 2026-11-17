@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useThermalPanels, ThermalPhotoBox } from './ThermalPhotos';
 import { Status, plain } from '@/components/ui/Status';
@@ -34,6 +34,28 @@ const GN_STATIONS = [
   '김해금관가야휴게소(기장방향)', '김해금관가야휴게소(창원방향)',
 ];
 
+// 작성 중 열화상 사진 보존(IndexedDB: 파일·폴더 핸들을 그대로 저장할 수 있음)
+const draftDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  const req = indexedDB.open('inspection-draft', 1);
+  req.onupgradeneeded = () => { req.result.createObjectStore('thermal'); };
+  req.onsuccess = () => resolve(req.result);
+  req.onerror = () => reject(req.error);
+});
+const draftThermalGet = async (key: string): Promise<any> => {
+  const db = await draftDB();
+  return new Promise((res) => { const r = db.transaction('thermal', 'readonly').objectStore('thermal').get(key); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); });
+};
+const draftThermalPut = async (key: string, val: any | null) => {
+  const db = await draftDB();
+  const put = (v: any) => new Promise<void>((res, rej) => {
+    const tx = db.transaction('thermal', 'readwrite'); const st = tx.objectStore('thermal');
+    try { v ? st.put(v, key) : st.delete(key); } catch (e) { rej(e); return; }
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+  });
+  try { await put(val); }
+  catch { if (val) await put({ ...val, panels: val.panels.map((p: any) => p && { ...p, source: null }) }).catch(() => {}); }   // 폴더 핸들 저장 불가 시 파일만
+};
+
 const emptyMeasureSet = () => ({
   voltage_A: '', voltage_B: '', voltage_C: '', voltage_N: '',
   current_A: '', current_B: '', current_C: '',
@@ -47,6 +69,7 @@ export function InspectionForm() {
   const [stations, setStations] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [meId, setMeId] = useState<string | null>(null);
+  const meIdRef = useRef<string | null>(null); meIdRef.current = meId;
   const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
   const [viewOwner, setViewOwner] = useState<string>('mine'); // 'mine' | 회원id | 'all'
   const [query, setQuery] = useState('');
@@ -72,8 +95,18 @@ export function InspectionForm() {
   const thermal = thermalApi.thermal;
   // 저압 현장은 PF/PT/CH 대신 촬영 순서(전경 1장 + 상별 3장) 규칙 사용
   //  + 현장별 부위 설정(양식·설비가 다른 현장) 불러오기
+  const pendingThermal = useRef<string | null>(null);   // 복원할 열화상 초안의 현장 id
+  const [thermalDraftReady, setThermalDraftReady] = useState(false);
   useEffect(() => {
     thermalApi.setStationContext({ stationId: selected?.id || null, lowVoltage: !!selected && Number(selected.voltage) < 3000 });
+    const key = meIdRef.current ? `inspection-draft:${meIdRef.current}` : null;
+    if (pendingThermal.current && selected?.id === pendingThermal.current && key) {
+      pendingThermal.current = null;
+      draftThermalGet(key)
+        .then((d) => (d && d.stationId === selected.id && Array.isArray(d.panels) ? thermalApi.restore(d.panels) : undefined))
+        .catch(() => {})
+        .finally(() => setThermalDraftReady(true));
+    }
   }, [selected]);
 
   // 최초: 권한·점검자명 설정 + 관리자면 사이트 보유 회원 목록 로드
@@ -411,12 +444,14 @@ export function InspectionForm() {
         if (d.weather) setWeather(d.weather);
         if (typeof d.remarks === 'string') setRemarks(d.remarks);
         if (st) {
+          pendingThermal.current = st.id;
           setSelected(st); setQuery(st.name); loadStationFolder(st);
           if (Array.isArray(d.measureSets) && d.measureSets.length) setMeasureSets(d.measureSets);
         }
         if (st || d.remarks || (d.measureSets || []).some((m: any) => Object.values(m || {}).some(Boolean))) setDraftRestored(true);
       }
     } catch {}
+    if (!pendingThermal.current) setThermalDraftReady(true);
     setDraftReady(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftKey, stations]);
@@ -431,7 +466,22 @@ export function InspectionForm() {
     }, 300);
     return () => clearTimeout(t);
   }, [draftKey, draftReady, done, selected, date, inspType, inspector, count, weather, measureSets, remarks]);
-  const clearDraft = () => { try { if (draftKey) localStorage.removeItem(draftKey); } catch {} setDraftRestored(false); };
+  // 열화상 사진: 처리 중이 아닐 때 IndexedDB에 저장 (사진이 없으면 지움)
+  useEffect(() => {
+    if (!draftKey || !thermalDraftReady || done || thermal.some(t => t?.busy)) return;
+    const t = setTimeout(() => {
+      const panels = thermalApi.snapshot();
+      const has = !!selected && panels.some(Boolean);
+      draftThermalPut(draftKey, has ? { stationId: selected.id, panels, savedAt: Date.now() } : null).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, thermalDraftReady, done, thermal, selected]);
+  const clearDraft = () => {
+    try { if (draftKey) localStorage.removeItem(draftKey); } catch {}
+    if (draftKey) draftThermalPut(draftKey, null).catch(() => {});
+    setDraftRestored(false);
+  };
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
     setMeasureSets(prev => {
@@ -583,7 +633,7 @@ export function InspectionForm() {
     <div style={{ maxWidth: 940, margin: 0, padding: 0 }}>
       {draftRestored && (
         <div style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, fontSize: 13 }}>
-          <span style={{ flex: 1, color: 'var(--text-primary)' }}>작성하던 내용을 불러왔어요. 열화상 사진은 다시 넣어 주세요.</span>
+          <span style={{ flex: 1, color: 'var(--text-primary)' }}>작성하던 내용을 불러왔어요. (카메라 등 다른 앱을 쓰는 사이 페이지가 새로 열려도 입력값·열화상 사진이 유지됩니다)</span>
           <button onClick={() => { clearDraft(); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); thermalApi.reset(); }}
             style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>새로 쓰기</button>
           <button onClick={() => setDraftRestored(false)} aria-label="닫기" style={{ background: 'transparent', border: 0, color: 'var(--text-tertiary)', cursor: 'pointer', padding: 2 }}><X size={15} /></button>

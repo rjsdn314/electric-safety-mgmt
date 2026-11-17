@@ -198,6 +198,26 @@ export function useThermalPanels() {
     });
 
   const clear = (idx: number) => { revoke(ref.current[idx]); patch(idx, EMPTY); };
+
+  // 작성 중 보존용: 고른 사진 파일 + 부위 지정 (카메라 앱 등을 쓰다 페이지가 새로 열려도 복원)
+  type Snap = { files: File[]; parts: (Part | null)[]; ai: (Part | null)[]; source: PanelThermal['source'] } | null;
+  const snapshot = (): Snap[] => ref.current.map(t => (t && t.files?.length && t.shots.length
+    ? { files: t.files, parts: t.shots.map(s => s.part ?? null), ai: t.shots.map(s => (s as any).ai ?? null), source: t.source || null }
+    : null));
+  const restore = async (snaps: Snap[]) => {
+    for (let idx = 0; idx < snaps.length; idx++) {
+      const sn = snaps[idx]; if (!sn?.files?.length) continue;
+      patch(idx, { shots: [], busy: true, status: '⏳ 작성하던 사진을 다시 불러오는 중입니다.', files: sn.files, source: sn.source || null });
+      try {
+        const { shots, skipped } = await loadShots(sn.files);
+        const same = shots.length === sn.parts.length;
+        const ui: UIShot[] = shots.map((s, i) => ({ ...s, url: URL.createObjectURL(s.y), ...(same ? { part: sn.parts[i], ai: sn.ai[i] } : {}) } as UIShot));
+        patch(idx, { shots: ui, skipped, busy: false, status: same ? '✅ 작성하던 사진과 부위 지정을 불러왔습니다.' : '⚠️ 사진은 불러왔지만 부위 지정은 다시 확인해 주세요.' });
+      } catch (e: any) {
+        patch(idx, { shots: [], files: [], source: null, busy: false, status: '⚠️ 작성하던 사진을 불러오지 못했습니다. 다시 넣어 주세요.' });
+      }
+    }
+  };
   const reset = () => { ref.current.forEach(revoke); setThermal([]); };
   const removeAt = (idx: number) => { revoke(ref.current[idx]); setThermal(prev => prev.filter((_, i) => i !== idx)); };
 
@@ -236,7 +256,7 @@ export function useThermalPanels() {
     archivePanelPhotos(root, subFolderName, ref.current.map((t, i) => ({ index: i, files: t?.files || [], source: t?.source })), panelCount);
 
   return {
-    thermal, parts, accountParts, stationParts, stationId, lowVoltage: low, canPickFolder,
+    thermal, parts, accountParts, stationParts, stationId, lowVoltage: low, canPickFolder, snapshot, restore,
     // 현장별 설정이 있으면 그 이름(행 순서)으로 엑셀 라벨을 바꿔 적도록 전송
     b7Labels: stationParts ? stationParts.map(p => p.name) : null,
     setStationContext, saveStationParts, clearStationParts,
