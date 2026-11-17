@@ -67,9 +67,6 @@ export function InspectionForm() {
   const [folderName, setFolderName] = useState('');
   const [todayEvents, setTodayEvents] = useState<{ text: string; desc?: string; dayIndex: number; span: number }[]>([]);
   const [result, setResult] = useState<any>(null);
-  // 캘린더 오늘 일정 매칭용 전체 현장(관리자 전용) — "내 관리구역" 보기 중이어도
-  // 다른 회원 소유 현장이 오늘 일정이면 놓치지 않도록 소유자 필터와 무관하게 별도 로드.
-  const [allStationsForCalendar, setAllStationsForCalendar] = useState<any[]>([]);
   // 별지7 열화상: 수배전반 인덱스별 사진·온도·부위 분류 (사진이 없으면 나중에 점검 이력에서 추가)
   const thermalApi = useThermalPanels();
   const thermal = thermalApi.thermal;
@@ -102,9 +99,6 @@ export function InspectionForm() {
           const { data: profs } = await sb.from('profiles').select('id, name').in('id', ownerIds);
           setMembers((profs || []).map((p: any) => ({ id: p.id, name: p.name || '이름없음' })));
         }
-        // 캘린더 매칭용: 소유자 필터 없이 전체 활성 현장 로드
-        const { data: all } = await sb.from('stations').select('*').eq('is_active', true).order('name');
-        setAllStationsForCalendar(all || []);
       }
     })();
   }, []);
@@ -341,10 +335,12 @@ export function InspectionForm() {
     return segs;
   }, [todayEvents]);
 
-  // 캘린더 매칭 판정용 전체 후보군(관리자는 전체, 일반 사용자는 본인 관리구역)
-  const calendarPool = isAdmin && allStationsForCalendar.length ? allStationsForCalendar : stations;
+  // 캘린더는 회사 공용이라 다른 사람 출장 일정(예: '경상남도 출장')도 섞여 있다.
+  //  → '오늘 일정' 표시는 내 현장(관리자가 특정 회원을 보는 중이면 그 회원 현장)에만 한다.
+  const calendarOwner = isAdmin && viewOwner !== 'mine' && viewOwner !== 'all' ? viewOwner : meId;
+  const calendarPool = stations.filter((st: any) => st.user_id === calendarOwner);
   const isTodayStation = (s: any): boolean => {
-    if (!todaySegments.length) return false;
+    if (!todaySegments.length || !calendarOwner || s.user_id !== calendarOwner) return false;
     const cands = [s.name, s.base_name].filter(Boolean);   // 원문 전달(segMatch가 정규화·방향추출)
     if (todaySegments.some(seg => segMatch(seg, cands))) return true;   // 방향까지 정밀 매칭
     // 방향이 달라 실패했어도, 이름으로는 유일하게 이 현장만 해당되면 허용
@@ -378,19 +374,10 @@ export function InspectionForm() {
     for (let i = 0; i < todaySegments.length; i++) if (segMatch(todaySegments[i], cands)) return i;
     return Infinity;
   };
-  // 현재 보기(예: "내 관리구역")에 없더라도, 오늘 캘린더 일정에 매칭되는 다른 회원 소유 현장은
-  // 놓치지 않도록 별도로 끌어와 목록에 합친다. (소유자 필터가 캘린더 자동인식을 막지 않도록)
-  const extraTodayStations = useMemo(() => {
-    if (!isAdmin || !todaySegments.length || !allStationsForCalendar.length) return [];
-    const currentIds = new Set(stations.map(s => s.id));
-    return allStationsForCalendar.filter(s => !currentIds.has(s.id) && isTodayStation(s));
-  }, [isAdmin, stations, allStationsForCalendar, todaySegments]);
-
   const memberName = (userId: string | null) => members.find(m => m.id === userId)?.name;
 
   const filtered = useMemo(() => {
-    const merged = [...stations, ...extraTodayStations];
-    const base = merged
+    const base = stations
       .filter(s => matchStation(s, query))
       .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i);
     // 정렬: 오늘 일정(미작성) 맨 위 → 일반 → 오늘 작성 완료 맨 아래
@@ -401,7 +388,50 @@ export function InspectionForm() {
       if (ra === 0) return segIndexOf(a) - segIndexOf(b);   // 오늘 일정: 캘린더 나열 순서대로
       return 0;
     });
-  }, [stations, extraTodayStations, query, todaySegments, doneTodayNames]);
+  }, [stations, query, todaySegments, doneTodayNames, calendarOwner]);
+
+  // ── 작성 중 내용 자동 저장 / 복원 ──
+  //  모바일에서 다른 앱을 쓰고 오면 브라우저가 페이지를 새로 여는 경우가 있어 입력값이 날아간다.
+  //  → 이 기기(localStorage)에 사용자별로 저장해 두고, 다시 열면 그대로 복원. 점검 생성에 성공하면 지움.
+  //  (열화상 사진은 파일이라 저장하지 못함)
+  const draftKey = meId ? `inspection-draft:${meId}` : null;
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  useEffect(() => {
+    if (!draftKey || draftReady || !stations.length) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      const d = raw ? JSON.parse(raw) : null;
+      if (d && Date.now() - (d.savedAt || 0) < 3 * 24 * 3600 * 1000) {
+        const st = d.stationId ? stations.find((s: any) => s.id === d.stationId) : null;
+        if (d.date) setDate(d.date);
+        if (d.inspType) setTimeout(() => setInspType(d.inspType), 0);   // 날짜→유형 자동설정 뒤에 덮어씀
+        if (d.inspector) setInspector(d.inspector);
+        if (d.count) setCount(d.count);
+        if (d.weather) setWeather(d.weather);
+        if (typeof d.remarks === 'string') setRemarks(d.remarks);
+        if (st) {
+          setSelected(st); setQuery(st.name); loadStationFolder(st);
+          if (Array.isArray(d.measureSets) && d.measureSets.length) setMeasureSets(d.measureSets);
+        }
+        if (st || d.remarks || (d.measureSets || []).some((m: any) => Object.values(m || {}).some(Boolean))) setDraftRestored(true);
+      }
+    } catch {}
+    setDraftReady(true);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey, stations]);
+  useEffect(() => {
+    if (!draftKey || !draftReady || done) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          stationId: selected?.id || null, date, inspType, inspector, count, weather, measureSets, remarks, savedAt: Date.now(),
+        }));
+      } catch {}
+    }, 300);
+    return () => clearTimeout(t);
+  }, [draftKey, draftReady, done, selected, date, inspType, inspector, count, weather, measureSets, remarks]);
+  const clearDraft = () => { try { if (draftKey) localStorage.removeItem(draftKey); } catch {} setDraftRestored(false); };
 
   const updateMeasureSet = (index: number, field: string, value: string) => {
     setMeasureSets(prev => {
@@ -516,6 +546,7 @@ export function InspectionForm() {
       setResult({ ...r, station: selected, inspType, date, inspector, count, weather, measureSets, remarks });
       setDoneTodayNames(prev => new Set(prev).add(selected.name));  // 작성 완료 → 목록 맨 아래로 즉시 반영
       setDone(true);
+      clearDraft();
     } catch (e: any) {
       alert('점검표를 만들지 못했습니다.\n' + e.message);
     } finally { setLoading(false); }
@@ -550,6 +581,14 @@ export function InspectionForm() {
 
   return (
     <div style={{ maxWidth: 940, margin: 0, padding: 0 }}>
+      {draftRestored && (
+        <div style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 'var(--radius)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, fontSize: 13 }}>
+          <span style={{ flex: 1, color: 'var(--text-primary)' }}>작성하던 내용을 불러왔어요. 열화상 사진은 다시 넣어 주세요.</span>
+          <button onClick={() => { clearDraft(); setSelected(null); setQuery(''); setMeasureSets([emptyMeasureSet()]); setRemarks(''); thermalApi.reset(); }}
+            style={{ padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-hover)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>새로 쓰기</button>
+          <button onClick={() => setDraftRestored(false)} aria-label="닫기" style={{ background: 'transparent', border: 0, color: 'var(--text-tertiary)', cursor: 'pointer', padding: 2 }}><X size={15} /></button>
+        </div>
+      )}
       <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <div style={{ width: 36, height: 36, borderRadius: 8, background: folderHandle ? 'var(--positive-soft)' : 'var(--bg-elevated)', color: folderHandle ? 'var(--positive)' : 'var(--text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Folder size={18} /></div>
         <div style={{ minWidth: 0, flex: 1 }}>
