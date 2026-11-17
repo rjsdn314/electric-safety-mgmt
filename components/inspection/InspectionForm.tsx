@@ -222,7 +222,8 @@ export function InspectionForm() {
     setQuery(station.name);
     setOpen(false);
     const panelCount = station.panel_count && station.panel_count > 0 ? station.panel_count : 1;
-    setMeasureSets(Array.from({ length: panelCount }, () => emptyMeasureSet()));
+    // 충전소를 나중에 골라도 먼저 적어 둔 전압·전류 등은 유지 (수배전반 수만 맞춤)
+    setMeasureSets(prev => Array.from({ length: panelCount }, (_, i) => prev[i] || emptyMeasureSet()));
     thermalApi.reset();
     loadStationFolder(station);
   };

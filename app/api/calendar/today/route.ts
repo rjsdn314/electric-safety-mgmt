@@ -65,6 +65,22 @@ function icsDateToYmd(v: string): string | null {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
+// DTSTART/DTEND 값 → 한국 날짜. 시각이 있는 UTC 값(…T150000Z)은 한국시간으로 바꿔야 날짜가 맞다
+//  (예: 20261116T150000Z = 한국 11/17 00:00 → 예전엔 11/16으로 읽어 다일 출장 'N일차'가 하루 밀렸음)
+//  isEnd: 끝 시각은 '그 순간 직전'까지이므로, 시각 있는 값은 마지막 날 다음 날짜(배타적 끝)로 맞춘다
+function icsValueToYmd(v: string, isEnd = false): string | null {
+  const m = v.trim().match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?/);
+  if (!m) return icsDateToYmd(v);
+  if (!m[4]) return `${m[1]}-${m[2]}-${m[3]}`;   // 종일 일정
+  // 시각 있는 값: Z면 UTC, 아니면(TZID 지정) 한국시간으로 간주
+  const ms = m[7]
+    ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])
+    : Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) - 9 * 3600 * 1000;
+  const fmt = (t: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+  if (!isEnd) return fmt(ms);
+  return fmt(ms - 1 + 86400000);   // 끝 순간 직전 날짜의 다음 날 = 배타적 끝
+}
+
 function ymdToDate(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d));
@@ -147,13 +163,13 @@ export async function GET(req: Request) {
       for (const line of lines) {
         if (/^SUMMARY/i.test(line)) summary = unescapeIcs(line.replace(/^SUMMARY[^:]*:/i, ''));
         else if (/^DESCRIPTION/i.test(line)) desc = unescapeIcs(line.replace(/^DESCRIPTION[^:]*:/i, ''));
-        else if (/^DTSTART/i.test(line)) start = icsDateToYmd(line.split(':').pop() || '');
-        else if (/^DTEND/i.test(line)) end = icsDateToYmd(line.split(':').pop() || '');
+        else if (/^DTSTART/i.test(line)) start = icsValueToYmd(line.split(':').pop() || '');
+        else if (/^DTEND/i.test(line)) end = icsValueToYmd(line.split(':').pop() || '', true);
         else if (/^RRULE/i.test(line)) rrule = line.replace(/^RRULE[^:]*:/i, '').trim();
       }
       if (!summary || !start) continue;
       const hit = occursToday(start, end, rrule, today);
-      if (debug) dbg.push({ summary, start, end, rrule, hit });
+      if (debug) dbg.push({ summary, start, end, rrule, hit, rawStart: (lines.find((l) => /^DTSTART/i.test(l)) || '').slice(0, 60) });
       if (hit) {
         // 다일 출장: 오늘이 시작일 기준 며칠째인지(dayIndex), 총 며칠인지(span)
         const dayIndex = rrule ? 0 : Math.max(0, dayDiff(start, today));
