@@ -80,3 +80,22 @@ export async function applyPower(buf: ArrayBuffer | Buffer, values: PowerValue[]
   zip.file(path, xml);
   return { buffer: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), filled, blocks: blocks.map((b) => b.label) };
 }
+
+// ── 현장에 저장해 둔 한전ON 값(고객번호별) → 점검표 변압기 블록 순서로 맞추기 ──
+//  stations.custom_values.power = { entries: [{ kepco_no, contract_kw, max_kw, pf, month }], updated_at }
+//  · 블록 라벨에 'TR 750KVA'처럼 용량이 있으면 용량 순서끼리 짝지음 (계약전력이 클수록 큰 변압기)
+//  · 용량이 없거나 개수가 다르면 저장된 순서대로
+export interface PowerEntry { kepco_no?: string; contract_kw?: number | null; max_kw: number | null; pf: number | null; month?: number | null }
+export function matchPowerToBlocks(labels: string[], entries: PowerEntry[]): (PowerValue & { kepco_no?: string; month?: number | null })[] {
+  const out: (PowerValue & { kepco_no?: string; month?: number | null })[] = labels.map(() => ({ max_kw: null, pf: null }));
+  const put = (i: number, e: PowerEntry) => { out[i] = { max_kw: e.max_kw, pf: e.pf, kepco_no: e.kepco_no, month: e.month ?? null }; };
+  const kva = labels.map((l) => { const m = l.replace(/,/g, '').match(/(\d{2,5})\s*K\s*V\s*A/i); return m ? +m[1] : null; });
+  if (labels.length && entries.length === labels.length && kva.every((k) => k !== null) && entries.every((e) => e.contract_kw)) {
+    const bi = labels.map((_, i) => i).sort((a, b) => (kva[a]! - kva[b]!) || a - b);
+    const ei = entries.map((_, i) => i).sort((a, b) => (entries[a].contract_kw! - entries[b].contract_kw!) || a - b);
+    bi.forEach((b, k) => put(b, entries[ei[k]]));
+    return out;
+  }
+  entries.forEach((e, i) => { if (i < labels.length) put(i, e); });
+  return out;
+}

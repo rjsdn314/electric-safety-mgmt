@@ -9,6 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { fillWorkbook, InspectionData } from '@/lib/excel/builder';
 import { buildInspectionXlsx } from '@/lib/excel/xmlFill';
+import { applyPower, readPowerBlocks, matchPowerToBlocks } from '@/lib/excel/power';
 import ExcelJS from 'exceljs';
 
 export const runtime = 'nodejs';
@@ -214,6 +215,18 @@ export async function POST(req: NextRequest) {
       buffer = Buffer.from(await wb.xlsx.writeBuffer());
     }
 
+    // ── 연차 고압: 현장에 저장해 둔 한전ON 최대전력·역률(고객번호별)을 전원품질 시트에 선반영 ──
+    let powerRecord: any;
+    const powerEntries = (station.custom_values as any)?.power?.entries;
+    if (inspection_type === '연차' && isHighV && Array.isArray(powerEntries) && powerEntries.length) {
+      try {
+        const values = matchPowerToBlocks(await readPowerBlocks(buffer), powerEntries);
+        const r = await applyPower(buffer, values);
+        buffer = r.buffer;
+        powerRecord = { values, blocks: r.blocks, source: 'kepco_on', updated_at: new Date().toISOString() };
+      } catch (e) { console.error('[create] 한전ON 값 선반영 실패', e); }
+    }
+
     const dateNum = date.replace(/-/g, '');
     const displayFileName = `${station.name}_${inspection_type}점검_${dateNum}.xlsx`;
     const typeMap: any = { '월차': 'monthly', '분기': 'quarterly', '반기': 'semiannual', '연차': 'annual' };
@@ -236,6 +249,7 @@ export async function POST(req: NextRequest) {
       inspector_name,
       measure_values: {
         sets, ground_resistance: ground, device: is_mobile ? 'mobile' : 'pc', used_registered_template: usedRegistered,
+        ...(powerRecord ? { power: powerRecord } : {}),
         // 별지7 열화상 온도 기록(사진 제외)
         thermal: Array.isArray(b7_panels)
           ? b7_panels.map((p: any) => p && Object.fromEntries(Object.entries(p).map(([k, v]: [string, any]) => [k, v?.temps || []])))

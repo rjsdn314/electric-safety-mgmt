@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { applyPower, readPowerBlocks } from '@/lib/excel/power';
+import { applyPower, readPowerBlocks, matchPowerToBlocks } from '@/lib/excel/power';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -52,11 +52,20 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { inspection_id, values } = await req.json();
-    if (!inspection_id || !Array.isArray(values)) return NextResponse.json({ error: '입력값이 없습니다' }, { status: 400 });
+    const body = await req.json();
+    const { inspection_id, from_station } = body;
+    let values = body.values;
+    if (!inspection_id || (!from_station && !Array.isArray(values))) return NextResponse.json({ error: '입력값이 없습니다' }, { status: 400 });
     const a = await load(inspection_id);
     if ('error' in a) return a.error;
     const { sb, insp, storagePath, buf } = a;
+    // from_station: 현장에 저장해 둔 한전ON 값(고객번호별)을 변압기 블록에 맞춰 넣기
+    if (from_station) {
+      const { data: st } = await sb.from('stations').select('custom_values').eq('id', insp.station_id).maybeSingle();
+      const entries = (st?.custom_values as any)?.power?.entries;
+      if (!Array.isArray(entries) || !entries.length) return NextResponse.json({ error: '이 현장에 저장된 한전ON 값이 없습니다' }, { status: 400 });
+      values = matchPowerToBlocks(await readPowerBlocks(buf), entries);
+    }
     const { buffer, filled, blocks } = await applyPower(buf, values);
     const { error: upErr } = await sb.storage.from('inspections').upload(storagePath, buffer, {
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true,
