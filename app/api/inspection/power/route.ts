@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { applyPower, readPowerBlocks, matchPowerToBlocks } from '@/lib/excel/power';
+import { applyPower, readPowerBlocks, matchPowerToBlocks, entriesForMonth } from '@/lib/excel/power';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -64,7 +64,10 @@ export async function POST(req: NextRequest) {
       const { data: st } = await sb.from('stations').select('custom_values').eq('id', insp.station_id).maybeSingle();
       const entries = (st?.custom_values as any)?.power?.entries;
       if (!Array.isArray(entries) || !entries.length) return NextResponse.json({ error: '이 현장에 저장된 한전ON 값이 없습니다' }, { status: 400 });
-      values = matchPowerToBlocks(await readPowerBlocks(buf), entries);
+      const m = Number(String(insp.inspection_date || '').slice(5, 7)) || 0;
+      const f = entriesForMonth(entries, m);   // 점검 월 이전 청구서(예: 10월분)는 아직 반영 안 함
+      if (!f.usable) return NextResponse.json({ error: '점검 월 청구서 값이 아직 없습니다(이전 달 값은 반영하지 않음)' }, { status: 400 });
+      values = matchPowerToBlocks(await readPowerBlocks(buf), f.entries);
     }
     const { buffer, filled, blocks } = await applyPower(buf, values);
     const { error: upErr } = await sb.storage.from('inspections').upload(storagePath, buffer, {

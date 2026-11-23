@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 import { fillWorkbook, InspectionData } from '@/lib/excel/builder';
 import { buildInspectionXlsx } from '@/lib/excel/xmlFill';
-import { applyPower, readPowerBlocks, matchPowerToBlocks } from '@/lib/excel/power';
+import { applyPower, readPowerBlocks, matchPowerToBlocks, entriesForMonth } from '@/lib/excel/power';
 import ExcelJS from 'exceljs';
 
 export const runtime = 'nodejs';
@@ -218,9 +218,10 @@ export async function POST(req: NextRequest) {
     // ── 연차 고압: 현장에 저장해 둔 한전ON 최대전력·역률(고객번호별)을 전원품질 시트에 선반영 ──
     let powerRecord: any;
     const powerEntries = (station.custom_values as any)?.power?.entries;
-    if (inspection_type === '연차' && isHighV && Array.isArray(powerEntries) && powerEntries.length) {
+    const pf = Array.isArray(powerEntries) ? entriesForMonth(powerEntries, Number(String(date).slice(5, 7)) || 0) : null;   // 이전 달 청구서 값은 제외
+    if (inspection_type === '연차' && isHighV && pf && pf.usable) {
       try {
-        const values = matchPowerToBlocks(await readPowerBlocks(buffer), powerEntries);
+        const values = matchPowerToBlocks(await readPowerBlocks(buffer), pf.entries);
         const r = await applyPower(buffer, values);
         buffer = r.buffer;
         powerRecord = { values, blocks: r.blocks, source: 'kepco_on', updated_at: new Date().toISOString() };

@@ -99,3 +99,14 @@ export function matchPowerToBlocks(labels: string[], entries: PowerEntry[]): (Po
   entries.forEach((e, i) => { if (i < labels.length) put(i, e); });
   return out;
 }
+
+// 점검 월보다 이전 달 청구서 값(예: 11월 점검인데 10월분)은 아직 넣지 않음 → 그 고객번호는 빈칸 처리(짝 맞춤 순서는 유지)
+export function entriesForMonth(entries: PowerEntry[], month: number): { entries: PowerEntry[]; usable: number } {
+  let usable = 0;
+  const out = entries.map((e) => {
+    const ok = e.month == null || Number(e.month) >= month;
+    if (ok && (e.max_kw != null || e.pf != null)) usable++;
+    return ok ? e : { ...e, max_kw: null, pf: null };
+  });
+  return { entries: out, usable };
+}
