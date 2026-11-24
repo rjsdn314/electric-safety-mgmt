@@ -1,4 +1,5 @@
 import { parseKepcoList } from '@/lib/utils/kepco';
+import { normalizeSchedule } from '@/lib/utils/schedule';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { createServerClient } from '@supabase/ssr';
@@ -66,6 +67,7 @@ export async function POST(req: NextRequest) {
     if (body.notes !== undefined) cv.notes = String(body.notes);
     if (body.kepco_nos !== undefined) cv.kepco_nos = parseKepcoList(body.kepco_nos);   // 한전 고객번호(여러 개)
     if (panelNames !== undefined) cv.panel_names = panelNames;
+    if (body.schedule !== undefined) cv.schedule = normalizeSchedule(body.schedule);   // 월별 점검 종류
     patch.custom_values = cv;
 
     const { data: updated, error: upErr } = await supabase

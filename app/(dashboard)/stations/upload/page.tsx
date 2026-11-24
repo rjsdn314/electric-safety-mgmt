@@ -9,6 +9,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Download, FileSpreadsheet, Upload, Plus, Pencil, Trash2, Save, Loader2, CheckCircle2, XCircle, DraftingCompass } from 'lucide-react';
 import Link from 'next/link';
 import { kepcoOf, KEPCO_ON_URL } from '@/lib/utils/kepco';
+import { DEFAULT_SCHEDULE, scheduleOf, scheduleSummary, type Schedule } from '@/lib/utils/schedule';
+import { ScheduleEditor } from '@/components/ui/ScheduleEditor';
 import TemplateManager from '@/components/admin/TemplateManager';
 import { Search, FileText } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -65,7 +67,7 @@ export default function StationUploadPage() {
   const [listLoading, setListLoading] = useState(false);
   const [adding, setAdding] = useState(false);
   const [addErr, setAddErr] = useState('');
-  const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '', kepcoNos: '' };
+  const emptyForm = { name: '', sectorLabel: '', voltage: '', capacity: '', panelCount: '1', defaultType: '월차', inspectorName: '', kepcoNos: '', schedule: { ...DEFAULT_SCHEDULE } as Schedule };
   const [form, setForm] = useState({ ...emptyForm });
   const [stationQuery, setStationQuery] = useState('');
 
@@ -136,7 +138,7 @@ export default function StationUploadPage() {
           voltage: form.voltage,
           capacity: form.capacity,
           panel_count: form.panelCount,
-          default_type: form.defaultType,
+          schedule: form.schedule,   // 월별 점검 종류(현장마다 다름)
         }),
       });
       const data = await res.json();
@@ -167,6 +169,7 @@ export default function StationUploadPage() {
       panel_names: Array.isArray(pn) ? pn.join(', ') : (pn || ''),
       notes: st.custom_values?.notes || '',
       kepco_nos: kepcoOf(st).join(', '),
+      schedule: scheduleOf(st),
     });
   };
   const cancelEdit = () => { setEditing(null); setEditForm(null); setEditErr(''); };
@@ -298,14 +301,9 @@ export default function StationUploadPage() {
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>수배전반 개수</label>
             <input style={inputStyle} type="number" min={1} value={form.panelCount} onChange={e => setForm({ ...form, panelCount: e.target.value })} />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>기본 점검양식</label>
-            <select style={inputStyle} value={form.defaultType} onChange={e => setForm({ ...form, defaultType: e.target.value })}>
-              <option value="월차">월차</option>
-              <option value="분기">분기</option>
-              <option value="반기">반기</option>
-              <option value="연차">연차</option>
-            </select>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>월별 점검 종류 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(현장마다 다르면 여기서 맞춰 두세요. 점검 생성 때 날짜에 맞춰 자동 선택)</span></label>
+            <ScheduleEditor value={form.schedule} onChange={(s) => setForm({ ...form, schedule: s })} />
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>한전 고객번호 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(여러 개면 쉼표로 구분, 연차점검 때 한전ON에서 최대전력·역률 조회용)</span></label>
@@ -543,7 +541,7 @@ export default function StationUploadPage() {
                         {st.name}
                         <span style={{ marginLeft: 6, fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 5, verticalAlign: 'middle', background: formIds.has(st.id) ? 'var(--positive-soft)' : partialIds.has(st.id) ? 'var(--warning-soft)' : 'var(--negative-soft)', color: formIds.has(st.id) ? 'var(--positive)' : partialIds.has(st.id) ? 'var(--warning)' : 'var(--negative)' }}>{formIds.has(st.id) ? '점검 양식 있음' : partialIds.has(st.id) ? '분기 양식만' : '도면 대기'}</span>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, st.custom_values?.default_type].filter(Boolean).join(', ')}</div>
+                      <div style={{ fontSize: 12, color: 'var(--dim)', marginTop: 1 }}>{[`${st.voltage}V`, `${st.capacity}kW`, `수배전반 ${st.panel_count}개`, scheduleSummary(scheduleOf(st))].filter(Boolean).join(', ')}</div>
                       <div style={{ fontSize: 12, marginTop: 2, color: kepcoOf(st).length ? 'var(--text-secondary)' : 'var(--text-tertiary)' }}>
                         한전 고객번호 {kepcoOf(st).length ? <a href={KEPCO_ON_URL} target="_blank" rel="noopener noreferrer" title="한전ON 열기" style={{ color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{kepcoOf(st).join(', ')}</a> : '없음'}
                       </div>
@@ -588,6 +586,10 @@ export default function StationUploadPage() {
                         <div style={{ gridColumn: '1 / -1' }}>
                           <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>한전 고객번호 <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>(여러 개면 쉼표로 구분)</span></label>
                           <input style={inputStyle} placeholder="예: 17-1983-8244, 17-1983-8253" value={editForm.kepco_nos} onChange={e => setEditForm({ ...editForm, kepco_nos: e.target.value })} />
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6 }}>월별 점검 종류</label>
+                          <ScheduleEditor value={editForm.schedule} onChange={(s) => setEditForm({ ...editForm, schedule: s })} />
                         </div>
                       </div>
                       {editErr && (<div className="status err" style={{ marginTop: 10, fontSize: 12 }}><XCircle size={14} /> {editErr}</div>)}

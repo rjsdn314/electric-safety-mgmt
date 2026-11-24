@@ -5,6 +5,7 @@ import { useThermalPanels, ThermalPhotoBox } from './ThermalPhotos';
 import { Status, plain } from '@/components/ui/Status';
 import { CheckCircle2, FileText, FolderOpen, Folder, Download, Plus, X, Loader2, Copy, ExternalLink } from 'lucide-react';
 import { kepcoOf, KEPCO_ON_URL } from '@/lib/utils/kepco';
+import { typeForStationMonth, scheduleOf } from '@/lib/utils/schedule';
 
 const TYPE_OPTIONS = [
   { value: '월차', months: '1,2,4,5,7,8,10,12월' },
@@ -13,10 +14,8 @@ const TYPE_OPTIONS = [
   { value: '연차', months: '11월' },
 ];
 
-// 점검일자의 '월'에 따라 점검유형 자동 결정
-//  6월→반기, 11월→연차, 3·9월→분기, 그 외(1,2,4,5,7,8,10,12월)→월차
-const typeForMonth = (m: number): string =>
-  m === 6 ? '반기' : m === 11 ? '연차' : (m === 3 || m === 9) ? '분기' : '월차';
+// 점검일자의 '월'에 따라 점검유형 자동 결정 — 현장별 월별 설정(관리구역)을 따름.
+//  설정이 없으면 기본: 6월 반기, 11월 연차, 3·9월 분기, 그 외 월차
 
 // 캘린더에 '경상북도'/'경상남도'(지역명)만 적혀 있을 때, 해당 권역 현장으로 자동 확장.
 //  · 경북: '1일차'~'3일차' 표기가 있으면 그 날짜 현장만, 없으면 전체.
@@ -154,8 +153,8 @@ export function InspectionForm() {
   useEffect(() => {
     if (!date) return;
     const m = parseInt(date.slice(5, 7), 10);
-    if (m >= 1 && m <= 12) setInspType(typeForMonth(m));
-  }, [date]);
+    if (m >= 1 && m <= 12) setInspType(typeForStationMonth(selected, m));
+  }, [date, selected?.id]);
 
   useEffect(() => {
     (async () => {
@@ -718,7 +717,13 @@ export function InspectionForm() {
           {TYPE_OPTIONS.map(t => (
             <button key={t.value} onClick={() => setInspType(t.value)} style={{ padding: '12px 4px', borderRadius: 8, border: `1px solid ${inspType === t.value ? 'var(--accent)' : 'var(--border)'}`, background: inspType === t.value ? 'var(--accent-soft)' : 'var(--bg-card)', color: inspType === t.value ? 'var(--accent)' : 'var(--text-secondary)', fontSize: 15, fontWeight: 700, cursor: 'pointer', textAlign: 'center', fontFamily: 'inherit' }}>
               {t.value}
-              <div style={{ fontSize: 11, opacity: .7, marginTop: 4, fontWeight: 500 }}>{t.months}</div>
+              <div style={{ fontSize: 11, opacity: .7, marginTop: 4, fontWeight: 500 }}>{(() => {
+                // 선택한 현장의 월별 설정 기준으로 해당 종류의 달 표시
+                if (!selected) return t.months;
+                const sc = scheduleOf(selected);
+                const ms = Object.keys(sc).filter(k => sc[k] === t.value).map(Number);
+                return ms.length ? `${ms.join(', ')}월` : '없음';
+              })()}</div>
             </button>
           ))}
         </div>
